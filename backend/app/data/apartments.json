@@ -1,0 +1,1023 @@
+[
+  {
+    "id": "apt-001",
+    "address": "123 Market St, San Francisco, CA 94103",
+    "rent": 3400,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1100,
+    "property_type": "Apartment",
+    "available_date": "2025-11-15",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly", "Gym", "Rooftop deck"],
+    "neighborhood": "SoMa",
+    "description": "Modern luxury apartment in the heart of SoMa. Walking distance to BART and tech offices. Floor-to-ceiling windows with city views.",
+    "images": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2",
+      "https://images.unsplash.com/photo-1515263487990-61b07816b324"
+    ]
+  },
+  {
+    "id": "apt-002",
+    "address": "456 Valencia St, San Francisco, CA 94110",
+    "rent": 3600,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 950,
+    "property_type": "Apartment",
+    "available_date": "2025-12-01",
+    "amenities": ["Shared laundry", "Street parking", "Pet-friendly"],
+    "neighborhood": "Mission District",
+    "description": "Charming Victorian apartment in vibrant Mission District. Close to restaurants, bars, and Dolores Park. Hardwood floors throughout.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-003",
+    "address": "789 Broadway, New York, NY 10003",
+    "rent": 4200,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 750,
+    "property_type": "Apartment",
+    "available_date": "2025-11-20",
+    "amenities": ["Doorman", "Elevator", "Gym", "Bike storage"],
+    "neighborhood": "Greenwich Village",
+    "description": "Luxe 1BR in the heart of Greenwich Village. Pre-war building with modern updates. Steps from Washington Square Park.",
+    "images": [
+      "https://images.unsplash.com/photo-1536376072261-38c75010e6c9",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af"
+    ]
+  },
+  {
+    "id": "apt-004",
+    "address": "321 Congress Ave, Austin, TX 78701",
+    "rent": 2200,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1200,
+    "property_type": "Apartment",
+    "available_date": "2025-12-15",
+    "amenities": ["In-unit laundry", "Parking", "Pool", "Gym", "Pet-friendly"],
+    "neighborhood": "Downtown Austin",
+    "description": "Brand new luxury high-rise in downtown Austin. Amazing amenities including rooftop pool. Walk to Sixth Street nightlife.",
+    "images": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858"
+    ]
+  },
+  {
+    "id": "apt-005",
+    "address": "555 Pine St, Seattle, WA 98101",
+    "rent": 2800,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 800,
+    "property_type": "Apartment",
+    "available_date": "2025-11-25",
+    "amenities": ["In-unit laundry", "Parking", "Concierge", "Gym"],
+    "neighborhood": "Downtown Seattle",
+    "description": "Modern apartment with stunning views of Pike Place Market and Puget Sound. Walkable to all major tech offices.",
+    "images": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
+      "https://images.unsplash.com/photo-1522050212171-61b01dd24579"
+    ]
+  },
+  {
+    "id": "apt-006",
+    "address": "888 Folsom St, San Francisco, CA 94107",
+    "rent": 3000,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 850,
+    "property_type": "Apartment",
+    "available_date": "2025-12-01",
+    "amenities": ["In-unit laundry", "Bike storage", "Pet-friendly", "Gym"],
+    "neighborhood": "SoMa",
+    "description": "Industrial loft-style apartment with exposed brick and high ceilings. Perfect for tech professionals. Great natural light.",
+    "images": [
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb",
+      "https://images.unsplash.com/photo-1556912173-3bb406ef7e77"
+    ]
+  },
+  {
+    "id": "apt-007",
+    "address": "200 Riverside Blvd, New York, NY 10069",
+    "rent": 5500,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1300,
+    "property_type": "Apartment",
+    "available_date": "2025-11-30",
+    "amenities": ["Doorman", "Concierge", "Gym", "Pool", "Parking", "In-unit laundry"],
+    "neighborhood": "Upper West Side",
+    "description": "Luxury waterfront apartment with Hudson River views. World-class amenities. Close to Lincoln Center.",
+    "images": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e",
+      "https://images.unsplash.com/photo-1591088398332-8a7791972843"
+    ]
+  },
+  {
+    "id": "apt-008",
+    "address": "1500 Rainey St, Austin, TX 78701",
+    "rent": 1900,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-12-10",
+    "amenities": ["Pool", "Gym", "Pet-friendly", "Parking"],
+    "neighborhood": "Rainey Street District",
+    "description": "Trendy apartment on famous Rainey Street. Walking distance to bars, restaurants, and Lady Bird Lake trail.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672023488-70e25813eb80",
+      "https://images.unsplash.com/photo-1494203484021-3c454daf695d"
+    ]
+  },
+  {
+    "id": "apt-009",
+    "address": "777 1st Ave, Seattle, WA 98104",
+    "rent": 3200,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1150,
+    "property_type": "Apartment",
+    "available_date": "2025-11-22",
+    "amenities": ["In-unit laundry", "Parking", "Gym", "Rooftop terrace", "Bike storage"],
+    "neighborhood": "Pioneer Square",
+    "description": "Contemporary apartment in historic Pioneer Square. Exposed brick meets modern finishes. Pet-friendly building.",
+    "images": [
+      "https://images.unsplash.com/photo-1560185893-a55cbc8c57e8",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-010",
+    "address": "2100 Pacific Ave, San Francisco, CA 94115",
+    "rent": 4500,
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "sqft": 1600,
+    "property_type": "Apartment",
+    "available_date": "2025-12-05",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly", "Storage"],
+    "neighborhood": "Pacific Heights",
+    "description": "Spacious family-friendly apartment in prestigious Pacific Heights. Updated kitchen, hardwood floors, stunning views.",
+    "images": [
+      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85",
+      "https://images.unsplash.com/photo-1512915922686-57c11dde9b6b"
+    ]
+  },
+  {
+    "id": "apt-011",
+    "address": "450 W 42nd St, New York, NY 10036",
+    "rent": 3800,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 650,
+    "property_type": "Apartment",
+    "available_date": "2025-12-01",
+    "amenities": ["Doorman", "Gym", "Roof deck", "Bike storage"],
+    "neighborhood": "Hell's Kitchen",
+    "description": "Sleek studio in vibrant Hell's Kitchen. Close to Times Square and Hudson Yards. Modern kitchen with stainless appliances.",
+    "images": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2"
+    ]
+  },
+  {
+    "id": "apt-012",
+    "address": "3200 Lamar Blvd, Austin, TX 78705",
+    "rent": 1600,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 650,
+    "property_type": "Apartment",
+    "available_date": "2025-11-28",
+    "amenities": ["Pool", "Pet-friendly", "Shared laundry"],
+    "neighborhood": "North Campus",
+    "description": "Affordable apartment near UT Austin. Perfect for young professionals. Close to coffee shops and restaurants.",
+    "images": [
+      "https://images.unsplash.com/photo-1536376072261-38c75010e6c9",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af"
+    ]
+  },
+  {
+    "id": "apt-013",
+    "address": "1200 Capitol Hill, Seattle, WA 98122",
+    "rent": 2400,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 750,
+    "property_type": "Apartment",
+    "available_date": "2025-12-08",
+    "amenities": ["In-unit laundry", "Pet-friendly", "Bike storage"],
+    "neighborhood": "Capitol Hill",
+    "description": "Hip apartment in trendy Capitol Hill. Surrounded by bars, restaurants, and music venues. Great nightlife.",
+    "images": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858"
+    ]
+  },
+  {
+    "id": "apt-014",
+    "address": "600 Haight St, San Francisco, CA 94117",
+    "rent": 2800,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 1000,
+    "property_type": "Apartment",
+    "available_date": "2025-11-18",
+    "amenities": ["Shared laundry", "Pet-friendly", "Backyard"],
+    "neighborhood": "Haight-Ashbury",
+    "description": "Classic Victorian apartment in historic Haight-Ashbury. Original details preserved. Walk to Golden Gate Park.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-015",
+    "address": "88 Greenwich St, New York, NY 10006",
+    "rent": 6000,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1250,
+    "property_type": "Apartment",
+    "available_date": "2025-12-12",
+    "amenities": ["Doorman", "Concierge", "Gym", "Pool", "In-unit laundry", "Parking"],
+    "neighborhood": "Financial District",
+    "description": "Ultra-luxury apartment in downtown Manhattan. Floor-to-ceiling windows with Statue of Liberty views. White-glove service.",
+    "images": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
+      "https://images.unsplash.com/photo-1522050212171-61b01dd24579"
+    ]
+  },
+  {
+    "id": "apt-016",
+    "address": "2500 Red River St, Austin, TX 78705",
+    "rent": 1800,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 900,
+    "property_type": "Apartment",
+    "available_date": "2025-11-29",
+    "amenities": ["Parking", "Pet-friendly", "Shared laundry"],
+    "neighborhood": "East Austin",
+    "description": "Laid-back apartment in up-and-coming East Austin. Close to food trucks and live music. Great value.",
+    "images": [
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb",
+      "https://images.unsplash.com/photo-1556912173-3bb406ef7e77"
+    ]
+  },
+  {
+    "id": "apt-017",
+    "address": "900 Fremont Ave N, Seattle, WA 98103",
+    "rent": 2200,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-12-03",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "Fremont",
+    "description": "Quirky apartment in artsy Fremont neighborhood. Close to Google and tech offices. Sunday farmers market nearby.",
+    "images": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e",
+      "https://images.unsplash.com/photo-1591088398332-8a7791972843"
+    ]
+  },
+  {
+    "id": "apt-018",
+    "address": "1600 Divisadero St, San Francisco, CA 94115",
+    "rent": 3200,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 800,
+    "property_type": "Apartment",
+    "available_date": "2025-12-07",
+    "amenities": ["In-unit laundry", "Pet-friendly", "Shared backyard"],
+    "neighborhood": "Western Addition",
+    "description": "Renovated apartment on trendy Divisadero corridor. Steps from shops, cafes, and restaurants. Sunny and bright.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672023488-70e25813eb80",
+      "https://images.unsplash.com/photo-1494203484021-3c454daf695d"
+    ]
+  },
+  {
+    "id": "apt-019",
+    "address": "250 E 40th St, New York, NY 10016",
+    "rent": 3500,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-11-27",
+    "amenities": ["Doorman", "Gym", "Laundry", "Roof deck"],
+    "neighborhood": "Murray Hill",
+    "description": "Convenient apartment in Murray Hill. Close to Grand Central and Midtown offices. Quiet residential street.",
+    "images": [
+      "https://images.unsplash.com/photo-1560185893-a55cbc8c57e8",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-020",
+    "address": "4000 S Congress Ave, Austin, TX 78704",
+    "rent": 2100,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1100,
+    "property_type": "Apartment",
+    "available_date": "2025-12-14",
+    "amenities": ["Pool", "Gym", "In-unit laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "South Congress",
+    "description": "Modern apartment on SoCo. Walkable to boutiques, restaurants, and food trucks. Austin vibe at its best.",
+    "images": [
+      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85",
+      "https://images.unsplash.com/photo-1512915922686-57c11dde9b6b"
+    ]
+  },
+  {
+    "id": "apt-021",
+    "address": "1800 Westlake Ave N, Seattle, WA 98109",
+    "rent": 3000,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1100,
+    "property_type": "Apartment",
+    "available_date": "2025-11-26",
+    "amenities": ["In-unit laundry", "Parking", "Gym", "Concierge"],
+    "neighborhood": "South Lake Union",
+    "description": "New construction in booming South Lake Union. Steps from Amazon campus. Modern finishes throughout.",
+    "images": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2"
+    ]
+  },
+  {
+    "id": "apt-022",
+    "address": "3500 19th St, San Francisco, CA 94110",
+    "rent": 2900,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 950,
+    "property_type": "Apartment",
+    "available_date": "2025-12-02",
+    "amenities": ["Shared laundry", "Pet-friendly", "Backyard access"],
+    "neighborhood": "Mission District",
+    "description": "Sunny Mission apartment with outdoor space. Close to BART, restaurants, and murals. Great neighborhood feel.",
+    "images": [
+      "https://images.unsplash.com/photo-1536376072261-38c75010e6c9",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af"
+    ]
+  },
+  {
+    "id": "apt-023",
+    "address": "100 Park Ave S, New York, NY 10017",
+    "rent": 4800,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1150,
+    "property_type": "Apartment",
+    "available_date": "2025-12-09",
+    "amenities": ["Doorman", "Concierge", "Gym", "Roof deck", "In-unit laundry"],
+    "neighborhood": "Midtown East",
+    "description": "Premier Midtown location. Walk to work at major corporations. Luxury finishes and services.",
+    "images": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858"
+    ]
+  },
+  {
+    "id": "apt-024",
+    "address": "5500 Burnet Rd, Austin, TX 78756",
+    "rent": 1700,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-11-30",
+    "amenities": ["Pool", "Parking", "Pet-friendly"],
+    "neighborhood": "North Loop",
+    "description": "Affordable apartment in North Loop. Great for young professionals. Close to tech offices and entertainment.",
+    "images": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
+      "https://images.unsplash.com/photo-1522050212171-61b01dd24579"
+    ]
+  },
+  {
+    "id": "apt-025",
+    "address": "2300 Alaskan Way, Seattle, WA 98121",
+    "rent": 3500,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1200,
+    "property_type": "Apartment",
+    "available_date": "2025-12-11",
+    "amenities": ["In-unit laundry", "Parking", "Gym", "Waterfront views"],
+    "neighborhood": "Waterfront",
+    "description": "Stunning waterfront apartment with Elliott Bay views. Walk to Pike Place Market. Ferry terminal nearby.",
+    "images": [
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb",
+      "https://images.unsplash.com/photo-1556912173-3bb406ef7e77"
+    ]
+  },
+  {
+    "id": "apt-026",
+    "address": "2800 Octavia St, San Francisco, CA 94123",
+    "rent": 3800,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1250,
+    "property_type": "Apartment",
+    "available_date": "2025-11-24",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly", "Roof deck"],
+    "neighborhood": "Marina District",
+    "description": "Beautiful Marina apartment near Crissy Field. Shops and restaurants on Chestnut Street. Great for active lifestyle.",
+    "images": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e",
+      "https://images.unsplash.com/photo-1591088398332-8a7791972843"
+    ]
+  },
+  {
+    "id": "apt-027",
+    "address": "175 Kent Ave, Brooklyn, NY 11249",
+    "rent": 3900,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 1000,
+    "property_type": "Apartment",
+    "available_date": "2025-12-06",
+    "amenities": ["In-unit laundry", "Gym", "Roof deck", "Pet-friendly"],
+    "neighborhood": "Williamsburg",
+    "description": "Hip Williamsburg loft with industrial charm. Close to L train and Bedford Avenue. Tons of restaurants and bars.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672023488-70e25813eb80",
+      "https://images.unsplash.com/photo-1494203484021-3c454daf695d"
+    ]
+  },
+  {
+    "id": "apt-028",
+    "address": "6700 Guadalupe St, Austin, TX 78705",
+    "rent": 1500,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 600,
+    "property_type": "Studio",
+    "available_date": "2025-12-01",
+    "amenities": ["Pool", "Shared laundry", "Pet-friendly"],
+    "neighborhood": "Hyde Park",
+    "description": "Cozy studio in charming Hyde Park. Tree-lined streets and local coffee shops. Affordable Austin living.",
+    "images": [
+      "https://images.unsplash.com/photo-1560185893-a55cbc8c57e8",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-029",
+    "address": "4100 Phinney Ave N, Seattle, WA 98103",
+    "rent": 2600,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 950,
+    "property_type": "Apartment",
+    "available_date": "2025-11-21",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "Phinney Ridge",
+    "description": "Quiet residential apartment near Woodland Park Zoo. Family-friendly neighborhood with good schools.",
+    "images": [
+      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85",
+      "https://images.unsplash.com/photo-1512915922686-57c11dde9b6b"
+    ]
+  },
+  {
+    "id": "apt-030",
+    "address": "1100 Noe St, San Francisco, CA 94114",
+    "rent": 3100,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 800,
+    "property_type": "Apartment",
+    "available_date": "2025-12-04",
+    "amenities": ["In-unit laundry", "Pet-friendly", "Shared garden"],
+    "neighborhood": "Noe Valley",
+    "description": "Charming apartment in family-friendly Noe Valley. Sunny microclimate, great cafes, and weekend farmers market.",
+    "images": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2"
+    ]
+  },
+  {
+    "id": "apt-031",
+    "address": "300 E 23rd St, New York, NY 10010",
+    "rent": 4100,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 750,
+    "property_type": "Apartment",
+    "available_date": "2025-11-28",
+    "amenities": ["Doorman", "Gym", "Roof deck", "In-unit laundry"],
+    "neighborhood": "Gramercy",
+    "description": "Elegant pre-war apartment in prestigious Gramercy. Close to Gramercy Park (key access). Quiet tree-lined street.",
+    "images": [
+      "https://images.unsplash.com/photo-1536376072261-38c75010e6c9",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af"
+    ]
+  },
+  {
+    "id": "apt-032",
+    "address": "7800 Shoal Creek Blvd, Austin, TX 78757",
+    "rent": 1900,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 900,
+    "property_type": "Apartment",
+    "available_date": "2025-12-13",
+    "amenities": ["Pool", "Parking", "Pet-friendly"],
+    "neighborhood": "Crestview",
+    "description": "Spacious apartment near Shoal Creek trail. Perfect for outdoor enthusiasts. Close to Mueller development.",
+    "images": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858"
+    ]
+  },
+  {
+    "id": "apt-033",
+    "address": "5200 University Way NE, Seattle, WA 98105",
+    "rent": 2100,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 650,
+    "property_type": "Apartment",
+    "available_date": "2025-12-02",
+    "amenities": ["Shared laundry", "Bike storage", "Pet-friendly"],
+    "neighborhood": "University District",
+    "description": "Affordable apartment near UW campus. Great for grad students and young professionals. Close to light rail.",
+    "images": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
+      "https://images.unsplash.com/photo-1522050212171-61b01dd24579"
+    ]
+  },
+  {
+    "id": "apt-034",
+    "address": "2200 Lombard St, San Francisco, CA 94123",
+    "rent": 3400,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 1000,
+    "property_type": "Apartment",
+    "available_date": "2025-11-23",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "Cow Hollow",
+    "description": "Updated apartment on Lombard Street. Close to Marina Green and Presidio trails. Union Street shopping nearby.",
+    "images": [
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb",
+      "https://images.unsplash.com/photo-1556912173-3bb406ef7e77"
+    ]
+  },
+  {
+    "id": "apt-035",
+    "address": "500 W 43rd St, New York, NY 10036",
+    "rent": 3600,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-12-08",
+    "amenities": ["Doorman", "Gym", "Laundry", "Bike room"],
+    "neighborhood": "Hell's Kitchen",
+    "description": "Modern apartment in Hell's Kitchen. Walk to Broadway theaters and Hudson Yards. Great restaurants on every block.",
+    "images": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e",
+      "https://images.unsplash.com/photo-1591088398332-8a7791972843"
+    ]
+  },
+  {
+    "id": "apt-036",
+    "address": "8900 Metric Blvd, Austin, TX 78758",
+    "rent": 1600,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-11-25",
+    "amenities": ["Pool", "Gym", "Parking"],
+    "neighborhood": "North Austin",
+    "description": "Value apartment near tech companies. Easy access to Domain shopping. Good for commuters.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672023488-70e25813eb80",
+      "https://images.unsplash.com/photo-1494203484021-3c454daf695d"
+    ]
+  },
+  {
+    "id": "apt-037",
+    "address": "6300 35th Ave NE, Seattle, WA 98115",
+    "rent": 2300,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 750,
+    "property_type": "Apartment",
+    "available_date": "2025-12-05",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "Wedgwood",
+    "description": "Peaceful apartment in residential Wedgwood. Safe neighborhood, good schools. Close to parks and trails.",
+    "images": [
+      "https://images.unsplash.com/photo-1560185893-a55cbc8c57e8",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-038",
+    "address": "4400 Geary Blvd, San Francisco, CA 94118",
+    "rent": 2700,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 950,
+    "property_type": "Apartment",
+    "available_date": "2025-12-10",
+    "amenities": ["Shared laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "Richmond District",
+    "description": "Classic San Francisco apartment in the Richmond. Close to Golden Gate Park and Ocean Beach. Dim sum nearby.",
+    "images": [
+      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85",
+      "https://images.unsplash.com/photo-1512915922686-57c11dde9b6b"
+    ]
+  },
+  {
+    "id": "apt-039",
+    "address": "80 DeKalb Ave, Brooklyn, NY 11201",
+    "rent": 4200,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1100,
+    "property_type": "Apartment",
+    "available_date": "2025-11-29",
+    "amenities": ["Doorman", "Gym", "Roof deck", "In-unit laundry", "Storage"],
+    "neighborhood": "Fort Greene",
+    "description": "Modern luxury in Fort Greene. Close to BAM and great restaurants. Easy commute to Manhattan via multiple trains.",
+    "images": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2"
+    ]
+  },
+  {
+    "id": "apt-040",
+    "address": "9500 Burnet Rd, Austin, TX 78758",
+    "rent": 1700,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 650,
+    "property_type": "Apartment",
+    "available_date": "2025-12-07",
+    "amenities": ["Pool", "Parking", "Pet-friendly"],
+    "neighborhood": "North Austin",
+    "description": "Practical apartment with great amenities. Close to major employers like Apple and Google. Affordable living.",
+    "images": [
+      "https://images.unsplash.com/photo-1536376072261-38c75010e6c9",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af"
+    ]
+  },
+  {
+    "id": "apt-041",
+    "address": "7400 Roosevelt Way NE, Seattle, WA 98115",
+    "rent": 2500,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 900,
+    "property_type": "Apartment",
+    "available_date": "2025-11-27",
+    "amenities": ["In-unit laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "Ravenna",
+    "description": "Family-friendly apartment in Ravenna. Near Green Lake and Burke-Gilman Trail. Great for outdoor activities.",
+    "images": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858"
+    ]
+  },
+  {
+    "id": "apt-042",
+    "address": "5500 California St, San Francisco, CA 94121",
+    "rent": 2900,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 1000,
+    "property_type": "Apartment",
+    "available_date": "2025-12-03",
+    "amenities": ["Shared laundry", "Parking", "Pet-friendly"],
+    "neighborhood": "Outer Richmond",
+    "description": "Spacious apartment in quiet Outer Richmond. Short drive to the beach. Good value for San Francisco.",
+    "images": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
+      "https://images.unsplash.com/photo-1522050212171-61b01dd24579"
+    ]
+  },
+  {
+    "id": "apt-043",
+    "address": "150 Henry St, Brooklyn, NY 11201",
+    "rent": 3700,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 800,
+    "property_type": "Apartment",
+    "available_date": "2025-12-12",
+    "amenities": ["Gym", "Roof deck", "In-unit laundry", "Bike storage"],
+    "neighborhood": "Brooklyn Heights",
+    "description": "Historic Brooklyn Heights charm. Walking distance to Brooklyn Bridge Park. Picturesque tree-lined streets.",
+    "images": [
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb",
+      "https://images.unsplash.com/photo-1556912173-3bb406ef7e77"
+    ]
+  },
+  {
+    "id": "apt-044",
+    "address": "10200 S 1st St, Austin, TX 78748",
+    "rent": 1400,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 600,
+    "property_type": "Apartment",
+    "available_date": "2025-11-22",
+    "amenities": ["Pool", "Parking"],
+    "neighborhood": "South Austin",
+    "description": "Budget-friendly apartment in South Austin. Good for students and young professionals. Nearby bus routes.",
+    "images": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e",
+      "https://images.unsplash.com/photo-1591088398332-8a7791972843"
+    ]
+  },
+  {
+    "id": "apt-045",
+    "address": "8500 Greenwood Ave N, Seattle, WA 98103",
+    "rent": 2400,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 750,
+    "property_type": "Apartment",
+    "available_date": "2025-12-09",
+    "amenities": ["In-unit laundry", "Pet-friendly", "Bike storage"],
+    "neighborhood": "Greenwood",
+    "description": "Cozy apartment in charming Greenwood. Local shops and cafes. Great community feel.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672023488-70e25813eb80",
+      "https://images.unsplash.com/photo-1494203484021-3c454daf695d"
+    ]
+  },
+  {
+    "id": "apt-046",
+    "address": "6600 Irving St, San Francisco, CA 94122",
+    "rent": 2600,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 750,
+    "property_type": "Apartment",
+    "available_date": "2025-11-30",
+    "amenities": ["Shared laundry", "Pet-friendly"],
+    "neighborhood": "Inner Sunset",
+    "description": "Sunny Inner Sunset apartment. Walk to Golden Gate Park and UCSF. Great food scene on Irving Street.",
+    "images": [
+      "https://images.unsplash.com/photo-1560185893-a55cbc8c57e8",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-047",
+    "address": "200 Water St, Brooklyn, NY 11201",
+    "rent": 5200,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1300,
+    "property_type": "Apartment",
+    "available_date": "2025-12-15",
+    "amenities": ["Doorman", "Concierge", "Gym", "Pool", "In-unit laundry", "Parking"],
+    "neighborhood": "DUMBO",
+    "description": "Ultra-modern DUMBO loft with Manhattan skyline views. Luxury finishes. Walk to Brooklyn Bridge.",
+    "images": [
+      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85",
+      "https://images.unsplash.com/photo-1512915922686-57c11dde9b6b"
+    ]
+  },
+  {
+    "id": "apt-048",
+    "address": "11300 W Parmer Ln, Austin, TX 78727",
+    "rent": 1800,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1000,
+    "property_type": "Apartment",
+    "available_date": "2025-12-11",
+    "amenities": ["Pool", "Gym", "Parking", "Pet-friendly"],
+    "neighborhood": "Northwest Austin",
+    "description": "Modern apartment near tech corridor. Easy access to major companies. Great amenities package.",
+    "images": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2"
+    ]
+  },
+  {
+    "id": "apt-049",
+    "address": "9600 Stone Ave N, Seattle, WA 98103",
+    "rent": 2700,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1050,
+    "property_type": "Apartment",
+    "available_date": "2025-11-26",
+    "amenities": ["In-unit laundry", "Parking", "Gym", "Pet-friendly"],
+    "neighborhood": "Wallingford",
+    "description": "Beautiful apartment in desirable Wallingford. Close to Gas Works Park. Family-friendly neighborhood.",
+    "images": [
+      "https://images.unsplash.com/photo-1536376072261-38c75010e6c9",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af"
+    ]
+  },
+  {
+    "id": "apt-050",
+    "address": "7700 Sunset Blvd, San Francisco, CA 94116",
+    "rent": 2500,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-12-06",
+    "amenities": ["Shared laundry", "Parking"],
+    "neighborhood": "Outer Sunset",
+    "description": "Quiet apartment near the beach. Foggy but charming. Great for surfers and beach lovers.",
+    "images": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858"
+    ]
+  },
+  {
+    "id": "apt-051",
+    "address": "350 11th St, Brooklyn, NY 11215",
+    "rent": 3300,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 750,
+    "property_type": "Apartment",
+    "available_date": "2025-11-24",
+    "amenities": ["In-unit laundry", "Pet-friendly", "Roof deck"],
+    "neighborhood": "Park Slope",
+    "description": "Classic Park Slope brownstone apartment. Near Prospect Park. Great restaurants and cafes on 5th Avenue.",
+    "images": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
+      "https://images.unsplash.com/photo-1522050212171-61b01dd24579"
+    ]
+  },
+  {
+    "id": "apt-052",
+    "address": "12400 N Lamar Blvd, Austin, TX 78753",
+    "rent": 1500,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 650,
+    "property_type": "Apartment",
+    "available_date": "2025-12-01",
+    "amenities": ["Pool", "Parking"],
+    "neighborhood": "North Lamar",
+    "description": "Basic apartment with good location. Easy highway access. Affordable option for Austin.",
+    "images": [
+      "https://images.unsplash.com/photo-1554995207-c18c203602cb",
+      "https://images.unsplash.com/photo-1556912173-3bb406ef7e77"
+    ]
+  },
+  {
+    "id": "apt-053",
+    "address": "10700 Northup Way, Seattle, WA 98004",
+    "rent": 2900,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 800,
+    "property_type": "Apartment",
+    "available_date": "2025-12-08",
+    "amenities": ["In-unit laundry", "Parking", "Gym", "Pool"],
+    "neighborhood": "Bellevue",
+    "description": "Modern Bellevue apartment near Microsoft and tech campuses. Shopping and dining nearby. Safe neighborhood.",
+    "images": [
+      "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e",
+      "https://images.unsplash.com/photo-1591088398332-8a7791972843"
+    ]
+  },
+  {
+    "id": "apt-054",
+    "address": "8800 Geary Blvd, San Francisco, CA 94121",
+    "rent": 2400,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-11-28",
+    "amenities": ["Shared laundry", "Pet-friendly"],
+    "neighborhood": "Outer Richmond",
+    "description": "Affordable Richmond District apartment. Close to parks and beaches. Asian restaurants and markets nearby.",
+    "images": [
+      "https://images.unsplash.com/photo-1502672023488-70e25813eb80",
+      "https://images.unsplash.com/photo-1494203484021-3c454daf695d"
+    ]
+  },
+  {
+    "id": "apt-055",
+    "address": "450 Washington Ave, Brooklyn, NY 11238",
+    "rent": 3500,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-12-04",
+    "amenities": ["Gym", "Roof deck", "In-unit laundry"],
+    "neighborhood": "Clinton Hill",
+    "description": "Trendy Clinton Hill apartment. Close to Pratt Institute. Up-and-coming neighborhood with great energy.",
+    "images": [
+      "https://images.unsplash.com/photo-1560185893-a55cbc8c57e8",
+      "https://images.unsplash.com/photo-1493809842364-78817add7ffb"
+    ]
+  },
+  {
+    "id": "apt-056",
+    "address": "13500 Research Blvd, Austin, TX 78750",
+    "rent": 1600,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 700,
+    "property_type": "Apartment",
+    "available_date": "2025-12-10",
+    "amenities": ["Pool", "Gym", "Parking"],
+    "neighborhood": "Northwest Hills",
+    "description": "Peaceful apartment in Northwest Hills. Good schools, safe area. Close to Arboretum shopping.",
+    "images": [
+      "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85",
+      "https://images.unsplash.com/photo-1512915922686-57c11dde9b6b"
+    ]
+  },
+  {
+    "id": "apt-057",
+    "address": "11800 NE 8th St, Seattle, WA 98005",
+    "rent": 3100,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1100,
+    "property_type": "Apartment",
+    "available_date": "2025-11-25",
+    "amenities": ["In-unit laundry", "Parking", "Gym", "Concierge"],
+    "neighborhood": "Bellevue",
+    "description": "Luxury Bellevue living. Walk to Bellevue Square. Great schools and low crime. Easy commute to Seattle.",
+    "images": [
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267",
+      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2"
+    ]
+  },
+  {
+    "id": "apt-058",
+    "address": "9900 Taraval St, San Francisco, CA 94116",
+    "rent": 2300,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 650,
+    "property_type": "Apartment",
+    "available_date": "2025-12-02",
+    "amenities": ["Shared laundry"],
+    "neighborhood": "Outer Sunset",
+    "description": "Budget-friendly Sunset apartment. Close to Ocean Beach. Quiet residential area. Good value.",
+    "images": [
+      "https://images.unsplash.com/photo-1536376072261-38c75010e6c9",
+      "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af"
+    ]
+  },
+  {
+    "id": "apt-059",
+    "address": "550 Grand St, Brooklyn, NY 11211",
+    "rent": 4000,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1100,
+    "property_type": "Apartment",
+    "available_date": "2025-12-14",
+    "amenities": ["Doorman", "Gym", "Roof deck", "In-unit laundry"],
+    "neighborhood": "Williamsburg",
+    "description": "Stylish Williamsburg waterfront apartment. Manhattan skyline views. Best of Brooklyn living.",
+    "images": [
+      "https://images.unsplash.com/photo-1512917774080-9991f1c4c750",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858"
+    ]
+  },
+  {
+    "id": "apt-060",
+    "address": "14600 Anderson Mill Rd, Austin, TX 78729",
+    "rent": 1700,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 950,
+    "property_type": "Apartment",
+    "available_date": "2025-11-23",
+    "amenities": ["Pool", "Gym", "Parking", "Pet-friendly"],
+    "neighborhood": "Cedar Park",
+    "description": "Spacious apartment in growing Cedar Park. Family-friendly. Good schools and parks. Affordable alternative to central Austin.",
+    "images": [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00",
+      "https://images.unsplash.com/photo-1522050212171-61b01dd24579"
+    ]
+  }
+]
