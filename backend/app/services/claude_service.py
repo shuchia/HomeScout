@@ -93,7 +93,16 @@ Analyze each apartment based on:
 3. Space requirements (bedrooms, bathrooms, square footage)
 4. Property type preference
 5. Move-in date availability
-6. Additional preferences (amenities, pet-friendly, parking, etc.)
+6. Additional preferences, which may include any of the following:
+   - Pet policies: pet-friendly, pet play area, fee/rent for dog, fee/rent for cat
+   - Parking: parking availability, fee for parking, garage, EV charging
+   - Lease terms: deposit needed, furnished, short term lease (less than 1 year)
+   - Building amenities: gym, swimming pool, tennis court, picnic area, sundeck, fireplace, day care, planned social activities
+   - Unit features: walk-in closet, washer/dryer in apartment, refrigerator, microwave, air conditioner, hardwood floors, vinyl flooring
+   - Utilities: Wi-Fi included, cable included, electric heating, gas heating, water view
+   - Location & accessibility: landmark nearby, walk to market, public transport, 10 min walk to transportation, take out eateries nearby, walk score, bike score
+   - Safety & security: safety, controlled access
+   - Services: English/Spanish speaking staff, on-site maintenance, on-site management, online rent payment, dry cleaning service, pay for garbage pick up
 
 For each apartment, provide:
 - A match score (0-100%)
