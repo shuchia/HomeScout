@@ -300,6 +300,34 @@
 
 ---
 
+## E2E Testing (Playwright)
+
+- [x] Set up Playwright testing framework
+  - [x] Install `@playwright/test` dependency
+  - [x] Create `playwright.config.ts` with Chromium browser
+  - [x] Configure single worker to avoid Claude API rate limits
+  - [x] Set 60-second timeout for API-dependent tests
+
+- [x] Create `frontend/e2e/homescout.spec.ts` with 20 test cases:
+  - [x] **Homepage tests** (2): Header, hero section, search form display
+  - [x] **Search Form tests** (5): Default values, form inputs, property type toggles, validation
+  - [x] **Search Results tests** (5): Loading state, results display, apartment cards, match scores, no results
+  - [x] **Image Carousel tests** (3): Image display, navigation arrows, carousel interaction
+  - [x] **Responsive Layout tests** (2): Desktop grid, mobile stack
+  - [x] **Error Handling tests** (1): API failure recovery
+  - [x] **AI Features tests** (2): Reasoning display, highlight checkmarks
+
+- [x] Add npm scripts for testing:
+  - [x] `npm test` - Run all tests
+  - [x] `npm run test:ui` - Run with Playwright UI
+  - [x] `npm run test:headed` - Run in headed browser mode
+
+- [x] Test execution:
+  - [x] Tests without backend: `SKIP_BACKEND_TESTS=true npm test` (9 pass, 11 skip)
+  - [x] Tests with backend: Start backend first, then `npm test` (all 20 pass when API available)
+
+---
+
 ## Success Criteria
 
 ✅ **Milestone 2 COMPLETE:**
@@ -312,6 +340,7 @@
 - ✅ Reasoning and highlights render correctly
 - ✅ Mobile-responsive design works well
 - ✅ Clean, professional UI matching design guidelines
+- ✅ E2E test suite with 20 Playwright tests
 
 ---
 
