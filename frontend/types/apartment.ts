@@ -62,3 +62,51 @@ export interface HealthResponse {
   status: string;
   message: string;
 }
+
+/**
+ * Search context passed from search page to compare page
+ */
+export interface SearchContext {
+  city: string;
+  budget: number;
+  bedrooms: number;
+  bathrooms: number;
+  property_type: string;
+  move_in_date: string;
+}
+
+/**
+ * Score and note for a single comparison category
+ */
+export interface CategoryScore {
+  score: number;
+  note: string;
+}
+
+/**
+ * Detailed comparison scoring for one apartment
+ */
+export interface ApartmentComparisonScore {
+  apartment_id: string;
+  overall_score: number;
+  reasoning: string;
+  highlights: string[];
+  category_scores: Record<string, CategoryScore>;
+}
+
+/**
+ * The winning apartment and why
+ */
+export interface ComparisonWinner {
+  apartment_id: string;
+  reason: string;
+}
+
+/**
+ * Full comparison analysis returned by Claude
+ */
+export interface ComparisonAnalysis {
+  winner: ComparisonWinner;
+  categories: string[];
+  apartment_scores: ApartmentComparisonScore[];
+}

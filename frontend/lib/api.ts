@@ -3,7 +3,7 @@
  * Handles all communication with the FastAPI server
  */
 
-import { SearchParams, SearchResponse, HealthResponse, Apartment, ApartmentWithScore } from '@/types/apartment';
+import { SearchParams, SearchResponse, HealthResponse, Apartment, ApartmentWithScore, SearchContext, ComparisonAnalysis } from '@/types/apartment';
 
 // Get API URL from environment variable, fallback to localhost
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -171,6 +171,7 @@ export async function getApartmentsBatch(ids: string[]): Promise<Apartment[]> {
 export interface CompareResponse {
   apartments: ApartmentWithScore[];
   comparison_fields: string[];
+  comparison_analysis?: ComparisonAnalysis;
 }
 
 /**
@@ -184,7 +185,8 @@ export interface CompareResponse {
  */
 export async function compareApartments(
   apartmentIds: string[],
-  preferences?: string
+  preferences?: string,
+  searchContext?: SearchContext
 ): Promise<CompareResponse> {
   try {
     const response = await fetch(`${API_URL}/api/apartments/compare`, {
@@ -195,6 +197,7 @@ export async function compareApartments(
       body: JSON.stringify({
         apartment_ids: apartmentIds,
         preferences: preferences || null,
+        search_context: searchContext || null,
       }),
     });
 

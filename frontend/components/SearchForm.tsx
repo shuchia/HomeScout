@@ -3,6 +3,14 @@
 import { useState } from 'react';
 import { SearchParams, ApartmentWithScore } from '@/types/apartment';
 import { searchApartments, ApiError } from '@/lib/api';
+import { useComparison } from '@/hooks/useComparison';
+
+// Available cities (MVP - 3 PA cities)
+const AVAILABLE_CITIES = [
+  { value: 'Philadelphia, PA', label: 'Philadelphia, PA' },
+  { value: 'Bryn Mawr, PA', label: 'Bryn Mawr, PA' },
+  { value: 'Pittsburgh, PA', label: 'Pittsburgh, PA' },
+];
 
 // Property type options
 const PROPERTY_TYPES = ['Apartment', 'Condo', 'Townhouse', 'Studio'];
@@ -30,14 +38,15 @@ interface SearchFormProps {
 
 export default function SearchForm({ onResults, onLoading, onError }: SearchFormProps) {
   // Form state
-  const [city, setCity] = useState('San Francisco, CA');
-  const [budget, setBudget] = useState(3500);
-  const [bedrooms, setBedrooms] = useState(2);
+  const [city, setCity] = useState('Pittsburgh, PA');
+  const [budget, setBudget] = useState(2000);
+  const [bedrooms, setBedrooms] = useState(1);
   const [bathrooms, setBathrooms] = useState(1);
-  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>(['Apartment', 'Condo']);
-  const [moveInDate, setMoveInDate] = useState('2025-12-01');
+  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>(['Apartment']);
+  const [moveInDate, setMoveInDate] = useState('2026-03-01');
   const [otherPreferences, setOtherPreferences] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { setSearchContext } = useComparison();
 
   // Handle property type checkbox toggle
   const handlePropertyTypeChange = (type: string) => {
@@ -80,6 +89,17 @@ export default function SearchForm({ onResults, onLoading, onError }: SearchForm
 
       const response = await searchApartments(params);
       onResults(response.apartments);
+
+      // Save search context for comparison page
+      setSearchContext({
+        city: city.trim(),
+        budget,
+        bedrooms,
+        bathrooms,
+        property_type: selectedPropertyTypes.join(', '),
+        move_in_date: moveInDate,
+        other_preferences: otherPreferences.trim(),
+      });
     } catch (error) {
       if (error instanceof ApiError) {
         onError(error.message);
@@ -94,20 +114,24 @@ export default function SearchForm({ onResults, onLoading, onError }: SearchForm
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* City Input */}
+      {/* City Select */}
       <div>
         <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
           City
         </label>
-        <input
-          type="text"
+        <select
           id="city"
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          placeholder="San Francisco, CA"
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
           required
-        />
+        >
+          {AVAILABLE_CITIES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Budget Input */}
