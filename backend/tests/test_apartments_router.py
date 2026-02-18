@@ -133,3 +133,55 @@ async def test_compare_apartments_with_nonexistent():
     # Only the existing apartment should be returned
     assert len(data["apartments"]) == 1
     assert data["apartments"][0]["id"] == "apt-001"
+
+
+@pytest.mark.asyncio
+async def test_compare_apartments_with_preferences():
+    """Test comparison with preferences triggers analysis."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/apartments/compare",
+            json={
+                "apartment_ids": ["apt-001", "apt-002"],
+                "preferences": "parking, quiet neighborhood",
+                "search_context": {
+                    "city": "Bryn Mawr, PA",
+                    "budget": 2000,
+                    "bedrooms": 1,
+                    "bathrooms": 1,
+                    "property_type": "Apartment",
+                    "move_in_date": "2026-03-01"
+                }
+            }
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["apartments"]) == 2
+    assert "comparison_analysis" in data
+    analysis = data["comparison_analysis"]
+    assert "winner" in analysis
+    assert analysis["winner"]["apartment_id"] in ["apt-001", "apt-002"]
+    assert "reason" in analysis["winner"]
+    assert "categories" in analysis
+    assert len(analysis["categories"]) >= 3  # At least Value, Space, Amenities
+    assert "apartment_scores" in analysis
+    assert len(analysis["apartment_scores"]) == 2
+    for score in analysis["apartment_scores"]:
+        assert "overall_score" in score
+        assert 0 <= score["overall_score"] <= 100
+        assert "category_scores" in score
+        for cat in analysis["categories"]:
+            assert cat in score["category_scores"]
+
+
+@pytest.mark.asyncio
+async def test_compare_apartments_without_preferences_no_analysis():
+    """Test comparison without preferences returns no analysis."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/apartments/compare",
+            json={"apartment_ids": ["apt-001", "apt-002"]}
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data.get("comparison_analysis") is None
