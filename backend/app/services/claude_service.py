@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
@@ -45,8 +45,25 @@ class ClaudeService:
             List of apartment scores with match_score, reasoning, and highlights
         """
 
-        # Format the prompt
-        apartments_json = json.dumps(apartments, indent=2)
+        # Slim down apartment data to reduce prompt size and speed up API call
+        slim_apartments = []
+        for apt in apartments:
+            slim_apt = {
+                "id": apt["id"],
+                "address": apt.get("address", ""),
+                "rent": apt.get("rent", 0),
+                "bedrooms": apt.get("bedrooms", 0),
+                "bathrooms": apt.get("bathrooms", 0),
+                "sqft": apt.get("sqft", 0),
+                "property_type": apt.get("property_type", ""),
+                "available_date": apt.get("available_date", ""),
+                "neighborhood": apt.get("neighborhood", ""),
+                "description": (apt.get("description", "") or "")[:300],
+                "amenities": (apt.get("amenities", []) or [])[:15],
+            }
+            slim_apartments.append(slim_apt)
+
+        apartments_json = json.dumps(slim_apartments, indent=2)
 
         # Build the user prompt from our template
         user_prompt = f"""Please analyze and score the following apartments based on my preferences:
@@ -179,3 +196,108 @@ Be honest and practical in your scoring. A perfect 100% match is rare. Most good
         except Exception as e:
             print(f"Error parsing response: {str(e)}")
             raise
+
+    def compare_apartments_with_analysis(
+        self,
+        apartments: List[Dict],
+        preferences: str,
+        search_context: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        Deep head-to-head comparison of 2-3 apartments.
+        Returns dict with winner, categories, and per-apartment scores.
+        """
+        slim_apartments = []
+        for apt in apartments:
+            slim_apt = {
+                "id": apt["id"],
+                "address": apt.get("address", ""),
+                "rent": apt.get("rent", 0),
+                "bedrooms": apt.get("bedrooms", 0),
+                "bathrooms": apt.get("bathrooms", 0),
+                "sqft": apt.get("sqft", 0),
+                "property_type": apt.get("property_type", ""),
+                "available_date": apt.get("available_date", ""),
+                "neighborhood": apt.get("neighborhood", ""),
+                "description": (apt.get("description", "") or "")[:300],
+                "amenities": (apt.get("amenities", []) or [])[:15],
+            }
+            slim_apartments.append(slim_apt)
+
+        apartments_json = json.dumps(slim_apartments, indent=2)
+
+        context_section = ""
+        if search_context:
+            context_section = f"""## Original Search Criteria
+City: {search_context.get('city', 'N/A')} | Budget: ${search_context.get('budget', 'N/A')}/mo | Bedrooms: {search_context.get('bedrooms', 'N/A')} | Bathrooms: {search_context.get('bathrooms', 'N/A')} | Type: {search_context.get('property_type', 'N/A')} | Move-in: {search_context.get('move_in_date', 'N/A')}
+
+"""
+
+        user_prompt = f"""{context_section}## What Matters Most to This User
+{preferences}
+
+## Apartments to Compare
+{apartments_json}
+
+Compare these apartments across categories. Always include Value, Space & Layout, and Amenities as standard categories. Add 1-3 custom categories based on what matters most to this user. Score each apartment 0-100 per category. Pick an overall winner.
+
+Return a JSON object with this exact structure:
+{{
+  "winner": {{
+    "apartment_id": "the-winning-id",
+    "reason": "1-2 sentence explanation of why this apartment wins overall"
+  }},
+  "categories": ["Value", "Space & Layout", "Amenities", ...custom categories],
+  "apartment_scores": [
+    {{
+      "apartment_id": "id",
+      "overall_score": 85,
+      "reasoning": "1-2 sentence overall assessment",
+      "highlights": ["highlight 1", "highlight 2"],
+      "category_scores": {{
+        "Value": {{"score": 80, "note": "brief note"}},
+        "Space & Layout": {{"score": 75, "note": "brief note"}},
+        ...one entry per category
+      }}
+    }}
+  ]
+}}
+
+Return valid JSON only, no additional text."""
+
+        system_prompt = """You are an expert apartment comparison analyst for HomeScout. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
+
+        try:
+            message = self.client.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=4096,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+
+            response_text = message.content[0].text
+            result = self._parse_comparison_response(response_text)
+            return result
+
+        except Exception as e:
+            print(f"Error calling Claude API for comparison: {str(e)}")
+            raise
+
+    def _parse_comparison_response(self, response_text: str) -> Dict:
+        """Parse the comparison analysis JSON from Claude's response."""
+        if "```json" in response_text:
+            json_start = response_text.find("```json") + 7
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.find("```") + 3
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+
+        result = json.loads(response_text)
+
+        for field in ["winner", "categories", "apartment_scores"]:
+            if field not in result:
+                raise ValueError(f"Missing required field: {field}")
+
+        return result
