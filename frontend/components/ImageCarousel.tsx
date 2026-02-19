@@ -56,9 +56,9 @@ export default function ImageCarousel({ images, alt }: ImageCarouselProps) {
   }
 
   return (
-    <div className="relative">
+    <div className="relative pointer-events-none">
       {/* Main Carousel */}
-      <div className="overflow-hidden rounded-t-lg" ref={emblaRef}>
+      <div className="overflow-hidden rounded-t-lg pointer-events-auto" ref={emblaRef}>
         <div className="flex">
           {images.map((image, index) => (
             <div
@@ -80,7 +80,7 @@ export default function ImageCarousel({ images, alt }: ImageCarouselProps) {
       {/* Navigation Arrows */}
       <button
         onClick={scrollPrev}
-        className={`absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-md transition hover:bg-white ${
+        className={`absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-md transition hover:bg-white pointer-events-auto ${
           !canScrollPrev && 'opacity-50'
         }`}
         aria-label="Previous image"
@@ -101,7 +101,7 @@ export default function ImageCarousel({ images, alt }: ImageCarouselProps) {
       </button>
       <button
         onClick={scrollNext}
-        className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-md transition hover:bg-white ${
+        className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-md transition hover:bg-white pointer-events-auto ${
           !canScrollNext && 'opacity-50'
         }`}
         aria-label="Next image"
@@ -122,7 +122,7 @@ export default function ImageCarousel({ images, alt }: ImageCarouselProps) {
       </button>
 
       {/* Pagination Dots */}
-      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 pointer-events-auto">
         {images.map((_, index) => (
           <button
             key={index}

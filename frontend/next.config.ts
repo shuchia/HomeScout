@@ -24,6 +24,11 @@ const nextConfig: NextConfig = {
         hostname: '*.googleusercontent.com',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: '*.apartments.com',
+        pathname: '/**',
+      },
     ],
   },
 };

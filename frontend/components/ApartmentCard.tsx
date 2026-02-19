@@ -56,7 +56,7 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
         <ImageCarousel images={images} alt={address} />
 
         {/* Favorite Button */}
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute top-2 left-2 z-30 pointer-events-auto">
           <FavoriteButton apartmentId={id} />
         </div>
 

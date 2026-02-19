@@ -107,6 +107,44 @@ class ApartmentWithScore(Apartment):
         }
 
 
+class SearchContext(BaseModel):
+    """Search criteria context for comparison scoring."""
+    city: str
+    budget: int
+    bedrooms: int
+    bathrooms: int
+    property_type: str
+    move_in_date: str
+
+
+class CategoryScore(BaseModel):
+    """Score and note for a single comparison category."""
+    score: int = Field(..., ge=0, le=100)
+    note: str
+
+
+class ApartmentComparisonScore(BaseModel):
+    """Detailed comparison scoring for one apartment."""
+    apartment_id: str
+    overall_score: int = Field(..., ge=0, le=100)
+    reasoning: str
+    highlights: List[str]
+    category_scores: dict[str, CategoryScore]
+
+
+class ComparisonWinner(BaseModel):
+    """The winning apartment and why."""
+    apartment_id: str
+    reason: str
+
+
+class ComparisonAnalysis(BaseModel):
+    """Full comparison analysis returned by Claude."""
+    winner: ComparisonWinner
+    categories: List[str]
+    apartment_scores: List[ApartmentComparisonScore]
+
+
 class SearchResponse(BaseModel):
     """Response model for apartment search"""
     apartments: List[ApartmentWithScore]
@@ -139,6 +177,7 @@ class CompareRequest(BaseModel):
     """Request model for apartment comparison."""
     apartment_ids: List[str] = Field(..., max_length=3)
     preferences: Optional[str] = Field(None, description="User preferences for scoring")
+    search_context: Optional[SearchContext] = Field(None, description="Original search criteria")
 
     class Config:
         json_schema_extra = {
@@ -153,6 +192,7 @@ class CompareResponse(BaseModel):
     """Response model for apartment comparison."""
     apartments: List[Apartment]
     comparison_fields: List[str]
+    comparison_analysis: Optional[ComparisonAnalysis] = None
 
     class Config:
         json_schema_extra = {

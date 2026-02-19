@@ -24,11 +24,19 @@ export function useFavorites() {
     setLoading(true)
 
     // Get favorites from Supabase
-    const { data: favs } = await supabase
+    const { data: favs, error: favsError } = await supabase
       .from('favorites')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
+
+    console.log('Loaded favorites from Supabase:', { favs, error: favsError })
+
+    if (favsError) {
+      console.error('Error loading favorites:', favsError)
+      setLoading(false)
+      return
+    }
 
     if (!favs?.length) {
       setFavorites([])
@@ -38,8 +46,10 @@ export function useFavorites() {
 
     // Fetch apartment details from FastAPI
     const apartmentIds = favs.map(f => f.apartment_id)
+    console.log('Fetching apartment details for IDs:', apartmentIds)
     try {
       const apartments = await getApartmentsBatch(apartmentIds)
+      console.log('Got apartments from batch API:', apartments)
       const apartmentMap = new Map(apartments.map(a => [a.id, a]))
 
       const merged = favs.map(fav => ({
@@ -84,16 +94,42 @@ export function useFavorites() {
   async function addFavorite(apartmentId: string): Promise<boolean> {
     if (!user) return false
 
+    // Optimistic update - immediately show as favorited
+    setFavorites(prev => [...prev, {
+      id: `temp-${apartmentId}`,
+      user_id: user.id,
+      apartment_id: apartmentId,
+      notes: null,
+      is_available: true,
+      created_at: new Date().toISOString(),
+      apartment: null
+    }])
+
     const { error } = await supabase.from('favorites').insert({
       user_id: user.id,
       apartment_id: apartmentId,
     })
 
-    return !error
+    if (error) {
+      console.error('Supabase addFavorite error:', error)
+      // Rollback optimistic update on error
+      setFavorites(prev => prev.filter(f => f.apartment_id !== apartmentId))
+      return false
+    }
+
+    // Refresh to get full data including apartment details
+    await loadFavorites()
+    return true
   }
 
   async function removeFavorite(apartmentId: string): Promise<boolean> {
     if (!user) return false
+
+    // Store for rollback
+    const previousFavorites = [...favorites]
+
+    // Optimistic update - immediately remove
+    setFavorites(prev => prev.filter(f => f.apartment_id !== apartmentId))
 
     const { error } = await supabase
       .from('favorites')
@@ -101,7 +137,14 @@ export function useFavorites() {
       .eq('user_id', user.id)
       .eq('apartment_id', apartmentId)
 
-    return !error
+    if (error) {
+      console.error('Supabase removeFavorite error:', error)
+      // Rollback on error
+      setFavorites(previousFavorites)
+      return false
+    }
+
+    return true
   }
 
   function isFavorite(apartmentId: string): boolean {

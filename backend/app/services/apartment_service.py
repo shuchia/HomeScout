@@ -154,7 +154,7 @@ class ApartmentService:
 
         return filtered
 
-    def search_apartments(
+    async def search_apartments(
         self,
         city: str,
         budget: int,
@@ -179,25 +179,17 @@ class ApartmentService:
             List of filtered apartments
         """
         if self._use_database:
-            # Run async database query in sync context
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(
-                    self._search_database(
-                        city, budget, bedrooms, bathrooms,
-                        property_type, move_in_date
-                    )
-                )
-            finally:
-                loop.close()
+            return await self._search_database(
+                city, budget, bedrooms, bathrooms,
+                property_type, move_in_date
+            )
         else:
             return self._search_json(
                 city, budget, bedrooms, bathrooms,
                 property_type, move_in_date
             )
 
-    def get_top_apartments(
+    async def get_top_apartments(
         self,
         city: str,
         budget: int,
@@ -225,7 +217,7 @@ class ApartmentService:
             Tuple of (list of apartments with scores, total count)
         """
         # Step 1: Filter apartments by basic criteria
-        filtered_apartments = self.search_apartments(
+        filtered_apartments = await self.search_apartments(
             city=city,
             budget=budget,
             bedrooms=bedrooms,
@@ -238,8 +230,13 @@ class ApartmentService:
         if not filtered_apartments:
             return [], 0
 
-        # Step 2: Score apartments using Claude AI
-        scores = self.claude_service.score_apartments(
+        # Cap the number of apartments sent to Claude to keep API calls fast
+        max_to_score = top_n * 2
+        apartments_to_score = filtered_apartments[:max_to_score]
+
+        # Step 2: Score apartments using Claude AI (run in thread to not block async loop)
+        scores = await asyncio.to_thread(
+            self.claude_service.score_apartments,
             city=city,
             budget=budget,
             bedrooms=bedrooms,
@@ -247,14 +244,14 @@ class ApartmentService:
             property_type=property_type,
             move_in_date=move_in_date,
             other_preferences=other_preferences or "None specified",
-            apartments=filtered_apartments
+            apartments=apartments_to_score,
         )
 
         # Step 3: Merge apartment data with scores
         scored_apartments = []
         score_map = {score["apartment_id"]: score for score in scores}
 
-        for apt in filtered_apartments:
+        for apt in apartments_to_score:
             apt_id = apt["id"]
             if apt_id in score_map:
                 score_data = score_map[apt_id]
