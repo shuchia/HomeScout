@@ -61,7 +61,18 @@ coverage/
 .cache/
 
 # Claude Code
+.claude/settings.json
 .claude/settings.local.json
+.claude/track-*.md
+
+# Pytest
+.pytest_cache/
+
+# Database
+*.db
+
+# Local env overrides
+.env.local
 
 # Misc
 *.tsbuildinfo

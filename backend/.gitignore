@@ -40,3 +40,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Pytest
+.pytest_cache/
+
+# Celery
+celerybeat-schedule*
