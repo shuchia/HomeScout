@@ -100,7 +100,7 @@ async def health_check():
 @app.get("/api/apartments/count")
 async def get_apartment_count():
     """Get total number of apartments in the database"""
-    count = apartment_service.get_apartment_count()
+    count = await apartment_service.get_apartment_count_async()
     return {
         "total_apartments": count,
         "message": f"Currently tracking {count} apartments across multiple cities"
@@ -136,7 +136,7 @@ async def search_apartments(request: SearchRequest):
     """
     try:
         # Get top apartments using the service
-        top_apartments, total_count = apartment_service.get_top_apartments(
+        top_apartments, total_count = await apartment_service.get_top_apartments(
             city=request.city,
             budget=request.budget,
             bedrooms=request.bedrooms,

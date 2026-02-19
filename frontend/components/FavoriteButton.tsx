@@ -15,26 +15,40 @@ export function FavoriteButton({ apartmentId, className = '' }: FavoriteButtonPr
 
   const favorited = isFavorite(apartmentId)
 
-  async function handleClick() {
+  async function handleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    e.preventDefault()
+
+    console.log('FavoriteButton clicked!', { apartmentId, user: !!user, favorited })
+
     if (!user) {
+      console.log('No user, triggering sign in...')
       signInWithGoogle()
       return
     }
 
     setLoading(true)
-    if (favorited) {
-      await removeFavorite(apartmentId)
-    } else {
-      await addFavorite(apartmentId)
+    try {
+      if (favorited) {
+        console.log('Removing favorite...')
+        const result = await removeFavorite(apartmentId)
+        console.log('Remove result:', result)
+      } else {
+        console.log('Adding favorite...')
+        const result = await addFavorite(apartmentId)
+        console.log('Add result:', result)
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
     }
     setLoading(false)
   }
 
   return (
     <button
-      onClick={handleClick}
+      onClick={(e) => handleClick(e)}
       disabled={loading}
-      className={`p-2 rounded-full transition-colors ${
+      className={`p-2 rounded-full transition-colors pointer-events-auto cursor-pointer ${
         favorited
           ? 'bg-red-100 text-red-600 hover:bg-red-200'
           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'

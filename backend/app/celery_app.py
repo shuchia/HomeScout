@@ -3,8 +3,12 @@ Celery application configuration for HomeScout background tasks.
 Uses Redis as message broker.
 """
 import os
+from dotenv import load_dotenv
 from celery import Celery
 from celery.schedules import crontab
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Redis URL for message broker
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -49,21 +53,21 @@ celery_app.conf.update(
     worker_disable_rate_limits=False,
 )
 
-# Beat schedule for Bryn Mawr MVP
+# Beat schedule for MVP (3 cities)
 celery_app.conf.beat_schedule = {
-    # Daily scrape at 6 AM EST (11 AM UTC)
-    "scrape-bryn-mawr-daily": {
+    # Daily scrape all MVP cities at 6 AM EST (11 AM UTC)
+    "scrape-apartments-com-daily": {
         "task": "app.tasks.scrape_tasks.scrape_source",
         "schedule": crontab(hour=11, minute=0),
         "args": ("apartments_com",),
         "kwargs": {
-            "cities": ["Bryn Mawr"],
+            "cities": ["Philadelphia", "Bryn Mawr", "Pittsburgh"],
             "state": "PA",
-            "max_listings_per_city": 200,
+            "max_listings_per_city": 100,
         },
     },
 
-    # Cleanup stale after 3 days
+    # Cleanup stale listings after 3 days
     "cleanup-stale-listings": {
         "task": "app.tasks.maintenance_tasks.cleanup_stale_listings",
         "schedule": crontab(hour=12, minute=0),

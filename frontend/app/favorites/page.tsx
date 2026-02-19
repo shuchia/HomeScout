@@ -3,11 +3,30 @@ import { useFavorites } from '@/hooks/useFavorites'
 import { useAuth } from '@/contexts/AuthContext'
 import ApartmentCard from '@/components/ApartmentCard'
 import Link from 'next/link'
-import { ApartmentWithScore } from '@/types/apartment'
+import { Apartment, ApartmentWithScore } from '@/types/apartment'
+
+// Convert a basic Apartment to ApartmentWithScore with default values
+function toApartmentWithScore(apartment: Apartment): ApartmentWithScore {
+  return {
+    ...apartment,
+    match_score: 100, // Favorited = 100% match
+    reasoning: "You saved this apartment to your favorites.",
+    highlights: ["Saved to favorites"]
+  }
+}
 
 export default function FavoritesPage() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth()
   const { favorites, loading } = useFavorites()
+
+  // Debug logging
+  console.log('FavoritesPage render:', {
+    user: user?.id,
+    authLoading,
+    loading,
+    favoritesCount: favorites.length,
+    favorites: favorites.map(f => ({ id: f.id, apartment_id: f.apartment_id, hasApartment: !!f.apartment }))
+  })
 
   if (authLoading) {
     return (
@@ -63,15 +82,21 @@ export default function FavoritesPage() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {favorites.map(fav => (
             <div key={fav.id} className="relative">
-              {!fav.is_available && (
+              {fav.is_available === false && (
                 <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center rounded-lg">
                   <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
                     No longer available
                   </span>
                 </div>
               )}
-              {fav.apartment && (
-                <ApartmentCard apartment={fav.apartment as ApartmentWithScore} />
+              {fav.apartment ? (
+                <ApartmentCard apartment={toApartmentWithScore(fav.apartment)} />
+              ) : (
+                <div className="bg-gray-100 rounded-lg p-4 h-64 flex items-center justify-center">
+                  <p className="text-gray-500 text-sm">
+                    Apartment {fav.apartment_id} not found
+                  </p>
+                </div>
               )}
             </div>
           ))}
