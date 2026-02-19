@@ -29,26 +29,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    // Get initial session
+    let mounted = true
+
+    // Support E2E test auth bypass via localStorage
+    const testUser = typeof window !== 'undefined'
+      ? localStorage.getItem('__test_auth_user')
+      : null
+    if (testUser) {
+      try {
+        setUser(JSON.parse(testUser) as User)
+        setLoading(false)
+        return
+      } catch { /* fall through to normal auth */ }
+    }
+
+    // Get initial session with timeout
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('Auth session check timed out')
+        setLoading(false)
+      }
+    }, 5000)
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      setLoading(false)
+      clearTimeout(timeout)
+      if (mounted) {
+        setUser(session?.user ?? null)
+        if (session?.user) fetchProfile(session.user.id)
+        setLoading(false)
+      }
+    }).catch((error) => {
+      clearTimeout(timeout)
+      if (mounted) {
+        console.error('Auth session error:', error)
+        setLoading(false)
+      }
     })
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
+        if (mounted) {
+          setUser(session?.user ?? null)
+          if (session?.user) {
+            await fetchProfile(session.user.id)
+          } else {
+            setProfile(null)
+          }
         }
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      clearTimeout(timeout)
+      subscription.unsubscribe()
+    }
   }, [fetchProfile])
 
   async function signInWithGoogle() {
