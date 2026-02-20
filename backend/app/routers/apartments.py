@@ -166,12 +166,22 @@ async def get_apartment(apartment_id: str) -> Dict[str, Any]:
     Raises:
         HTTPException: 404 if apartment not found
     """
-    apartments = _get_apartments_data()
+    if is_database_enabled():
+        from sqlalchemy import select
+        from app.models.apartment import ApartmentModel
+        async with get_session_context() as session:
+            result = await session.execute(
+                select(ApartmentModel).where(ApartmentModel.id == apartment_id)
+            )
+            apt = result.scalar_one_or_none()
+            if apt:
+                return apt.to_dict()
+            raise HTTPException(status_code=404, detail=f"Apartment {apartment_id} not found")
 
+    apartments = _get_apartments_data()
     for apt in apartments:
         if apt.get("id") == apartment_id:
             return apt
-
     raise HTTPException(status_code=404, detail=f"Apartment {apartment_id} not found")
 
 
@@ -190,19 +200,29 @@ async def get_apartments_batch(apartment_ids: List[str] = Body(..., max_length=5
     if not apartment_ids:
         return []
 
+    if is_database_enabled():
+        from sqlalchemy import select
+        from app.models.apartment import ApartmentModel
+        async with get_session_context() as session:
+            stmt = select(ApartmentModel).where(ApartmentModel.id.in_(apartment_ids))
+            db_result = await session.execute(stmt)
+            apt_map = {apt.id: apt.to_dict() for apt in db_result.scalars()}
+            result = []
+            for aid in apartment_ids:
+                if aid in apt_map:
+                    result.append(apt_map[aid])
+                else:
+                    result.append({"id": aid, "is_available": False})
+            return result
+
     apartments = _get_apartments_data()
-
-    # Create a lookup map for efficiency
     apt_map = {apt.get("id"): apt for apt in apartments}
-
     result = []
     for aid in apartment_ids:
         if aid in apt_map:
             result.append(apt_map[aid])
         else:
-            # Return a minimal object indicating the apartment is not available
             result.append({"id": aid, "is_available": False})
-
     return result
 
 
@@ -220,28 +240,39 @@ async def compare_apartments(request: CompareRequest) -> CompareResponse:
     if not request.apartment_ids:
         return CompareResponse(apartments=[], comparison_fields=comparison_fields)
 
-    # Fetch apartments
-    apartments_data = _get_apartments_data()
-    apt_map = {apt.get("id"): apt for apt in apartments_data}
-
+    # Fetch apartments from database or JSON
     apartments = []
-    for aid in request.apartment_ids:
-        if aid in apt_map:
-            apartments.append(apt_map[aid])
+    if is_database_enabled():
+        from sqlalchemy import select
+        from app.models.apartment import ApartmentModel
+        async with get_session_context() as session:
+            stmt = select(ApartmentModel).where(ApartmentModel.id.in_(request.apartment_ids))
+            db_result = await session.execute(stmt)
+            apt_map = {apt.id: apt.to_dict() for apt in db_result.scalars()}
+            for aid in request.apartment_ids:
+                if aid in apt_map:
+                    apartments.append(apt_map[aid])
+    else:
+        apartments_data = _get_apartments_data()
+        apt_map = {apt.get("id"): apt for apt in apartments_data}
+        for aid in request.apartment_ids:
+            if aid in apt_map:
+                apartments.append(apt_map[aid])
 
-    # If preferences provided, run Claude comparison analysis
+    # Run Claude comparison analysis when we have at least 2 apartments
     comparison_analysis = None
-    if request.preferences and request.preferences.strip() and len(apartments) >= 2:
+    if len(apartments) >= 2:
         from app.services.claude_service import ClaudeService
 
         claude = ClaudeService()
         search_ctx = request.search_context.model_dump() if request.search_context else None
+        prefs = request.preferences.strip() if request.preferences else "general comparison"
 
         try:
             raw_analysis = await asyncio.to_thread(
                 claude.compare_apartments_with_analysis,
                 apartments=apartments,
-                preferences=request.preferences,
+                preferences=prefs,
                 search_context=search_ctx,
             )
             from app.schemas import ComparisonAnalysis

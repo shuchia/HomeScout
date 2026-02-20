@@ -71,8 +71,6 @@ export default function ComparePage() {
 
   // Handle scoring with preferences
   const handleScore = async () => {
-    if (!preferences.trim()) return
-
     setScoring(true)
     setError(null)
 
@@ -220,20 +218,20 @@ export default function ComparePage() {
             Get AI Comparison
           </h2>
           <p className="text-gray-600 mb-4">
-            Tell us what matters most to you and Claude AI will do a deep head-to-head analysis.
+            Click Score for a deep head-to-head AI analysis. Optionally add your preferences for a personalized comparison.
           </p>
           <div className="flex gap-4">
             <input
               type="text"
               value={preferences}
               onChange={(e) => setPreferences(e.target.value)}
-              placeholder="e.g., parking, quiet for WFH, near transit"
+              placeholder="Optional: e.g., parking, quiet for WFH, near transit"
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyDown={(e) => { if (e.key === 'Enter' && preferences.trim()) handleScore() }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleScore() }}
             />
             <button
               onClick={handleScore}
-              disabled={scoring || !preferences.trim()}
+              disabled={scoring}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {scoring ? (

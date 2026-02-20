@@ -31,16 +31,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    // Support E2E test auth bypass via localStorage
-    const testUser = typeof window !== 'undefined'
-      ? localStorage.getItem('__test_auth_user')
-      : null
-    if (testUser) {
-      try {
-        setUser(JSON.parse(testUser) as User)
-        setLoading(false)
-        return
-      } catch { /* fall through to normal auth */ }
+    // Support E2E test auth bypass via localStorage (non-production only)
+    if (process.env.NODE_ENV !== 'production') {
+      const testUser = typeof window !== 'undefined'
+        ? localStorage.getItem('__test_auth_user')
+        : null
+      if (testUser) {
+        try {
+          setUser(JSON.parse(testUser) as User)
+          setLoading(false)
+          return
+        } catch { /* fall through to normal auth */ }
+      }
     }
 
     // Get initial session with timeout
