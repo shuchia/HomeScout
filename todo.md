@@ -360,15 +360,48 @@
 
 ---
 
+# ✅ Milestone 3: User Features & Enhanced Comparison (COMPLETED)
+
+**Goal:** Add authentication, favorites, and AI-powered comparison tool
+
+**Status:** ✅ COMPLETE
+
+---
+
+## Authentication
+- [x] Google OAuth via Supabase
+- [x] Auth gates on search page and compare page
+- [x] AuthContext with session persistence and 5-second timeout
+- [x] E2E test auth bypass (non-production only)
+
+## Favorites
+- [x] Heart icon on apartment cards
+- [x] Optimistic UI updates with rollback
+- [x] Supabase realtime subscriptions
+- [x] Dedicated favorites page (`/favorites`)
+
+## Enhanced Comparison Tool
+- [x] Compare up to 3 apartments side-by-side
+- [x] Claude AI head-to-head analysis (preferences optional)
+- [x] Winner summary card with reasoning
+- [x] Category-by-category scoring (Value, Space, Amenities, etc.)
+- [x] Search context auto-passed from search page via Zustand store
+- [x] Comparison table with Overall Score, rent, beds, baths, amenities
+
+## Data Collection Pipeline
+- [x] PostgreSQL database mode with async SQLAlchemy
+- [x] Apify integration for apartments.com scraping
+- [x] Data normalization and deduplication
+- [x] Celery task queue with Redis
+- [x] All apartment endpoints support both DB and JSON modes
+
+---
+
 # 🚀 Future Enhancements (Post-MVP)
 
-- [ ] User authentication and accounts
-- [ ] Save favorite apartments
-- [ ] Comparison tool (side-by-side)
 - [ ] Notes for each apartment
 - [ ] Viewing appointment scheduler
 - [ ] Photo upload for visited apartments
-- [ ] Integrate real apartment APIs (Zillow, Apartments.com)
 - [ ] Neighborhood insights (walkability, transit, safety)
 - [ ] Commute calculator
 - [ ] Email notifications for new matches
