@@ -294,6 +294,10 @@ async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
                     content_hash=listing_data.get("content_hash"),
                     data_quality_score=listing_data.get("data_quality_score", 50),
                     raw_data=listing_data.get("raw_data"),
+                    freshness_confidence=100,
+                    times_seen=1,
+                    first_seen_at=datetime.utcnow(),
+                    market_id=listing_data.get("market_id"),
                 )
                 session.add(apartment)
 
