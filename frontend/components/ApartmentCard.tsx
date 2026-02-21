@@ -23,6 +23,14 @@ const formatSqft = (sqft: number): string => {
   return new Intl.NumberFormat('en-US').format(sqft);
 };
 
+// Get freshness badge based on confidence score
+const getFreshnessBadge = (confidence?: number): { text: string; color: string } | null => {
+  if (confidence === undefined || confidence >= 80) return null;
+  if (confidence >= 50) return { text: 'Listed recently', color: 'bg-yellow-100 text-yellow-800' };
+  if (confidence >= 40) return { text: 'May no longer be available', color: 'bg-orange-100 text-orange-800' };
+  return null;
+};
+
 // Get color class based on match score
 const getScoreColor = (score: number): string => {
   if (score >= 85) return 'bg-green-500';
@@ -119,6 +127,13 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
             year: 'numeric',
           })}
         </p>
+
+        {/* Freshness Badge */}
+        {getFreshnessBadge(apartment.freshness_confidence) && (
+          <span className={`inline-block px-2 py-1 text-xs rounded-full ${getFreshnessBadge(apartment.freshness_confidence)!.color}`}>
+            {getFreshnessBadge(apartment.freshness_confidence)!.text}
+          </span>
+        )}
 
         {/* Amenities Tags */}
         <div className="flex flex-wrap gap-1.5">

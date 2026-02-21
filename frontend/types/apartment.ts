@@ -34,6 +34,9 @@ export interface Apartment {
   neighborhood: string;
   description: string;
   images: string[];
+  freshness_confidence?: number;
+  first_seen_at?: string;
+  times_seen?: number;
 }
 
 /**
