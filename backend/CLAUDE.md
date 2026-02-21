@@ -125,6 +125,7 @@ PostgreSQL (ApartmentModel)
 | `ApartmentModel` | `apartments` | Apartment listings with source tracking |
 | `ScrapeJobModel` | `scrape_jobs` | Scrape job status and metrics |
 | `DataSourceModel` | `data_sources` | Source configuration (rate limits, schedules) |
+| `MarketConfigModel` | `market_configs` | Market scraping configuration (tier, frequency, circuit breaker) |
 
 ### Scrapers (`services/scrapers/`)
 
@@ -183,17 +184,13 @@ SQL_ECHO=false
 
 ## Celery Beat Schedule
 
-Defined in `celery_app.py:53`:
+Defined in `celery_app.py`:
 
 | Task | Schedule | Description |
 |------|----------|-------------|
-| `scrape-zillow-every-6-hours` | Every 6h at :00 | Zillow for 4 cities |
-| `scrape-apartments-com-every-6-hours` | Every 6h at :30 | Apartments.com for 4 cities |
-| `scrape-craigslist-daily` | Daily at 2 AM | Craigslist for 4 cities |
-| `cleanup-stale-listings-weekly` | Sunday 3 AM | Mark old listings inactive |
-| `update-listing-status-daily` | Daily at 4 AM | Check available dates |
-| `reset-hourly-rate-limits` | Every hour | Reset hourly counters |
-| `reset-daily-rate-limits` | Midnight | Reset daily counters |
+| `dispatch_scrapes` | Every hour at :00 | Check market_configs, spawn scrape tasks for due markets |
+| `decay_and_verify` | Every hour at :30 | Recalculate freshness confidence, trigger verification |
+| `cleanup_maintenance` | Daily at 3 AM | Deactivate dead listings, reset circuit breakers, fail stale jobs |
 
 ## ApartmentModel Fields
 
