@@ -63,6 +63,15 @@ class ApartmentModel(Base):
     last_seen_at = Column(DateTime(timezone=True), server_default=func.now())  # Last time seen in scrape
     is_active = Column(Integer, default=1)  # 1=active, 0=inactive/removed
 
+    # Freshness tracking
+    freshness_confidence = Column(Integer, nullable=False, default=100)  # 0-100
+    confidence_updated_at = Column(DateTime(timezone=True), nullable=True)
+    verification_status = Column(String(20), nullable=True)  # null, pending, verified, gone
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    times_seen = Column(Integer, nullable=False, default=1)
+    first_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    market_id = Column(String(50), nullable=True)  # FK to market_configs.id
+
     # Indexes for common query patterns
     __table_args__ = (
         Index('idx_apartments_city', 'city'),
@@ -74,6 +83,9 @@ class ApartmentModel(Base):
         Index('idx_apartments_content_hash', 'content_hash'),
         Index('idx_apartments_is_active', 'is_active'),
         Index('idx_apartments_city_rent_beds', 'city', 'rent', 'bedrooms'),
+        Index('idx_apartments_freshness', 'freshness_confidence'),
+        Index('idx_apartments_verification', 'verification_status'),
+        Index('idx_apartments_market', 'market_id'),
     )
 
     def to_dict(self) -> dict:
@@ -98,6 +110,9 @@ class ApartmentModel(Base):
             "source": self.source,
             "source_url": self.source_url,
             "data_quality_score": self.data_quality_score,
+            "freshness_confidence": self.freshness_confidence,
+            "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
+            "times_seen": self.times_seen,
         }
 
     def __repr__(self):
