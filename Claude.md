@@ -150,48 +150,108 @@ HomeScout is a full-stack apartment finder using Claude AI for intelligent match
 │  SearchForm → API Client → Results Grid (ApartmentCard)                 │
 │  AuthContext (Google OAuth) ←→ Supabase Auth                            │
 │  useFavorites hook ←→ Supabase Database (favorites table)               │
-│  useComparisonStore (Zustand) → Compare Page                            │
+│  useComparison (Zustand+persist) → Compare Page + Claude Analysis       │
+│  Auth gates on Search + Compare pages (require sign-in)                 │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           Backend (FastAPI)                              │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  /api/search          → Filter + Claude AI scoring                      │
-│  /api/apartments/batch → Get multiple apartments by ID                  │
-│  /api/apartments/compare → Side-by-side comparison                      │
-│  /api/webhooks/supabase → Handle Supabase events                        │
+│  /api/search              → Filter + Claude AI scoring                  │
+│  /api/apartments/{id}     → Get single apartment (DB or JSON)           │
+│  /api/apartments/batch    → Get multiple apartments by ID (DB or JSON)  │
+│  /api/apartments/compare  → Claude head-to-head analysis (DB or JSON)   │
+│  /api/webhooks/supabase   → Handle Supabase events                      │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           Data Sources                                   │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  apartments.json (mock data) │ Supabase (users, favorites, searches)    │
-│  Claude AI (scoring)         │ Apify/ScrapingBee (future scraping)      │
+│  PostgreSQL (scraped data) │ apartments.json (fallback/mock)            │
+│  MarketConfig (19 markets) │ Claude AI (scoring + comparison analysis)  │
+│  Apify (apartments.com)   │ Redis (Celery task queue)                  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Flow
-1. User submits search criteria via `SearchForm.tsx`
-2. `lib/api.ts` sends POST to `/api/search`
-3. `apartment_service.py` filters `apartments.json` by basic criteria
-4. `claude_service.py` calls Claude API with filtered apartments + user preferences
-5. Claude returns JSON with `match_score` (0-100), `reasoning`, `highlights`
-6. Backend merges scores with apartment data, sorts by match_score, returns top 10
-7. Frontend displays results in `ApartmentCard` components with image carousels
-8. Users can favorite apartments (saved to Supabase) or add to comparison
+### Key Flow: Search
+1. User signs in via Google OAuth (auth gate on search page)
+2. User submits search criteria via `SearchForm.tsx`
+3. `lib/api.ts` sends POST to `/api/search`
+4. `apartment_service.py` filters apartments by basic criteria (DB or JSON mode)
+5. `claude_service.py` calls Claude API with filtered apartments + user preferences
+6. Claude returns JSON with `match_score` (0-100), `reasoning`, `highlights`
+7. Backend merges scores with apartment data, sorts by match_score, returns top 10
+8. Frontend displays results in `ApartmentCard` components with image carousels
+9. Users can favorite apartments (saved to Supabase) or add to comparison
+10. Search context (city, budget, etc.) is saved to Zustand store for the compare page
+
+### Key Flow: Comparison
+1. User selects 2-3 apartments via CompareButton on apartment cards
+2. ComparisonBar shows selected apartments, user clicks "Compare"
+3. Compare page loads apartments from `/api/apartments/compare`
+4. User optionally enters preferences, clicks "Score"
+5. Backend calls `claude_service.compare_apartments_with_analysis()`
+6. Claude returns winner, category scores (Value, Space, Amenities, etc.), reasoning
+7. Frontend displays winner summary card, category breakdown grid, and comparison table
+
+### Dual Data Mode
+The backend supports two data modes, controlled by `USE_DATABASE` env var:
+- **JSON Mode** (default): Uses static `app/data/apartments.json`
+- **Database Mode**: Uses PostgreSQL with scraped data from Apify
+
+All apartment endpoints (`get`, `batch`, `compare`, `list`) check `is_database_enabled()` and query the appropriate source.
 
 ### Type Synchronization
 Frontend TypeScript interfaces (`types/apartment.ts`) must match backend Pydantic models (`schemas.py`). Changes to data models require updates in both places.
 
+## Continuous Scraping Pipeline
+
+The backend uses a market-driven dispatcher pattern for continuous apartment scraping:
+
+### Beat Schedule (3 orchestrator tasks)
+| Task | Schedule | Purpose |
+|------|----------|---------|
+| `dispatch_scrapes` | Every hour at :00 | Check which markets are due, spawn scrape tasks |
+| `decay_and_verify` | Every hour at :30 | Update confidence scores, dispatch verification |
+| `cleanup_maintenance` | Daily at 3 AM | Deactivate dead listings, reset circuit breakers |
+
+### Market Tiers
+| Tier | Frequency | Decay Rate | Cities |
+|------|-----------|------------|--------|
+| Hot | Every 6h | -3/hour | NYC, Boston, DC, Philadelphia |
+| Standard | Every 12h | -2/hour | Pittsburgh, Baltimore, Newark, Jersey City, Cambridge, Arlington |
+| Cool | Every 24h | -1/hour | Bryn Mawr, Hoboken, Stamford, New Haven, Providence, Richmond, Charlotte, Raleigh, Hartford |
+
+### Freshness Confidence
+- New listings start at confidence=100
+- Confidence decays based on market tier when not re-seen
+- At <40: verification triggered (HTTP check on source URL)
+- At 0: listing deactivated (unless verified)
+- Re-seen in scrape: confidence resets to 100
+
+### Admin Endpoints
+```bash
+# List all markets
+curl http://localhost:8000/api/admin/data-collection/markets
+
+# Trigger immediate scrape
+curl -X POST http://localhost:8000/api/admin/data-collection/markets/bryn-mawr/scrape
+
+# Update market config
+curl -X PUT http://localhost:8000/api/admin/data-collection/markets/bryn-mawr \
+  -H "Content-Type: application/json" \
+  -d '{"tier": "standard", "scrape_frequency_hours": 12}'
+```
+
 ## Key Files
 
 ### Frontend - Core
-- `app/page.tsx` - Main page with search form + results grid
-- `app/favorites/page.tsx` - User's saved favorites
-- `app/compare/page.tsx` - Side-by-side apartment comparison
-- `app/auth/callback/route.ts` - OAuth callback handler
+- `app/page.tsx` - Main page with auth gate, search form + results grid
+- `app/favorites/page.tsx` - User's saved favorites (requires auth)
+- `app/compare/page.tsx` - Enhanced comparison with Claude AI analysis, winner summary, category scores
+- `app/auth/callback/page.tsx` - OAuth callback handler
 
 ### Frontend - Components
 - `components/SearchForm.tsx` - Search form with all inputs
@@ -205,12 +265,12 @@ Frontend TypeScript interfaces (`types/apartment.ts`) must match backend Pydanti
 - `components/ComparisonBar.tsx` - Floating bar showing comparison selection
 
 ### Frontend - State & Hooks
-- `contexts/AuthContext.tsx` - Google OAuth via Supabase
+- `contexts/AuthContext.tsx` - Google OAuth via Supabase (E2E test bypass in non-production)
 - `hooks/useFavorites.ts` - Favorites CRUD with optimistic updates
-- `stores/comparisonStore.ts` - Zustand store for comparison state
+- `hooks/useComparison.ts` - Zustand store with persist for comparison state + search context
 - `lib/supabase.ts` - Supabase client and type definitions
 - `lib/api.ts` - API client (searchApartments, getApartmentsBatch, compareApartments)
-- `types/apartment.ts` - TypeScript interfaces
+- `types/apartment.ts` - TypeScript interfaces (SearchContext, CategoryScore, ComparisonAnalysis, etc.)
 
 ### Backend - API
 - `app/main.py` - FastAPI app with main endpoints
@@ -220,9 +280,9 @@ Frontend TypeScript interfaces (`types/apartment.ts`) must match backend Pydanti
 - `app/schemas.py` - Pydantic models
 
 ### Backend - Services
-- `app/services/claude_service.py` - Claude AI integration
+- `app/services/claude_service.py` - Claude AI integration (search scoring + comparison analysis)
 - `app/services/apartment_service.py` - Filter logic, ranking
-- `app/data/apartments.json` - Mock dataset (12 Bryn Mawr apartments)
+- `app/data/apartments.json` - Fallback dataset (12 Bryn Mawr apartments, used in JSON mode)
 
 ### Backend - Data Collection (Infrastructure)
 - `app/celery_app.py` - Celery configuration and beat schedule
@@ -288,23 +348,33 @@ Run `supabase/migrations/001_initial_schema.sql` in Supabase SQL Editor:
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/search` | POST | Search with Claude AI scoring |
-| `/api/apartments/{id}` | GET | Get single apartment |
-| `/api/apartments/batch` | POST | Get multiple apartments by IDs |
-| `/api/apartments/compare` | POST | Compare 2-3 apartments |
+| `/api/apartments/{id}` | GET | Get single apartment (DB or JSON) |
+| `/api/apartments/batch` | POST | Get multiple apartments by IDs (DB or JSON) |
+| `/api/apartments/compare` | POST | Compare 2-3 apartments with Claude head-to-head analysis |
 | `/api/apartments/count` | GET | Total apartment count |
+| `/api/apartments/list` | GET | List apartments with filters (city, rent, bedrooms) |
+| `/api/apartments/stats` | GET | Apartment statistics by city |
 
 ### Webhooks
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/webhooks/supabase` | POST | Handle Supabase events |
 
+### Admin (Data Collection)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/data-collection/jobs` | POST | Trigger manual scrape |
+| `/api/admin/data-collection/jobs` | GET | List scrape jobs |
+| `/api/admin/data-collection/health` | GET | Data collection health check |
+
 ## Claude AI Integration
 
-The scoring prompts are in `claude_service.py`:
+The Claude integration has two modes, both in `claude_service.py`:
+
+### Search Scoring (`score_apartments()`)
 - **System prompt**: Defines Claude as apartment matching expert
 - **User prompt**: Contains search criteria + apartment data as JSON
-
-Claude returns JSON array:
+- Returns JSON array:
 ```json
 [{
   "apartment_id": "bryn-001",
@@ -312,6 +382,29 @@ Claude returns JSON array:
   "reasoning": "Under budget with all requested amenities...",
   "highlights": ["Under budget", "Pet-friendly", "Near train"]
 }]
+```
+
+### Comparison Analysis (`compare_apartments_with_analysis()`)
+- Deep head-to-head analysis of 2-3 apartments
+- Scores across categories: Value, Space & Layout, Amenities, + 1-3 custom
+- Picks a winner with reasoning
+- Uses `asyncio.to_thread()` to avoid blocking the async event loop
+- Returns structured JSON:
+```json
+{
+  "winner": {"apartment_id": "uuid", "reason": "Best overall value..."},
+  "categories": ["Value", "Space & Layout", "Amenities", "Location"],
+  "apartment_scores": [{
+    "apartment_id": "uuid",
+    "overall_score": 82,
+    "reasoning": "Strong choice for budget-conscious renters...",
+    "highlights": ["Lowest rent", "Good amenities"],
+    "category_scores": {
+      "Value": {"score": 90, "note": "Best price per sqft"},
+      "Amenities": {"score": 75, "note": "Standard amenities"}
+    }
+  }]
+}
 ```
 
 ## User Features
@@ -323,17 +416,23 @@ Claude returns JSON array:
 - Synced to Supabase with realtime subscriptions
 - View all favorites at `/favorites`
 
-### Comparison
+### Comparison (Enhanced)
 - Click "Compare" button on apartment cards (up to 3)
 - Floating ComparisonBar shows selected apartments
-- Side-by-side view at `/compare`
-- Zustand store persists selection during session
+- Side-by-side view at `/compare` with auth gate
+- Search context (city, budget, preferences) auto-passed from search page
+- Click "Score" for Claude AI head-to-head analysis (preferences optional)
+- Winner summary card with green border and star icon
+- Category breakdown grid (Value, Space, Amenities, etc.)
+- Comparison table with Overall Score row, rent/beds/baths/amenities
+- Zustand store with `persist` middleware keeps state across page navigation
 
 ### Authentication
 - Google OAuth via Supabase
 - Session persisted in cookies
 - AuthContext provides user state to all components
-- Protected routes redirect to sign-in
+- Auth gates on search page (`/`) and compare page (`/compare`)
+- E2E test bypass via `localStorage.__test_auth_user` (non-production only)
 
 ## Development Notes
 
@@ -345,3 +444,20 @@ Claude returns JSON array:
 - Backend uses model `claude-sonnet-4-5-20250929`
 - Favorites use optimistic updates with rollback on error
 - Auth has 5-second timeout to prevent infinite loading
+- Don't use `--reload` flag with uvicorn (causes venv file watching issues)
+- Compare endpoint always calls Claude when 2+ apartments (preferences optional, defaults to "general comparison")
+- All apartment endpoints (get, batch, compare) support both DB and JSON modes via `is_database_enabled()`
+- E2E tests mock auth via `localStorage.__test_auth_user` + Supabase API route interception
+- Zustand comparison store uses `persist` middleware with `createJSONStorage(() => localStorage)`
+- Backend comparison uses `asyncio.to_thread()` for synchronous Claude API calls
+
+## E2E Testing
+
+```bash
+cd frontend
+npx playwright test            # Run all 25 tests
+npx playwright test --ui       # Run with Playwright UI
+npx playwright test --headed   # Run in headed browser mode
+```
+
+Tests mock auth via `mockAuth()` helper that injects a test user into `localStorage.__test_auth_user` and intercepts Supabase API calls. The `AuthContext` checks for this key in non-production environments before initializing the real Supabase auth flow.
