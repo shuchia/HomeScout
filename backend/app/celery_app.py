@@ -21,6 +21,7 @@ celery_app = Celery(
     include=[
         "app.tasks.scrape_tasks",
         "app.tasks.maintenance_tasks",
+        "app.tasks.dispatcher",
     ]
 )
 
@@ -53,32 +54,24 @@ celery_app.conf.update(
     worker_disable_rate_limits=False,
 )
 
-# Beat schedule for MVP (3 cities)
+# Beat schedule — 3 orchestrator tasks only
 celery_app.conf.beat_schedule = {
-    # Daily scrape all MVP cities at 6 AM EST (11 AM UTC)
-    "scrape-apartments-com-daily": {
-        "task": "app.tasks.scrape_tasks.scrape_source",
-        "schedule": crontab(hour=11, minute=0),
-        "args": ("apartments_com",),
-        "kwargs": {
-            "cities": ["Philadelphia", "Bryn Mawr", "Pittsburgh"],
-            "state": "PA",
-            "max_listings_per_city": 100,
-        },
+    # Dispatcher: check which markets need scraping
+    "dispatch-scrapes": {
+        "task": "app.tasks.dispatcher.dispatch_scrapes",
+        "schedule": crontab(minute=0),  # Every hour at :00
     },
 
-    # Cleanup stale listings after 3 days
-    "cleanup-stale-listings": {
-        "task": "app.tasks.maintenance_tasks.cleanup_stale_listings",
-        "schedule": crontab(hour=12, minute=0),
-        "kwargs": {"days_old": 3},
+    # Decay confidence scores and trigger verification
+    "decay-and-verify": {
+        "task": "app.tasks.maintenance_tasks.decay_and_verify",
+        "schedule": crontab(minute=30),  # Every hour at :30
     },
 
-    # Reset rate limits daily
-    "reset-daily-rate-limits": {
-        "task": "app.tasks.maintenance_tasks.reset_rate_limits",
-        "schedule": crontab(hour=0, minute=0),
-        "kwargs": {"period": "day"},
+    # Daily maintenance at 3 AM UTC
+    "cleanup-maintenance": {
+        "task": "app.tasks.maintenance_tasks.cleanup_maintenance",
+        "schedule": crontab(hour=3, minute=0),
     },
 }
 
