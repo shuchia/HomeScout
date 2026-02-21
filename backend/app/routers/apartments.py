@@ -72,7 +72,7 @@ async def _list_from_database(
     try:
         async with get_session_context() as session:
             # Build base query
-            conditions = [ApartmentModel.is_active == 1]
+            conditions = [ApartmentModel.is_active == 1, ApartmentModel.freshness_confidence >= 40]
 
             if city:
                 conditions.append(ApartmentModel.city.ilike(f"%{city}%"))

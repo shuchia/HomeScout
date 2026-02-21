@@ -72,6 +72,7 @@ class ApartmentService:
             stmt = select(ApartmentModel).where(
                 and_(
                     ApartmentModel.is_active == 1,
+                    ApartmentModel.freshness_confidence >= 40,
                     ApartmentModel.rent <= budget,
                     ApartmentModel.bedrooms == bedrooms,
                     ApartmentModel.bathrooms >= bathrooms,
