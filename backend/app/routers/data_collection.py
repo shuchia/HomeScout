@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Body
 from pydantic import BaseModel, Field
 
 from app.database import get_async_session, is_database_enabled, AsyncSession
@@ -479,3 +479,109 @@ async def check_service_health():
     health["overall_healthy"] = db_healthy
 
     return HealthCheckResponse(**health)
+
+
+# --- Market Configuration Endpoints ---
+
+@router.get("/markets")
+async def list_markets():
+    """List all market configurations."""
+    if not is_database_enabled():
+        return {"markets": [], "message": "Database not enabled"}
+
+    from sqlalchemy import select
+    from app.models.market_config import MarketConfigModel
+    from app.database import get_session_context
+
+    async with get_session_context() as session:
+        result = await session.execute(
+            select(MarketConfigModel).order_by(MarketConfigModel.tier, MarketConfigModel.display_name)
+        )
+        markets = []
+        for m in result.scalars():
+            markets.append({
+                "id": m.id,
+                "display_name": m.display_name,
+                "city": m.city,
+                "state": m.state,
+                "tier": m.tier,
+                "is_enabled": m.is_enabled,
+                "scrape_frequency_hours": m.scrape_frequency_hours,
+                "max_listings_per_scrape": m.max_listings_per_scrape,
+                "last_scrape_at": m.last_scrape_at.isoformat() if m.last_scrape_at else None,
+                "last_scrape_status": m.last_scrape_status,
+                "consecutive_failures": m.consecutive_failures,
+            })
+        return {"markets": markets, "total": len(markets)}
+
+
+@router.post("/markets")
+async def create_market(market: dict = Body(...)):
+    """Add a new market. Required: id, display_name, city, state. Optional: tier, scrape_frequency_hours."""
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.models.market_config import MarketConfigModel
+    from app.database import get_session_context
+
+    async with get_session_context() as session:
+        m = MarketConfigModel(
+            id=market["id"],
+            display_name=market["display_name"],
+            city=market["city"],
+            state=market["state"],
+            tier=market.get("tier", "cool"),
+            scrape_frequency_hours=market.get("scrape_frequency_hours", 24),
+            max_listings_per_scrape=market.get("max_listings_per_scrape", 100),
+        )
+        session.add(m)
+        await session.commit()
+        return {"status": "created", "market_id": m.id}
+
+
+@router.put("/markets/{market_id}")
+async def update_market(market_id: str, updates: dict = Body(...)):
+    """Update market config. Supports: tier, is_enabled, scrape_frequency_hours, max_listings_per_scrape."""
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from sqlalchemy import update, select
+    from app.models.market_config import MarketConfigModel
+    from app.database import get_session_context
+
+    allowed = {"tier", "is_enabled", "scrape_frequency_hours", "max_listings_per_scrape"}
+    values = {k: v for k, v in updates.items() if k in allowed}
+
+    if not values:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    async with get_session_context() as session:
+        await session.execute(
+            update(MarketConfigModel).where(MarketConfigModel.id == market_id).values(**values)
+        )
+        await session.commit()
+        return {"status": "updated", "market_id": market_id, "updated_fields": list(values.keys())}
+
+
+@router.post("/markets/{market_id}/scrape")
+async def trigger_market_scrape(market_id: str):
+    """Trigger an immediate scrape for a specific market."""
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from sqlalchemy import select
+    from app.models.market_config import MarketConfigModel
+    from app.database import get_session_context
+
+    async with get_session_context() as session:
+        result = await session.execute(
+            select(MarketConfigModel).where(MarketConfigModel.id == market_id)
+        )
+        market = result.scalar_one_or_none()
+        if not market:
+            raise HTTPException(status_code=404, detail=f"Market {market_id} not found")
+
+    from app.tasks.scrape_tasks import scrape_city_task
+    task = scrape_city_task.apply_async(kwargs={"market_id": market_id}, queue="scraping")
+
+    return {"status": "dispatched", "market_id": market_id, "task_id": task.id}
