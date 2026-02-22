@@ -56,6 +56,8 @@ export interface ApartmentWithScore extends Apartment {
 export interface SearchResponse {
   apartments: ApartmentWithScore[];
   total_results: number;
+  tier?: string;
+  searches_remaining?: number;
 }
 
 /**

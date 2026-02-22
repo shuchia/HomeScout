@@ -13,6 +13,9 @@ export interface Profile {
   name: string | null
   avatar_url: string | null
   email_notifications: boolean
+  user_tier: 'free' | 'pro'
+  subscription_status: string | null
+  current_period_end: string | null
 }
 
 export interface Favorite {
