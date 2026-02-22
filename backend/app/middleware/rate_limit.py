@@ -26,7 +26,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self.redis = None
 
     async def dispatch(self, request: Request, call_next):
-        if not self.redis:
+        if not self.redis or os.getenv("TESTING"):
             return await call_next(request)
 
         # Extract user identity

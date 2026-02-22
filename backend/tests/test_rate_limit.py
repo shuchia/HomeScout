@@ -1,4 +1,5 @@
 """Tests for Redis-based rate limiting middleware."""
+import os
 import pytest
 from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
@@ -13,15 +14,14 @@ from app.middleware.rate_limit import (
 import app.middleware.rate_limit as rl_module
 
 
-def _build_app(mock_redis_client=None):
-    """Build a minimal FastAPI app with rate limiting middleware.
+@pytest.fixture(autouse=True)
+def _clear_testing_env(monkeypatch):
+    """Clear TESTING env var so rate limit middleware runs during these tests."""
+    monkeypatch.delenv("TESTING", raising=False)
 
-    We patch the ``redis`` attribute on the rate_limit module so that
-    ``redis.from_url(...)`` inside the middleware constructor returns our
-    mock.  The patch is applied with ``patch.object`` and remains active
-    for the lifetime of the app (we never undo it, which is fine for
-    short-lived test apps).
-    """
+
+def _build_app_and_client(mock_redis_client=None):
+    """Build a minimal FastAPI app with rate limiting middleware and return a TestClient."""
     app = FastAPI()
 
     @app.get("/health")
@@ -40,20 +40,16 @@ def _build_app(mock_redis_client=None):
     async def list_apartments():
         return {"apartments": []}
 
-    # We need the patch to stay active while TestClient builds the ASGI
-    # middleware stack (which calls RateLimitMiddleware.__init__).  Using
-    # ``start()`` without ``stop()`` keeps it active for the test's
-    # lifetime.
     patcher = patch.object(rl_module, "redis")
     mock_redis_mod = patcher.start()
     if mock_redis_client is None:
-        # Simulate redis.from_url raising, causing self.redis = None
         mock_redis_mod.from_url.side_effect = Exception("No Redis")
     else:
         mock_redis_mod.from_url.return_value = mock_redis_client
 
     app.add_middleware(RateLimitMiddleware)
-    return app, patcher
+    client = TestClient(app)
+    return client, patcher
 
 
 def _make_mock_redis(counter_value=1):
@@ -69,9 +65,8 @@ class TestRateLimitNormalRequests:
 
     def test_authenticated_request_under_limit(self):
         mock_redis = _make_mock_redis(counter_value=1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.get(
                 "/health",
                 headers={"Authorization": "Bearer test-token-123"},
@@ -83,9 +78,8 @@ class TestRateLimitNormalRequests:
 
     def test_anonymous_request_under_limit(self):
         mock_redis = _make_mock_redis(counter_value=1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.get("/health")
             assert response.status_code == 200
             assert response.json() == {"status": "ok"}
@@ -99,16 +93,14 @@ class TestRateLimitNormalRequests:
         def incr_side_effect(key):
             nonlocal call_count
             call_count += 1
-            return call_count  # 1, 2, 3, ...
+            return call_count
 
         mock_redis = MagicMock()
         mock_redis.incr.side_effect = incr_side_effect
         mock_redis.expire.return_value = True
 
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
-            # All should pass (under ANON_LIMIT=10)
             for _ in range(5):
                 response = client.get("/health")
                 assert response.status_code == 200
@@ -121,9 +113,8 @@ class TestRateLimitExceeded:
 
     def test_returns_429_when_limit_exceeded(self):
         mock_redis = _make_mock_redis(counter_value=GLOBAL_LIMIT + 1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.get(
                 "/health",
                 headers={"Authorization": "Bearer test-token"},
@@ -136,9 +127,8 @@ class TestRateLimitExceeded:
     def test_anonymous_429_at_lower_limit(self):
         """Anonymous users hit the limit at ANON_LIMIT (10)."""
         mock_redis = _make_mock_redis(counter_value=ANON_LIMIT + 1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.get("/health")
             assert response.status_code == 429
             assert "Rate limit exceeded" in response.json()["detail"]
@@ -149,14 +139,12 @@ class TestRateLimitExceeded:
         """Authenticated users have higher limit (GLOBAL_LIMIT=60), so
         a count of ANON_LIMIT+1 should still pass for them."""
         mock_redis = _make_mock_redis(counter_value=ANON_LIMIT + 1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.get(
                 "/health",
                 headers={"Authorization": "Bearer test-token"},
             )
-            # ANON_LIMIT+1 = 11, which is under GLOBAL_LIMIT=60
             assert response.status_code == 200
         finally:
             patcher.stop()
@@ -168,9 +156,8 @@ class TestExpensivePaths:
 
     def test_search_gets_expensive_limit(self):
         mock_redis = _make_mock_redis(counter_value=EXPENSIVE_LIMIT + 1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.post(
                 "/api/search",
                 headers={"Authorization": "Bearer test-token"},
@@ -181,9 +168,8 @@ class TestExpensivePaths:
 
     def test_compare_gets_expensive_limit(self):
         mock_redis = _make_mock_redis(counter_value=EXPENSIVE_LIMIT + 1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.post(
                 "/api/apartments/compare",
                 headers={"Authorization": "Bearer test-token"},
@@ -196,14 +182,12 @@ class TestExpensivePaths:
         """Non-expensive paths should NOT be limited at EXPENSIVE_LIMIT
         for authenticated users."""
         mock_redis = _make_mock_redis(counter_value=EXPENSIVE_LIMIT + 1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.get(
                 "/api/apartments/list",
                 headers={"Authorization": "Bearer test-token"},
             )
-            # EXPENSIVE_LIMIT+1 = 11, under GLOBAL_LIMIT=60 for authenticated
             assert response.status_code == 200
         finally:
             patcher.stop()
@@ -214,9 +198,8 @@ class TestRedisUnavailable:
 
     def test_no_redis_passes_through(self):
         """When Redis connection fails, all requests pass through."""
-        app, patcher = _build_app(mock_redis_client=None)
+        client, patcher = _build_app_and_client(mock_redis_client=None)
         try:
-            client = TestClient(app)
             response = client.get("/health")
             assert response.status_code == 200
         finally:
@@ -226,9 +209,8 @@ class TestRedisUnavailable:
         """When Redis raises an exception on incr, request still passes."""
         mock_redis = MagicMock()
         mock_redis.incr.side_effect = Exception("Redis connection lost")
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             response = client.get("/health")
             assert response.status_code == 200
         finally:
@@ -241,12 +223,10 @@ class TestRedisKeyManagement:
     def test_expire_set_on_first_request(self):
         """On the first request (incr returns 1), expire should be called."""
         mock_redis = _make_mock_redis(counter_value=1)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             client.get("/health")
             mock_redis.expire.assert_called()
-            # TTL should be 120 seconds
             call_args = mock_redis.expire.call_args
             assert call_args[0][1] == 120
         finally:
@@ -255,9 +235,8 @@ class TestRedisKeyManagement:
     def test_expire_not_set_on_subsequent_requests(self):
         """On subsequent requests (incr returns >1), expire should NOT be called."""
         mock_redis = _make_mock_redis(counter_value=5)
-        app, patcher = _build_app(mock_redis)
+        client, patcher = _build_app_and_client(mock_redis)
         try:
-            client = TestClient(app)
             client.get("/health")
             mock_redis.expire.assert_not_called()
         finally:
