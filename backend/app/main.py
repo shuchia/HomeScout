@@ -76,6 +76,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiting
+from app.middleware.rate_limit import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
 # Register routers (apartments_router registered later to avoid route conflicts)
 app.include_router(data_collection_router)
 app.include_router(webhooks_router)
