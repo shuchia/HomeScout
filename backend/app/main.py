@@ -18,6 +18,7 @@ from app.services.apartment_service import ApartmentService
 from app.routers.data_collection import router as data_collection_router
 from app.routers.apartments import router as apartments_router
 from app.routers.webhooks import router as webhooks_router
+from app.routers.billing import router as billing_router
 from app.database import is_database_enabled, init_db, close_db
 
 # Configure logging
@@ -74,6 +75,7 @@ app.add_middleware(
 # Register routers (apartments_router registered later to avoid route conflicts)
 app.include_router(data_collection_router)
 app.include_router(webhooks_router)
+app.include_router(billing_router)
 
 # Initialize services
 apartment_service = ApartmentService()
