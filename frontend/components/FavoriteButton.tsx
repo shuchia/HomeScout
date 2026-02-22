@@ -35,8 +35,11 @@ export function FavoriteButton({ apartmentId, className = '' }: FavoriteButtonPr
         console.log('Remove result:', result)
       } else {
         console.log('Adding favorite...')
-        const result = await addFavorite(apartmentId)
-        console.log('Add result:', result)
+        const success = await addFavorite(apartmentId)
+        console.log('Add result:', success)
+        if (!success) {
+          alert('Free limit reached (5/5). Upgrade to Pro for unlimited favorites.')
+        }
       }
     } catch (error) {
       console.error('Error toggling favorite:', error)
