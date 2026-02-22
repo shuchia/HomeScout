@@ -47,6 +47,9 @@ supabase==2.11.0
 # Payments
 stripe==11.4.1
 
+# Email
+resend==2.5.0
+
 # Development
 pytest==8.0.0
 pytest-asyncio==0.23.3
