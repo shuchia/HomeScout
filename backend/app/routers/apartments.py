@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from app.auth import get_optional_user, UserContext
 from app.services.apartment_service import ApartmentService
 from app.services.tier_service import TierService
+from app.services.analytics_service import AnalyticsService
 from app.schemas import CompareRequest, CompareResponse
 from app.database import is_database_enabled, get_session_context
 
@@ -297,6 +298,12 @@ async def compare_apartments(
         except Exception as e:
             logger.error(f"Claude comparison analysis failed: {e}")
             # Return apartments without analysis on failure
+
+    await AnalyticsService.log_event(
+        "compare",
+        user_id=user.user_id if user else None,
+        metadata={"apartment_count": len(request.apartment_ids), "used_ai": tier == "pro"},
+    )
 
     return {
         "apartments": apartments,

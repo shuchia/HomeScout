@@ -16,6 +16,7 @@ from app.schemas import (
 )
 from app.services.apartment_service import ApartmentService
 from app.services.tier_service import TierService
+from app.services.analytics_service import AnalyticsService
 from app.auth import get_optional_user, UserContext
 from app.routers.data_collection import router as data_collection_router
 from app.routers.apartments import router as apartments_router
@@ -202,6 +203,12 @@ async def search_apartments(
             await TierService.increment_search_count(user.user_id)
             # remaining decreases by 1 after this search
             searches_remaining = max(0, searches_remaining - 1)
+
+        await AnalyticsService.log_event(
+            "search",
+            user_id=user.user_id if user else None,
+            metadata={"city": request.city, "tier": tier, "result_count": len(apartments_out)},
+        )
 
         return {
             "apartments": apartments_out,
