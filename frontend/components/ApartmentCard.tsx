@@ -69,13 +69,19 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
         </div>
 
         {/* Match Score Badge */}
-        <div
-          className={`absolute top-3 right-3 ${getScoreColor(
-            match_score
-          )} text-white px-3 py-1 rounded-full font-bold text-sm shadow-md`}
-        >
-          {match_score}% Match
-        </div>
+        {match_score != null ? (
+          <div
+            className={`absolute top-3 right-3 ${getScoreColor(
+              match_score
+            )} text-white px-3 py-1 rounded-full font-bold text-sm shadow-md`}
+          >
+            {match_score}% Match
+          </div>
+        ) : (
+          <div className="absolute top-3 right-3 bg-gray-300 text-gray-600 px-3 py-1 rounded-full font-bold text-sm shadow-md">
+            Pro
+          </div>
+        )}
       </div>
 
       {/* Card Content */}
@@ -155,32 +161,34 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
         {/* Divider */}
         <hr className="border-gray-200" />
 
-        {/* AI Reasoning */}
-        <div className="space-y-2">
-          <p className="text-sm text-gray-700 italic">&quot;{reasoning}&quot;</p>
+        {/* AI Reasoning - only for scored results */}
+        {match_score != null && reasoning && (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-700 italic">&quot;{reasoning}&quot;</p>
 
-          {/* Highlights */}
-          <ul className="space-y-1">
-            {highlights.map((highlight, index) => (
-              <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
-                <svg
-                  className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                {highlight}
-              </li>
-            ))}
-          </ul>
-        </div>
+            {/* Highlights */}
+            <ul className="space-y-1">
+              {highlights.map((highlight, index) => (
+                <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
+                  <svg
+                    className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  {highlight}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Card Actions */}
         <div className="flex justify-end pt-2">

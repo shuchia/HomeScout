@@ -34,9 +34,10 @@ interface SearchFormProps {
   onResults: (results: ApartmentWithScore[]) => void;
   onLoading: (loading: boolean) => void;
   onError: (error: string | null) => void;
+  onSearchMeta?: (meta: { tier?: string; searches_remaining?: number | null }) => void;
 }
 
-export default function SearchForm({ onResults, onLoading, onError }: SearchFormProps) {
+export default function SearchForm({ onResults, onLoading, onError, onSearchMeta }: SearchFormProps) {
   // Form state
   const [city, setCity] = useState('Pittsburgh, PA');
   const [budget, setBudget] = useState(2000);
@@ -89,6 +90,7 @@ export default function SearchForm({ onResults, onLoading, onError }: SearchForm
 
       const response = await searchApartments(params);
       onResults(response.apartments);
+      onSearchMeta?.({ tier: response.tier, searches_remaining: response.searches_remaining });
 
       // Save search context for comparison page
       setSearchContext({

@@ -5,6 +5,7 @@ import SearchForm from '@/components/SearchForm';
 import ApartmentCard from '@/components/ApartmentCard';
 import { ApartmentWithScore } from '@/types/apartment';
 import { useAuth } from '@/contexts/AuthContext';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function Home() {
   // State for search results
@@ -12,13 +13,19 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [searchesRemaining, setSearchesRemaining] = useState<number | null>(null);
 
-  const { user, loading: authLoading, signInWithGoogle } = useAuth();
+  const { user, loading: authLoading, signInWithGoogle, tier, isPro } = useAuth();
 
   // Handle search results
   const handleResults = (apartments: ApartmentWithScore[]) => {
     setResults(apartments);
     setHasSearched(true);
+  };
+
+  // Handle search metadata (tier, remaining searches)
+  const handleSearchMeta = (meta: { tier?: string; searches_remaining?: number | null }) => {
+    setSearchesRemaining(meta.searches_remaining ?? null);
   };
 
   if (authLoading) {
@@ -79,7 +86,20 @@ export default function Home() {
                 onResults={handleResults}
                 onLoading={setIsLoading}
                 onError={setError}
+                onSearchMeta={handleSearchMeta}
               />
+              {tier === 'free' && searchesRemaining !== null && (
+                <p className="text-sm text-gray-500 mt-3">
+                  {searchesRemaining > 0
+                    ? `${searchesRemaining} of 3 free searches remaining today`
+                    : 'Daily search limit reached'}
+                </p>
+              )}
+              {tier === 'free' && searchesRemaining === 0 && (
+                <div className="mt-3">
+                  <UpgradePrompt feature="unlimited searches" inline />
+                </div>
+              )}
             </div>
           </div>
 

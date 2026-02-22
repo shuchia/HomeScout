@@ -44,8 +44,8 @@ export interface Apartment {
  * Matches backend ApartmentWithScore model
  */
 export interface ApartmentWithScore extends Apartment {
-  match_score: number;
-  reasoning: string;
+  match_score: number | null;
+  reasoning: string | null;
   highlights: string[];
 }
 
