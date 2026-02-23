@@ -5,9 +5,12 @@ import asyncio
 import logging
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 
+from app.auth import get_optional_user, UserContext
 from app.services.apartment_service import ApartmentService
+from app.services.tier_service import TierService
+from app.services.analytics_service import AnalyticsService
 from app.schemas import CompareRequest, CompareResponse
 from app.database import is_database_enabled, get_session_context
 
@@ -226,11 +229,15 @@ async def get_apartments_batch(apartment_ids: List[str] = Body(..., max_length=5
     return result
 
 
-@router.post("/compare", response_model=CompareResponse)
-async def compare_apartments(request: CompareRequest) -> CompareResponse:
+@router.post("/compare")
+async def compare_apartments(
+    request: CompareRequest,
+    user: UserContext | None = Depends(get_optional_user),
+):
     """
     Compare up to 3 apartments with optional preference scoring.
     When preferences are provided, Claude performs a deep head-to-head analysis.
+    Claude analysis is only available for pro-tier users.
     """
     comparison_fields = [
         "rent", "bedrooms", "bathrooms", "sqft",
@@ -238,7 +245,18 @@ async def compare_apartments(request: CompareRequest) -> CompareResponse:
     ]
 
     if not request.apartment_ids:
-        return CompareResponse(apartments=[], comparison_fields=comparison_fields)
+        tier = "anonymous" if not user else "free"
+        return {
+            "apartments": [],
+            "comparison_fields": comparison_fields,
+            "comparison_analysis": None,
+            "tier": tier,
+        }
+
+    # Determine user tier
+    tier = "anonymous"
+    if user:
+        tier = await TierService.get_user_tier(user.user_id)
 
     # Fetch apartments from database or JSON
     apartments = []
@@ -259,9 +277,9 @@ async def compare_apartments(request: CompareRequest) -> CompareResponse:
             if aid in apt_map:
                 apartments.append(apt_map[aid])
 
-    # Run Claude comparison analysis when we have at least 2 apartments
+    # Run Claude comparison analysis only for pro-tier users with at least 2 apartments
     comparison_analysis = None
-    if len(apartments) >= 2:
+    if tier == "pro" and len(apartments) >= 2:
         from app.services.claude_service import ClaudeService
 
         claude = ClaudeService()
@@ -281,8 +299,15 @@ async def compare_apartments(request: CompareRequest) -> CompareResponse:
             logger.error(f"Claude comparison analysis failed: {e}")
             # Return apartments without analysis on failure
 
-    return CompareResponse(
-        apartments=apartments,
-        comparison_fields=comparison_fields,
-        comparison_analysis=comparison_analysis,
+    await AnalyticsService.log_event(
+        "compare",
+        user_id=user.user_id if user else None,
+        metadata={"apartment_count": len(request.apartment_ids), "used_ai": tier == "pro"},
     )
+
+    return {
+        "apartments": apartments,
+        "comparison_fields": comparison_fields,
+        "comparison_analysis": comparison_analysis,
+        "tier": tier,
+    }

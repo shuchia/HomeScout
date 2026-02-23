@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useComparison } from '@/hooks/useComparison'
 import { useAuth } from '@/contexts/AuthContext'
+import UpgradePrompt from '@/components/UpgradePrompt'
 import { compareApartments, ApiError, CompareResponse } from '@/lib/api'
 import { Apartment, ComparisonAnalysis, SearchContext } from '@/types/apartment'
 
@@ -24,7 +25,7 @@ const getScoreColor = (score: number): string => {
 
 export default function ComparePage() {
   const router = useRouter()
-  const { user, loading: authLoading, signInWithGoogle } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, isPro } = useAuth()
   const { apartmentIds, removeFromCompare, clearComparison, searchContext } = useComparison()
 
   const [apartments, setApartments] = useState<Apartment[]>([])
@@ -220,35 +221,39 @@ export default function ComparePage() {
           <p className="text-gray-600 mb-4">
             Click Score for a deep head-to-head AI analysis. Optionally add your preferences for a personalized comparison.
           </p>
-          <div className="flex gap-4">
-            <input
-              type="text"
-              value={preferences}
-              onChange={(e) => setPreferences(e.target.value)}
-              placeholder="Optional: e.g., parking, quiet for WFH, near transit"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              onKeyDown={(e) => { if (e.key === 'Enter') handleScore() }}
-            />
-            <button
-              onClick={handleScore}
-              disabled={scoring}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {scoring ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Score
-                </>
-              )}
-            </button>
-          </div>
+          {isPro ? (
+            <div className="flex gap-4">
+              <input
+                type="text"
+                value={preferences}
+                onChange={(e) => setPreferences(e.target.value)}
+                placeholder="Optional: e.g., parking, quiet for WFH, near transit"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleScore() }}
+              />
+              <button
+                onClick={handleScore}
+                disabled={scoring}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {scoring ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Score
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            <UpgradePrompt feature="AI comparison analysis" />
+          )}
         </div>
 
         {/* Error Message */}
@@ -349,6 +354,13 @@ export default function ComparePage() {
                 )
               })}
             </div>
+          </div>
+        )}
+
+        {/* Upgrade prompt for free users when no analysis is available */}
+        {!analysis && !isPro && !loading && apartments.length > 0 && (
+          <div className="mb-8">
+            <UpgradePrompt feature="detailed AI analysis with winner picks and category scoring" />
           </div>
         )}
 

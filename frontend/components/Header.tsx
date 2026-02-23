@@ -28,6 +28,9 @@ export function Header() {
               </Link>
             </>
           )}
+          <Link href="/pricing" className="text-gray-600 hover:text-gray-900">
+            Pricing
+          </Link>
           <AuthButton />
           <UserMenu />
         </nav>

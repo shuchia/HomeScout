@@ -7,9 +7,12 @@ interface AuthContextType {
   user: User | null
   profile: Profile | null
   loading: boolean
+  isPro: boolean
+  tier: 'free' | 'pro' | 'anonymous'
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
   signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -106,12 +109,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     await supabase.auth.signOut()
     setProfile(null)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('comparison-storage')
+    }
   }
+
+  const tier: 'free' | 'pro' | 'anonymous' = user ? (profile?.user_tier || 'free') : 'anonymous'
+  const isPro = tier === 'pro'
+
+  const refreshProfile = useCallback(async () => {
+    if (user) await fetchProfile(user.id)
+  }, [user, fetchProfile])
 
   return (
     <AuthContext.Provider value={{
-      user, profile, loading,
-      signInWithGoogle, signInWithApple, signOut
+      user, profile, loading, isPro, tier,
+      signInWithGoogle, signInWithApple, signOut, refreshProfile
     }}>
       {children}
     </AuthContext.Provider>

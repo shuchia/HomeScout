@@ -2,7 +2,7 @@
 FastAPI application for HomeScout API.
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
@@ -15,9 +15,14 @@ from app.schemas import (
     ApartmentWithScore
 )
 from app.services.apartment_service import ApartmentService
+from app.services.tier_service import TierService
+from app.services.analytics_service import AnalyticsService
+from app.auth import get_optional_user, UserContext
 from app.routers.data_collection import router as data_collection_router
 from app.routers.apartments import router as apartments_router
 from app.routers.webhooks import router as webhooks_router
+from app.routers.billing import router as billing_router
+from app.routers.saved_searches import router as saved_searches_router
 from app.database import is_database_enabled, init_db, close_db
 
 # Configure logging
@@ -71,9 +76,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiting
+from app.middleware.rate_limit import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
 # Register routers (apartments_router registered later to avoid route conflicts)
 app.include_router(data_collection_router)
 app.include_router(webhooks_router)
+app.include_router(billing_router)
+app.include_router(saved_searches_router)
 
 # Initialize services
 apartment_service = ApartmentService()
@@ -121,52 +132,108 @@ async def get_apartment_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/search", response_model=SearchResponse)
-async def search_apartments(request: SearchRequest):
+@app.post("/api/search")
+async def search_apartments(
+    request: SearchRequest,
+    user: UserContext | None = Depends(get_optional_user),
+):
     """
     Search for apartments based on user preferences.
 
-    This endpoint:
-    1. Filters apartments by basic criteria (city, budget, beds, baths, type, date)
-    2. Uses Claude AI to score apartments based on preferences
-    3. Returns top 10 matches ranked by score
+    Behaviour varies by user tier:
+    - **pro** (authenticated + paid): full Claude AI-scored results.
+    - **free** (authenticated, no subscription): filtered results without AI
+      scoring, limited to FREE_DAILY_SEARCH_LIMIT searches per day.
+    - **anonymous** (no auth token): filtered results without AI scoring,
+      no daily limit tracking.
 
-    Returns:
-        SearchResponse with top 10 apartment recommendations
+    Returns a dict with apartments, total_results, tier, and
+    searches_remaining (null for pro/anonymous).
     """
+    # ── Determine tier ──────────────────────────────────────────────
+    if user is None:
+        tier = "anonymous"
+    else:
+        tier = await TierService.get_user_tier(user.user_id)
+
+    # ── Enforce daily limit for free users ──────────────────────────
+    searches_remaining: int | None = None
+    if tier == "free":
+        allowed, remaining = await TierService.check_search_limit(user.user_id)
+        searches_remaining = remaining
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="Daily search limit reached. Upgrade to Pro for unlimited searches.",
+            )
+
     try:
-        # Get top apartments using the service
-        top_apartments, total_count = await apartment_service.get_top_apartments(
-            city=request.city,
-            budget=request.budget,
-            bedrooms=request.bedrooms,
-            bathrooms=request.bathrooms,
-            property_type=request.property_type,
-            move_in_date=request.move_in_date,
-            other_preferences=request.other_preferences,
-            top_n=10
+        if tier == "pro":
+            # Full Claude AI-scored search
+            top_apartments, total_count = await apartment_service.get_top_apartments(
+                city=request.city,
+                budget=request.budget,
+                bedrooms=request.bedrooms,
+                bathrooms=request.bathrooms,
+                property_type=request.property_type,
+                move_in_date=request.move_in_date,
+                other_preferences=request.other_preferences,
+                top_n=10,
+            )
+            apartments_out = [
+                ApartmentWithScore(**apt) for apt in top_apartments
+            ]
+        else:
+            # Free / anonymous: filter only, no Claude scoring
+            filtered = await apartment_service.search_apartments(
+                city=request.city,
+                budget=request.budget,
+                bedrooms=request.bedrooms,
+                bathrooms=request.bathrooms,
+                property_type=request.property_type,
+                move_in_date=request.move_in_date,
+            )
+            total_count = len(filtered)
+            apartments_out = [
+                {
+                    **apt,
+                    "match_score": None,
+                    "reasoning": None,
+                    "highlights": [],
+                }
+                for apt in filtered[:10]
+            ]
+
+        # ── Increment counter for free users (after successful search) ──
+        if tier == "free":
+            await TierService.increment_search_count(user.user_id)
+            # remaining decreases by 1 after this search
+            searches_remaining = max(0, searches_remaining - 1)
+
+        await AnalyticsService.log_event(
+            "search",
+            user_id=user.user_id if user else None,
+            metadata={"city": request.city, "tier": tier, "result_count": len(apartments_out)},
         )
 
-        # Convert to response models
-        apartments_with_scores = [
-            ApartmentWithScore(**apt) for apt in top_apartments
-        ]
-
-        return SearchResponse(
-            apartments=apartments_with_scores,
-            total_results=total_count
-        )
+        return {
+            "apartments": apartments_out,
+            "total_results": total_count,
+            "tier": tier,
+            "searches_remaining": searches_remaining,
+        }
 
     except ValueError as e:
-        # Handle validation errors from services
         raise HTTPException(status_code=400, detail=str(e))
 
+    except HTTPException:
+        raise
+
     except Exception as e:
-        # Handle unexpected errors
         logger.exception(f"Error in search endpoint: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"An error occurred while searching for apartments: {str(e)}"
+            detail=f"An error occurred while searching for apartments: {str(e)}",
         )
 
 

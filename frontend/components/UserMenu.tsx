@@ -57,6 +57,13 @@ export function UserMenu() {
               >
                 Saved Searches
               </Link>
+              <Link
+                href="/settings"
+                className="block px-3 py-2 rounded hover:bg-gray-100"
+                onClick={() => setIsOpen(false)}
+              >
+                Settings
+              </Link>
               <button
                 onClick={() => { signOut(); setIsOpen(false) }}
                 className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-red-600"
