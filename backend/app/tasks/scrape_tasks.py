@@ -228,7 +228,11 @@ async def _scrape_city(
 
 
 async def _get_existing_data(city: str):
-    """Get existing hashes and listings for deduplication."""
+    """Get existing hashes and listings for deduplication.
+
+    Content hashes are loaded globally (UNIQUE constraint is global),
+    while fuzzy matching is city-scoped for performance.
+    """
     from sqlalchemy import select
     from app.models.apartment import ApartmentModel
 
@@ -237,17 +241,16 @@ async def _get_existing_data(city: str):
 
     try:
         async with get_session_context() as session:
-            # Get content hashes
+            # Get ALL content hashes globally (content_hash has a UNIQUE constraint)
             stmt = select(ApartmentModel.content_hash, ApartmentModel.id).where(
-                ApartmentModel.city.ilike(f"%{city}%"),
+                ApartmentModel.content_hash.isnot(None),
                 ApartmentModel.is_active == 1,
             )
             result = await session.execute(stmt)
             for row in result:
-                if row.content_hash:
-                    existing_hashes[row.content_hash] = row.id
+                existing_hashes[row.content_hash] = row.id
 
-            # Get recent listings for fuzzy matching (limit to recent)
+            # Get city-scoped listings for fuzzy address matching
             stmt = select(ApartmentModel).where(
                 ApartmentModel.city.ilike(f"%{city}%"),
                 ApartmentModel.is_active == 1,
@@ -263,12 +266,14 @@ async def _get_existing_data(city: str):
 
 
 async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
-    """Save listings to database."""
+    """Save listings to database. Inserts individually to avoid one bad
+    listing failing the entire batch."""
     from app.models.apartment import ApartmentModel
 
-    try:
-        async with get_session_context() as session:
-            for listing_data in listings:
+    saved = 0
+    for listing_data in listings:
+        try:
+            async with get_session_context() as session:
                 apartment = ApartmentModel(
                     id=listing_data["id"],
                     external_id=listing_data.get("external_id"),
@@ -300,19 +305,21 @@ async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
                     market_id=listing_data.get("market_id"),
                 )
                 session.add(apartment)
+                await session.commit()
+                saved += 1
+        except Exception as e:
+            logger.warning(f"Failed to save listing {listing_data.get('id')}: {e}")
 
-            await session.commit()
-            logger.info(f"Saved {len(listings)} listings to database")
-
-    except Exception as e:
-        logger.exception(f"Error saving listings: {e}")
-        raise
+    logger.info(f"Saved {saved}/{len(listings)} listings to database")
+    if saved == 0 and listings:
+        raise RuntimeError(f"Failed to save any of {len(listings)} listings")
 
 
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=3, soft_time_limit=5400, time_limit=7200)
 def scrape_city_task(self, market_id: str) -> Dict[str, Any]:
     """
     Scrape a single market. Called by the dispatcher.
+    Apify runs for hot markets can take 30-60 minutes.
     """
     logger.info(f"Starting scrape for market: {market_id}")
     return run_async(_scrape_market(self, market_id))
@@ -373,6 +380,13 @@ async def _scrape_market(task, market_id: str) -> Dict[str, Any]:
         scrape_result = await scraper.scrape(
             city=city, state=state, max_listings=max_listings
         )
+
+        if scrape_result.status.value == "failed":
+            error_msg = "; ".join(scrape_result.errors) or "Scrape failed"
+            logger.error(f"Scrape failed for {market_id}: {error_msg}")
+            await _update_job(job_id, "failed", error=error_msg)
+            await _update_market_after_scrape(market_id, "failed")
+            return {"status": "failed", "market_id": market_id, "error": error_msg}
 
         found = len(scrape_result.listings)
 
@@ -455,6 +469,9 @@ async def _update_job(job_id: str, status: str, **metrics):
     from app.models.scrape_job import ScrapeJobModel
 
     values = {"status": status, "completed_at": datetime.utcnow()}
+    # Map 'error' kwarg to the actual column name 'error_message'
+    if "error" in metrics:
+        metrics["error_message"] = metrics.pop("error")
     values.update(metrics)
 
     async with get_session_context() as session:

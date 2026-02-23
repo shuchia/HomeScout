@@ -44,8 +44,8 @@ celery_app.conf.update(
     result_expires=86400,  # 24 hours
 
     # Task time limits
-    task_soft_time_limit=1800,  # 30 minutes soft limit
-    task_time_limit=3600,  # 1 hour hard limit
+    task_soft_time_limit=1800,  # 30 minutes soft limit (default)
+    task_time_limit=3600,  # 1 hour hard limit (default)
 
     # Retry settings
     task_default_retry_delay=60,  # 1 minute
