@@ -357,13 +357,6 @@ export default function ComparePage() {
           </div>
         )}
 
-        {/* Upgrade prompt for free users when no analysis is available */}
-        {!analysis && !isPro && !loading && apartments.length > 0 && (
-          <div className="mb-8">
-            <UpgradePrompt feature="detailed AI analysis with winner picks and category scoring" />
-          </div>
-        )}
-
         {/* Comparison Table */}
         {!loading && apartments.length > 0 && (
           <div className="bg-white rounded-lg shadow-md overflow-hidden">

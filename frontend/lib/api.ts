@@ -4,18 +4,20 @@
  */
 
 import { SearchParams, SearchResponse, HealthResponse, Apartment, ApartmentWithScore, SearchContext, ComparisonAnalysis } from '@/types/apartment';
-import { supabase } from './supabase';
+import { getAccessToken } from './auth-store';
 
 // Get API URL from environment variable, fallback to localhost
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 /**
- * Get authorization headers with Supabase JWT if available
+ * Get authorization headers using the current access token.
+ * Reads synchronously from the auth-store (updated by AuthContext on every
+ * session change / token refresh). Never calls getSession() — no hanging.
  */
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session?.access_token) {
-    return { Authorization: `Bearer ${session.access_token}` }
+function getAuthHeaders(): Record<string, string> {
+  const token = getAccessToken()
+  if (token) {
+    return { Authorization: `Bearer ${token}` }
   }
   return {}
 }
@@ -44,7 +46,7 @@ export class ApiError extends Error {
  */
 export async function searchApartments(params: SearchParams): Promise<SearchResponse> {
   try {
-    const authHeaders = await getAuthHeaders()
+    const authHeaders = getAuthHeaders()
     const response = await fetch(`${API_URL}/api/search`, {
       method: 'POST',
       headers: {
@@ -204,7 +206,7 @@ export async function compareApartments(
   searchContext?: SearchContext
 ): Promise<CompareResponse> {
   try {
-    const authHeaders = await getAuthHeaders()
+    const authHeaders = getAuthHeaders()
     const response = await fetch(`${API_URL}/api/apartments/compare`, {
       method: 'POST',
       headers: {

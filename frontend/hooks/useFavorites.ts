@@ -9,6 +9,16 @@ interface FavoriteWithApartment extends Favorite {
   apartment: Apartment | null
 }
 
+/**
+ * Race a promise against a timeout. Returns null if the timeout fires first.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ])
+}
+
 export function useFavorites() {
   const { user, isPro } = useAuth()
   const [favorites, setFavorites] = useState<FavoriteWithApartment[]>([])
@@ -23,44 +33,58 @@ export function useFavorites() {
 
     setLoading(true)
 
-    // Get favorites from Supabase
-    const { data: favs, error: favsError } = await supabase
-      .from('favorites')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    console.log('Loaded favorites from Supabase:', { favs, error: favsError })
-
-    if (favsError) {
-      console.error('Error loading favorites:', favsError)
-      setLoading(false)
-      return
-    }
-
-    if (!favs?.length) {
-      setFavorites([])
-      setLoading(false)
-      return
-    }
-
-    // Fetch apartment details from FastAPI
-    const apartmentIds = favs.map(f => f.apartment_id)
-    console.log('Fetching apartment details for IDs:', apartmentIds)
     try {
-      const apartments = await getApartmentsBatch(apartmentIds)
-      console.log('Got apartments from batch API:', apartments)
-      const apartmentMap = new Map(apartments.map(a => [a.id, a]))
+      // Get favorites from Supabase (with timeout to prevent hanging)
+      const query = supabase
+        .from('favorites')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      const result = await withTimeout(
+        Promise.resolve(query),
+        5000,
+      )
 
-      const merged = favs.map(fav => ({
-        ...fav,
-        apartment: apartmentMap.get(fav.apartment_id) || null
-      }))
+      if (!result) {
+        console.warn('Supabase favorites query timed out')
+        setFavorites([])
+        setLoading(false)
+        return
+      }
 
-      setFavorites(merged)
+      const { data: favs, error: favsError } = result
+
+      if (favsError) {
+        console.error('Error loading favorites:', favsError)
+        setLoading(false)
+        return
+      }
+
+      if (!favs?.length) {
+        setFavorites([])
+        setLoading(false)
+        return
+      }
+
+      // Fetch apartment details from FastAPI
+      const apartmentIds = favs.map(f => f.apartment_id)
+      try {
+        const apartments = await getApartmentsBatch(apartmentIds)
+        const apartmentMap = new Map(apartments.map(a => [a.id, a]))
+
+        const merged = favs.map(fav => ({
+          ...fav,
+          apartment: apartmentMap.get(fav.apartment_id) || null
+        }))
+
+        setFavorites(merged)
+      } catch (error) {
+        console.error('Failed to fetch apartment details:', error)
+        setFavorites(favs.map(fav => ({ ...fav, apartment: null })))
+      }
     } catch (error) {
-      console.error('Failed to fetch apartment details:', error)
-      setFavorites(favs.map(fav => ({ ...fav, apartment: null })))
+      console.error('Failed to load favorites:', error)
+      setFavorites([])
     }
 
     setLoading(false)

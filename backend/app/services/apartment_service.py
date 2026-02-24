@@ -55,11 +55,14 @@ class ApartmentService:
         move_in_date: str
     ) -> List[Dict]:
         """Search apartments in PostgreSQL database."""
-        from sqlalchemy import select, and_
+        from sqlalchemy import select, and_, or_
         from app.models.apartment import ApartmentModel
 
         # Parse property types
         property_types = [pt.strip() for pt in property_type.split(",")]
+
+        # Parse city name from "City, ST" format for column matching
+        city_name = city.split(",")[0].strip() if "," in city else city.strip()
 
         # Parse move-in date
         try:
@@ -77,8 +80,11 @@ class ApartmentService:
                     ApartmentModel.bedrooms == bedrooms,
                     ApartmentModel.bathrooms >= bathrooms,
                     ApartmentModel.property_type.in_(property_types),
-                    # City filter: case-insensitive partial match
-                    ApartmentModel.address.ilike(f"%{city}%")
+                    # City filter: match on indexed city column or fallback to address
+                    or_(
+                        ApartmentModel.city.ilike(city_name),
+                        ApartmentModel.address.ilike(f"%{city}%"),
+                    ),
                 )
             )
 

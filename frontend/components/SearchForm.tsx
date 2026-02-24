@@ -5,11 +5,13 @@ import { SearchParams, ApartmentWithScore } from '@/types/apartment';
 import { searchApartments, ApiError } from '@/lib/api';
 import { useComparison } from '@/hooks/useComparison';
 
-// Available cities (MVP - 3 PA cities)
+// Available cities — matches scraped data in the database
 const AVAILABLE_CITIES = [
-  { value: 'Philadelphia, PA', label: 'Philadelphia, PA' },
+  { value: 'Boston, MA', label: 'Boston, MA' },
   { value: 'Bryn Mawr, PA', label: 'Bryn Mawr, PA' },
-  { value: 'Pittsburgh, PA', label: 'Pittsburgh, PA' },
+  { value: 'New York, NY', label: 'New York, NY' },
+  { value: 'Philadelphia, PA', label: 'Philadelphia, PA' },
+  { value: 'Washington, DC', label: 'Washington, DC' },
 ];
 
 // Property type options
@@ -39,7 +41,7 @@ interface SearchFormProps {
 
 export default function SearchForm({ onResults, onLoading, onError, onSearchMeta }: SearchFormProps) {
   // Form state
-  const [city, setCity] = useState('Pittsburgh, PA');
+  const [city, setCity] = useState('Philadelphia, PA');
   const [budget, setBudget] = useState(2000);
   const [bedrooms, setBedrooms] = useState(1);
   const [bathrooms, setBathrooms] = useState(1);

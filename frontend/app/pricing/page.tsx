@@ -1,22 +1,43 @@
 'use client'
+import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function PricingPage() {
-  const { user, isPro, loading } = useAuth()
+  const { user, isPro, loading, accessToken } = useAuth()
+  const [upgrading, setUpgrading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleUpgrade() {
-    const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
-    const res = await fetch(`${API_BASE}/api/billing/checkout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      },
-    })
-    const { url } = await res.json()
-    if (url) window.location.href = url
+    setUpgrading(true)
+    setError(null)
+    try {
+      if (!accessToken) {
+        setError('Session expired. Please sign out and sign back in.')
+        setUpgrading(false)
+        return
+      }
+      const res = await fetch(`${API_BASE}/api/billing/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.detail || 'Failed to start checkout. Please try again.')
+        setUpgrading(false)
+        return
+      }
+      const { url } = await res.json()
+      if (url) window.location.href = url
+    } catch (err) {
+      console.error('Upgrade failed:', err)
+      setError('Unable to connect to the server. Please try again.')
+    }
+    setUpgrading(false)
   }
 
   return (
@@ -58,15 +79,18 @@ export default function PricingPage() {
               <li>Saved searches</li>
               <li>Daily email alerts for new matches</li>
             </ul>
+            {error && (
+              <p className="text-red-600 text-sm mb-3 text-center">{error}</p>
+            )}
             {isPro ? (
               <p className="text-center text-green-600 font-medium">Your current plan</p>
             ) : (
               <button
                 onClick={handleUpgrade}
-                disabled={!user || loading}
+                disabled={!user || loading || upgrading}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
               >
-                {user ? 'Upgrade to Pro' : 'Sign in to upgrade'}
+                {upgrading ? 'Redirecting...' : user ? 'Upgrade to Pro' : 'Sign in to upgrade'}
               </button>
             )}
           </div>

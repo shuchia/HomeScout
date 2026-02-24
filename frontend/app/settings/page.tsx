@@ -1,12 +1,12 @@
 'use client'
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-export default function SettingsPage() {
-  const { user, profile, loading, isPro, tier, signOut, refreshProfile } = useAuth()
+function SettingsContent() {
+  const { user, profile, loading, isPro, tier, signOut, refreshProfile, accessToken } = useAuth()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -25,21 +25,26 @@ export default function SettingsPage() {
   }
 
   async function handleManageBilling() {
-    const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession()
-    const res = await fetch(`${API_BASE}/api/billing/portal`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      },
-    })
-    const { url } = await res.json()
-    if (url) window.location.href = url
+    if (!accessToken) return
+    try {
+      const res = await fetch(`${API_BASE}/api/billing/portal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      if (!res.ok) return
+      const { url } = await res.json()
+      if (url) window.location.href = url
+    } catch (err) {
+      console.error('Manage billing failed:', err)
+    }
   }
 
   async function handleDeleteAccount() {
     if (!confirm('This will permanently delete your account, favorites, and saved searches. This cannot be undone.')) return
-    await signOut()
+    signOut()
     window.location.href = '/'
   }
 
@@ -123,5 +128,13 @@ export default function SettingsPage() {
         </button>
       </section>
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <SettingsContent />
+    </Suspense>
   )
 }

@@ -1,7 +1,8 @@
 'use client'
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
-import { User } from '@supabase/supabase-js'
+import { User, Session } from '@supabase/supabase-js'
 import { supabase, Profile } from '@/lib/supabase'
+import { setAccessToken } from '@/lib/auth-store'
 
 interface AuthContextType {
   user: User | null
@@ -11,24 +12,38 @@ interface AuthContextType {
   tier: 'free' | 'pro' | 'anonymous'
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
-  signOut: () => Promise<void>
+  signOut: () => void
   refreshProfile: () => Promise<void>
+  /** Returns the current access token synchronously (null if not signed in). */
+  accessToken: string | null
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    setProfile(data)
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      setProfile(data)
+    } catch {
+      // Profile fetch failed, leave as null
+    }
+  }, [])
+
+  /** Sync session state + module-level token store */
+  const applySession = useCallback((s: Session | null) => {
+    setSession(s)
+    setUser(s?.user ?? null)
+    setAccessToken(s?.access_token ?? null)
   }, [])
 
   useEffect(() => {
@@ -48,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Get initial session with timeout
+    // Get initial session with timeout so the UI never hangs
     const timeout = setTimeout(() => {
       if (mounted) {
         console.warn('Auth session check timed out')
@@ -56,11 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 5000)
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
       clearTimeout(timeout)
       if (mounted) {
-        setUser(session?.user ?? null)
-        if (session?.user) fetchProfile(session.user.id)
+        applySession(s)
+        if (s?.user) fetchProfile(s.user.id)
         setLoading(false)
       }
     }).catch((error) => {
@@ -71,13 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    // Listen for auth changes
+    // Listen for ALL auth events: SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, etc.
+    // This is the primary mechanism that keeps the token up-to-date.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event, s) => {
         if (mounted) {
-          setUser(session?.user ?? null)
-          if (session?.user) {
-            await fetchProfile(session.user.id)
+          applySession(s)
+          if (s?.user) {
+            await fetchProfile(s.user.id)
           } else {
             setProfile(null)
           }
@@ -90,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timeout)
       subscription.unsubscribe()
     }
-  }, [fetchProfile])
+  }, [fetchProfile, applySession])
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -106,12 +122,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  async function signOut() {
-    await supabase.auth.signOut()
+  function signOut() {
+    // Clear local state immediately so the UI updates instantly,
+    // then tell Supabase to revoke the session (fire-and-forget).
     setProfile(null)
+    applySession(null)
     if (typeof window !== 'undefined') {
       localStorage.removeItem('comparison-storage')
     }
+    supabase.auth.signOut().catch(() => {})
   }
 
   const tier: 'free' | 'pro' | 'anonymous' = user ? (profile?.user_tier || 'free') : 'anonymous'
@@ -121,10 +140,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.id)
   }, [user, fetchProfile])
 
+  const accessToken = session?.access_token ?? null
+
   return (
     <AuthContext.Provider value={{
       user, profile, loading, isPro, tier,
-      signInWithGoogle, signInWithApple, signOut, refreshProfile
+      signInWithGoogle, signInWithApple, signOut, refreshProfile,
+      accessToken,
     }}>
       {children}
     </AuthContext.Provider>
