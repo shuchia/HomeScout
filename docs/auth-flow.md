@@ -82,9 +82,9 @@ AuthContext picks up session via onAuthStateChange(SIGNED_IN, session)
 
 ## 2. Token Storage & Access (The Key Design)
 
-**Problem solved:** `supabase.auth.getSession()` can hang indefinitely when the token refresh stalls, blocking the entire UI.
+**Problem solved:** The `@supabase/ssr` `createBrowserClient` stores sessions in cookies and requires Next.js middleware to refresh them. Without middleware, tokens go stale and `getSession()` hangs.
 
-**Solution:** Never call `getSession()` for API requests. Instead:
+**Solution:** Use the standard `@supabase/supabase-js` `createClient` with localStorage storage (reliable auto-refresh, no middleware needed). API requests read from a sync token store — never call `getSession()`:
 
 ```
 ┌─────────────────────────────┐

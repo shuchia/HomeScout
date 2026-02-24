@@ -9,16 +9,6 @@ interface FavoriteWithApartment extends Favorite {
   apartment: Apartment | null
 }
 
-/**
- * Race a promise against a timeout. Returns null if the timeout fires first.
- */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([
-    promise,
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
-  ])
-}
-
 export function useFavorites() {
   const { user, isPro } = useAuth()
   const [favorites, setFavorites] = useState<FavoriteWithApartment[]>([])
@@ -34,25 +24,11 @@ export function useFavorites() {
     setLoading(true)
 
     try {
-      // Get favorites from Supabase (with timeout to prevent hanging)
-      const query = supabase
+      const { data: favs, error: favsError } = await supabase
         .from('favorites')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-      const result = await withTimeout(
-        Promise.resolve(query),
-        5000,
-      )
-
-      if (!result) {
-        console.warn('Supabase favorites query timed out')
-        setFavorites([])
-        setLoading(false)
-        return
-      }
-
-      const { data: favs, error: favsError } = result
 
       if (favsError) {
         console.error('Error loading favorites:', favsError)

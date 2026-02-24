@@ -1,68 +1,68 @@
 'use client'
-import { useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Suspense } from 'react'
 
-function CallbackHandler() {
+export default function AuthCallback() {
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function handleCallback() {
-      // PKCE flow: exchange the code from the URL query params
-      const code = searchParams.get('code')
+      // Check for PKCE auth code in query params
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get('code')
+
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) {
           console.error('Auth code exchange failed:', error)
+          setError('Sign-in failed. Please try again.')
+          setTimeout(() => router.replace('/'), 3000)
+          return
         }
+      }
+
+      // For implicit flow, detectSessionInUrl handles the hash fragment
+      // automatically. Wait briefly for onAuthStateChange to fire.
+
+      // Either way, check if we now have a session
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
         router.replace('/')
         return
       }
 
-      // Implicit flow fallback: tokens arrive in the URL hash.
-      // The Supabase client picks these up automatically, so just
-      // wait for the SIGNED_IN event.
+      // If no session yet, wait for the auth state change
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_IN') {
+          subscription.unsubscribe()
           router.replace('/')
         }
       })
 
-      // Safety timeout — if nothing fires within 5s, go home anyway
-      const timeout = setTimeout(() => router.replace('/'), 5000)
-
-      return () => {
+      // Safety timeout
+      setTimeout(() => {
         subscription.unsubscribe()
-        clearTimeout(timeout)
-      }
+        router.replace('/')
+      }, 5000)
     }
 
     handleCallback()
-  }, [router, searchParams])
+  }, [router])
 
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p>Signing you in...</p>
+        {error ? (
+          <p className="text-red-600">{error}</p>
+        ) : (
+          <>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p>Signing you in...</p>
+          </>
+        )}
       </div>
     </div>
-  )
-}
-
-export default function AuthCallback() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p>Signing you in...</p>
-        </div>
-      </div>
-    }>
-      <CallbackHandler />
-    </Suspense>
   )
 }

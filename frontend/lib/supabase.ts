@@ -1,10 +1,18 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 
-// Provide placeholder values for build time - actual values needed at runtime
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Use localStorage for session persistence (reliable auto-refresh).
+    // The @supabase/ssr cookie-based approach requires Next.js middleware
+    // we don't have, causing stale tokens and hanging getSession() calls.
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+})
 
 // Types for Supabase tables
 export interface Profile {

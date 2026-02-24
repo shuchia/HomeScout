@@ -14,7 +14,6 @@ interface AuthContextType {
   signInWithApple: () => Promise<void>
   signOut: () => void
   refreshProfile: () => Promise<void>
-  /** Returns the current access token synchronously (null if not signed in). */
   accessToken: string | null
 }
 
@@ -39,7 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  /** Sync session state + module-level token store */
   const applySession = useCallback((s: Session | null) => {
     setSession(s)
     setUser(s?.user ?? null)
@@ -49,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    // Support E2E test auth bypass via localStorage (non-production only)
+    // E2E test auth bypass
     if (process.env.NODE_ENV !== 'production') {
       const testUser = typeof window !== 'undefined'
         ? localStorage.getItem('__test_auth_user')
@@ -59,35 +57,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(JSON.parse(testUser) as User)
           setLoading(false)
           return
-        } catch { /* fall through to normal auth */ }
+        } catch { /* fall through */ }
       }
     }
 
-    // Get initial session with timeout so the UI never hangs
-    const timeout = setTimeout(() => {
-      if (mounted) {
-        console.warn('Auth session check timed out')
-        setLoading(false)
-      }
-    }, 5000)
-
+    // With the standard createClient (localStorage-based), getSession()
+    // reads from localStorage synchronously — it does NOT hang.
     supabase.auth.getSession().then(({ data: { session: s } }) => {
-      clearTimeout(timeout)
       if (mounted) {
         applySession(s)
         if (s?.user) fetchProfile(s.user.id)
         setLoading(false)
       }
-    }).catch((error) => {
-      clearTimeout(timeout)
-      if (mounted) {
-        console.error('Auth session error:', error)
-        setLoading(false)
-      }
+    }).catch(() => {
+      if (mounted) setLoading(false)
     })
 
-    // Listen for ALL auth events: SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, etc.
-    // This is the primary mechanism that keeps the token up-to-date.
+    // This listener fires on: SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED.
+    // With the standard client, TOKEN_REFRESHED fires reliably every ~55 minutes
+    // (before the 1-hour access token expires).
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, s) => {
         if (mounted) {
@@ -103,7 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false
-      clearTimeout(timeout)
       subscription.unsubscribe()
     }
   }, [fetchProfile, applySession])
@@ -123,8 +110,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function signOut() {
-    // Clear local state immediately so the UI updates instantly,
-    // then tell Supabase to revoke the session (fire-and-forget).
     setProfile(null)
     applySession(null)
     if (typeof window !== 'undefined') {
