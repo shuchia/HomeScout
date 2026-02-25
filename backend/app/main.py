@@ -66,7 +66,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Rate limiting (added first so CORS wraps it — Starlette runs middleware
+# in reverse order of addition, so the last-added middleware runs first)
+from app.middleware.rate_limit import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
+# Configure CORS (added last = runs first = wraps all responses with CORS headers)
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
@@ -75,10 +80,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Rate limiting
-from app.middleware.rate_limit import RateLimitMiddleware
-app.add_middleware(RateLimitMiddleware)
 
 # Register routers (apartments_router registered later to avoid route conflicts)
 app.include_router(data_collection_router)

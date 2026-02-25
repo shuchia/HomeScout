@@ -26,7 +26,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self.redis = None
 
     async def dispatch(self, request: Request, call_next):
-        if not self.redis or os.getenv("TESTING"):
+        # Skip rate limiting for preflight requests and when disabled
+        if request.method == "OPTIONS" or not self.redis or os.getenv("TESTING"):
             return await call_next(request)
 
         # Extract user identity
