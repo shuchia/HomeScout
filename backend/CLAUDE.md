@@ -1,6 +1,6 @@
 # Backend CLAUDE.md
 
-This file provides Claude Code guidance for the HomeScout backend, focusing on the data collection architecture.
+This file provides Claude Code guidance for the HomeScout backend, covering authentication, monetization, data collection, and API architecture.
 
 ## Quick Commands
 
@@ -41,6 +41,12 @@ DATABASE_URL=postgresql+asyncpg://user@localhost:5432/homescout
 REDIS_URL=redis://localhost:6379/0
 ANTHROPIC_API_KEY=your-key
 APIFY_API_TOKEN=your-token  # For apartments.com scraping
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_JWT_SECRET=your-jwt-secret
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID=price_...
 ```
 
 ## Verification
@@ -70,7 +76,13 @@ HomeScout backend has two modes:
 
 Set `USE_DATABASE=true` in `.env` to enable database mode.
 
-**All apartment endpoints** (`get/{id}`, `batch`, `compare`, `list`, `count`, `stats`) check `is_database_enabled()` and query the appropriate source. The compare endpoint also calls Claude AI for head-to-head analysis via `compare_apartments_with_analysis()`, using `asyncio.to_thread()` to avoid blocking the async event loop.
+**All apartment endpoints** (`get/{id}`, `batch`, `compare`, `list`, `count`, `stats`) check `is_database_enabled()` and query the appropriate source.
+
+### Tier-Gated Endpoints
+The search and compare endpoints are tier-gated:
+- **`/api/search`**: Pro gets Claude AI scoring; free gets filtered results (3 searches/day via Redis counter); anonymous gets filtered results with no limit tracking
+- **`/api/apartments/compare`**: Pro gets Claude head-to-head analysis; free/anonymous get basic comparison table without AI analysis
+- Auth is via Supabase JWT (`auth.py` → `get_optional_user`), tier checked via `TierService.get_user_tier()`
 
 ## Data Collection Pipeline
 
@@ -114,9 +126,22 @@ PostgreSQL (ApartmentModel)
 
 | File | Purpose |
 |------|---------|
-| `celery_app.py` | Celery configuration, task routes, beat schedule |
+| `celery_app.py` | Celery configuration, task routes, beat schedule (4 tasks) |
 | `database.py` | Async SQLAlchemy engine, session management |
+| `auth.py` | Supabase JWT verification (`get_current_user`, `get_optional_user`) |
 | `alembic/` | Database migrations |
+
+### Auth & Monetization
+
+| File | Purpose |
+|------|---------|
+| `auth.py` | JWT decode (HS256, audience "authenticated"), `UserContext` dataclass |
+| `services/tier_service.py` | Tier checking (Supabase), Redis daily search metering, tier updates |
+| `services/analytics_service.py` | Fire-and-forget event logging to Supabase `analytics_events` table |
+| `routers/billing.py` | Stripe checkout, portal, webhook endpoints |
+| `routers/saved_searches.py` | Saved search CRUD (Pro only) |
+| `middleware/rate_limit.py` | Redis-based rate limiting (60/min auth, 10/min anon, 10/min expensive) |
+| `tasks/alert_tasks.py` | Daily email alerts for Pro users via Resend |
 
 ### ORM Models (`models/`)
 
@@ -150,19 +175,37 @@ PostgreSQL (ApartmentModel)
 |------|---------|
 | `scrape_tasks.py` | `scrape_source`, `scrape_city_task` |
 | `maintenance_tasks.py` | `cleanup_stale_listings`, `reset_rate_limits`, `vacuum_database` |
+| `alert_tasks.py` | `send_daily_alerts` — email Pro users with new matching apartments |
 
 ## Environment Variables
 
-### Required for Data Collection
+### Required
 
 ```bash
+# Claude AI
+ANTHROPIC_API_KEY=your-claude-api-key
+
+# Supabase (auth + tier management)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_JWT_SECRET=your-jwt-secret
+
+# Stripe (payments)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID=price_...
+
 # Database
 USE_DATABASE=true
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/homescout
 
-# Redis (Celery broker)
+# Redis (Celery broker + rate limiting + search metering)
 REDIS_URL=redis://localhost:6379/0
+```
 
+### Required for Data Collection
+
+```bash
 # Apify (Zillow, Apartments.com)
 APIFY_API_TOKEN=your_token
 
@@ -173,10 +216,17 @@ SCRAPINGBEE_API_KEY=your_key
 ### Optional
 
 ```bash
+# Email alerts (Resend)
+RESEND_API_KEY=re_...
+ALERT_FROM_EMAIL=alerts@homescout.app
+
 # S3 image caching
 S3_BUCKET_NAME=homescout-images
 AWS_REGION=us-west-2
 CLOUDFRONT_DOMAIN=d123.cloudfront.net
+
+# CORS
+FRONTEND_URL=http://localhost:3000
 
 # Debug
 SQL_ECHO=false
@@ -191,6 +241,7 @@ Defined in `celery_app.py`:
 | `dispatch_scrapes` | Every hour at :00 | Check market_configs, spawn scrape tasks for due markets |
 | `decay_and_verify` | Every hour at :30 | Recalculate freshness confidence, trigger verification |
 | `cleanup_maintenance` | Daily at 3 AM | Deactivate dead listings, reset circuit breakers, fail stale jobs |
+| `send_daily_alerts` | Daily at 1 PM UTC (8 AM ET) | Email Pro users with new listings matching saved searches |
 
 ## ApartmentModel Fields
 
@@ -251,7 +302,35 @@ When duplicates found:
 - Keep listing with higher quality score
 - Merge unique data (images, amenities, description)
 
-## Admin API Endpoints
+## API Endpoints
+
+### Tier-Gated Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/search` | POST | Optional | Pro: Claude AI scoring; Free: filtered (3/day); Anonymous: filtered |
+| `/api/apartments/compare` | POST | Optional | Pro: Claude analysis; Free/Anonymous: basic comparison |
+| `/api/saved-searches` | GET | Required | List user's saved searches |
+| `/api/saved-searches` | POST | Required (Pro) | Create saved search |
+| `/api/saved-searches/{id}` | DELETE | Required | Delete saved search |
+
+### Billing Endpoints
+
+Router: `routers/billing.py`
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/billing/checkout` | POST | Required | Create Stripe Checkout Session for Pro upgrade |
+| `/api/billing/portal` | POST | Required | Create Stripe Customer Portal session |
+| `/api/webhooks/stripe` | POST | Stripe sig | Handle Stripe webhook events |
+
+Stripe webhook events handled:
+- `checkout.session.completed` → set tier to "pro", store stripe_customer_id
+- `customer.subscription.updated` → update subscription_status, current_period_end
+- `customer.subscription.deleted` → revert tier to "free"
+- `invoice.payment_failed` → set subscription_status to "past_due"
+
+### Admin API Endpoints
 
 Router: `routers/data_collection.py`
 
@@ -310,9 +389,74 @@ result = scrape_city_task.delay("zillow", "San Francisco", "CA", max_listings=50
 print(result.get())  # Wait for result
 ```
 
+## Authentication & Tier System
+
+### JWT Verification (`auth.py`)
+- Decodes Supabase JWTs using HS256 with `SUPABASE_JWT_SECRET`
+- Audience: `"authenticated"`
+- `get_current_user(authorization)` → `UserContext` or 401
+- `get_optional_user(authorization)` → `UserContext | None` (never raises)
+- `UserContext` dataclass: `user_id: str`, `email: str | None`
+
+### Tier Service (`services/tier_service.py`)
+- `TierService.get_user_tier(user_id)` → queries `profiles.user_tier` from Supabase (defaults to "free")
+- `TierService.check_search_limit(user_id)` → Redis counter `search_count:{user_id}:{date}` with 48h TTL
+- `TierService.increment_search_count(user_id)` → Redis INCR
+- `TierService.update_user_tier(user_id, tier, **kwargs)` → updates Supabase profile (called from Stripe webhooks)
+- Fail-open: if Redis or Supabase is down, defaults to allowing requests
+- Module-level `supabase_admin` client using service role key (bypasses RLS)
+
+### Tier Limits
+| Feature | Free | Pro |
+|---------|------|-----|
+| Searches/day | 3 (Redis counter) | Unlimited |
+| Claude AI scoring | No | Yes |
+| Claude comparison analysis | No | Yes |
+| Saved searches | No (403) | Unlimited |
+| Email alerts | No | Daily digest |
+| Rate limit | 10 req/min | 60 req/min |
+
+### Rate Limiting (`middleware/rate_limit.py`)
+- Redis sliding window counter per minute
+- Identity: authenticated users keyed by token hash, anonymous by IP
+- Expensive paths (`/api/search`, `/api/apartments/compare`): 10 req/min regardless of auth
+- Returns 429 with `{"detail": "Rate limit exceeded. Please slow down."}`
+- Fail-open on Redis errors
+- Skipped when `TESTING` env var is set (conftest.py sets this)
+
+## Testing
+
+```bash
+# Run all backend tests (77 tests)
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
+```
+
+| Test File | Count | Coverage |
+|-----------|-------|----------|
+| `test_auth.py` | 6 | JWT verification, get_current_user, get_optional_user |
+| `test_tier_service.py` | 5 | Tier checking, Redis metering, fail-open |
+| `test_billing.py` | 13 | Stripe checkout, portal, webhooks, customer lookup |
+| `test_search_gating.py` | 9 | Anonymous/free/pro search behavior, daily limits |
+| `test_compare_gating.py` | 9 | Anonymous/free/pro compare behavior |
+| `test_saved_searches.py` | 8 | CRUD, auth required, Pro-only creation |
+| `test_rate_limit.py` | 13 | Rate limits, expensive paths, fail-open |
+| `test_alert_tasks.py` | 5 | Daily email alerts, filtering, error handling |
+| `test_webhooks.py` | 2 | Supabase webhook auth |
+
+Note: 5 pre-existing failures in `test_apartments_router.py` (don't mock TierService).
+
 ## Database Indexes
 
 `ApartmentModel` has indexes on:
 - `city`, `rent`, `bedrooms`, `bathrooms`, `property_type`
 - `source`, `content_hash`, `is_active`
 - Composite: `(city, rent, bedrooms)` for search queries
+
+## Supabase Migrations
+
+| Migration | Purpose |
+|-----------|---------|
+| `001_initial_schema.sql` | profiles, favorites, saved_searches, notifications tables + RLS |
+| `002_add_tier_columns.sql` | user_tier, stripe_customer_id, subscription_status, current_period_end on profiles |
+| `003_add_analytics_events.sql` | analytics_events table (event_type, metadata JSONB, user_id FK) |
+| `004_update_saved_searches.sql` | last_alerted_at, is_active on saved_searches + service update policy |
