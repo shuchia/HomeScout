@@ -137,3 +137,103 @@ class TestExtractPreferenceCategories:
             "I want a nice apartment"
         )
         assert categories == set()
+
+
+class TestSpaceFitScore:
+    """Space fit component: 15% weight."""
+
+    def test_exact_bedroom_match_with_sqft(self):
+        score = ScoringService.space_fit_score(
+            bedrooms=2, requested_bedrooms=2,
+            bathrooms=2, requested_bathrooms=1,
+            sqft=1200,
+        )
+        assert score >= 80
+
+    def test_no_sqft_still_scores(self):
+        score = ScoringService.space_fit_score(
+            bedrooms=2, requested_bedrooms=2,
+            bathrooms=1, requested_bathrooms=1,
+            sqft=None,
+        )
+        assert 50 <= score <= 80
+
+    def test_extra_bathrooms_bonus(self):
+        base = ScoringService.space_fit_score(
+            bedrooms=2, requested_bedrooms=2,
+            bathrooms=1, requested_bathrooms=1,
+            sqft=None,
+        )
+        bonus = ScoringService.space_fit_score(
+            bedrooms=2, requested_bedrooms=2,
+            bathrooms=2, requested_bathrooms=1,
+            sqft=None,
+        )
+        assert bonus > base
+
+
+class TestOverallScore:
+    """Weighted overall score combining all components."""
+
+    def test_perfect_apartment_scores_high(self):
+        score = ScoringService.compute_heuristic_score(
+            rent=1800, budget=2000,
+            freshness_confidence=95, last_seen_at=datetime.utcnow().isoformat(),
+            data_quality=90,
+            other_preferences="gym and parking",
+            amenities=["Fitness Center", "Covered Parking"],
+            bedrooms=2, requested_bedrooms=2,
+            bathrooms=2, requested_bathrooms=1,
+            sqft=1200,
+        )
+        assert score >= 85
+
+    def test_over_budget_poor_quality_scores_low(self):
+        score = ScoringService.compute_heuristic_score(
+            rent=2180, budget=2000,
+            freshness_confidence=45, last_seen_at=None,
+            data_quality=30,
+            other_preferences="pool and pet-friendly",
+            amenities=[],
+            bedrooms=2, requested_bedrooms=2,
+            bathrooms=1, requested_bathrooms=1,
+            sqft=None,
+        )
+        assert score <= 40
+
+    def test_score_to_label_excellent(self):
+        assert ScoringService.score_to_label(92) == "Excellent Match"
+
+    def test_score_to_label_great(self):
+        assert ScoringService.score_to_label(80) == "Great Match"
+
+    def test_score_to_label_good(self):
+        assert ScoringService.score_to_label(65) == "Good Match"
+
+    def test_score_to_label_fair(self):
+        assert ScoringService.score_to_label(45) == "Fair Match"
+
+    def test_score_to_label_none_for_low(self):
+        assert ScoringService.score_to_label(30) is None
+
+
+class TestScoreApartmentsList:
+    """Integration: ScoringService.score_apartments_list scores and sorts."""
+
+    def test_scores_and_sorts_descending(self):
+        apartments = [
+            {"id": "cheap", "rent": 1500, "bedrooms": 2, "bathrooms": 1,
+             "sqft": 1000, "amenities": ["Gym"], "freshness_confidence": 90,
+             "last_seen_at": datetime.utcnow().isoformat(), "data_quality_score": 80},
+            {"id": "expensive", "rent": 2150, "bedrooms": 2, "bathrooms": 1,
+             "sqft": 800, "amenities": [], "freshness_confidence": 50,
+             "last_seen_at": None, "data_quality_score": 40},
+        ]
+        scored = ScoringService.score_apartments_list(
+            apartments=apartments,
+            budget=2000, bedrooms=2, bathrooms=1,
+            other_preferences="gym",
+        )
+        assert scored[0]["id"] == "cheap"
+        assert scored[0]["heuristic_score"] > scored[1]["heuristic_score"]
+        assert "match_label" in scored[0]

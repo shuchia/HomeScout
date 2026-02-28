@@ -108,3 +108,126 @@ class ScoringService:
                 matched += 1
 
         return int(matched / len(requested) * 100)
+
+    @staticmethod
+    def space_fit_score(
+        bedrooms: int,
+        requested_bedrooms: int,
+        bathrooms: float,
+        requested_bathrooms: float,
+        sqft: Optional[int],
+    ) -> int:
+        """Score space fit (0-100).
+
+        Bedroom match (40%), bathroom overshoot bonus (30%),
+        sqft bonus (30% — 50 baseline if unavailable).
+        """
+        if bedrooms == requested_bedrooms:
+            bed_score = 100
+        elif abs(bedrooms - requested_bedrooms) == 1:
+            bed_score = 60
+        else:
+            bed_score = 20
+
+        if bathrooms >= requested_bathrooms:
+            extra = bathrooms - requested_bathrooms
+            bath_score = min(100, 80 + int(extra * 10))
+        else:
+            bath_score = 40
+
+        if sqft and sqft > 0:
+            expected = 800 + max(0, requested_bedrooms - 1) * 400
+            ratio = sqft / expected
+            sqft_score = min(100, int(ratio * 80))
+        else:
+            sqft_score = 50
+
+        return int(bed_score * 0.4 + bath_score * 0.3 + sqft_score * 0.3)
+
+    @staticmethod
+    def compute_heuristic_score(
+        rent: int,
+        budget: int,
+        freshness_confidence: Optional[int],
+        last_seen_at: Optional[str],
+        data_quality: Optional[int],
+        other_preferences: Optional[str],
+        amenities: List[str],
+        bedrooms: int,
+        requested_bedrooms: int,
+        bathrooms: float,
+        requested_bathrooms: float,
+        sqft: Optional[int],
+    ) -> int:
+        """Compute weighted overall heuristic score (0-100).
+
+        Weights: budget 30%, freshness 20%, quality 15%,
+        amenity 20%, space 15%.
+        """
+        budget_s = ScoringService.budget_fit_score(rent, budget)
+        fresh_s = ScoringService.freshness_score(freshness_confidence, last_seen_at)
+        quality_s = ScoringService.data_quality_score(data_quality)
+        amenity_s = ScoringService.amenity_match_score(other_preferences, amenities)
+        space_s = ScoringService.space_fit_score(
+            bedrooms, requested_bedrooms, bathrooms, requested_bathrooms, sqft
+        )
+
+        total = (
+            budget_s * 0.30
+            + fresh_s * 0.20
+            + quality_s * 0.15
+            + amenity_s * 0.20
+            + space_s * 0.15
+        )
+        return int(total)
+
+    @staticmethod
+    def score_to_label(score: int) -> Optional[str]:
+        """Map heuristic score to qualitative label for free users."""
+        if score >= 90:
+            return "Excellent Match"
+        if score >= 75:
+            return "Great Match"
+        if score >= 60:
+            return "Good Match"
+        if score >= 40:
+            return "Fair Match"
+        return None
+
+    @staticmethod
+    def score_apartments_list(
+        apartments: List[dict],
+        budget: int,
+        bedrooms: int,
+        bathrooms: float,
+        other_preferences: Optional[str] = None,
+    ) -> List[dict]:
+        """Score a list of apartments and return sorted (highest first).
+
+        Adds 'heuristic_score' and 'match_label' to each apartment dict.
+        """
+        scored = []
+        for apt in apartments:
+            h_score = ScoringService.compute_heuristic_score(
+                rent=apt.get("rent", 0),
+                budget=budget,
+                freshness_confidence=apt.get("freshness_confidence"),
+                last_seen_at=apt.get("last_seen_at"),
+                data_quality=apt.get("data_quality_score"),
+                other_preferences=other_preferences,
+                amenities=apt.get("amenities", []),
+                bedrooms=apt.get("bedrooms", 0),
+                requested_bedrooms=bedrooms,
+                bathrooms=apt.get("bathrooms", 0),
+                requested_bathrooms=bathrooms,
+                sqft=apt.get("sqft"),
+            )
+            apt_with_score = {
+                **apt,
+                "heuristic_score": h_score,
+                "match_label": ScoringService.score_to_label(h_score),
+            }
+            scored.append(apt_with_score)
+
+        scored.sort(key=lambda x: x["heuristic_score"], reverse=True)
+        return scored
