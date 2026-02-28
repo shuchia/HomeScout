@@ -185,7 +185,9 @@ async def search_apartments(
                 ApartmentWithScore(**apt) for apt in top_apartments
             ]
         else:
-            # Free / anonymous: filter only, no Claude scoring
+            # Free / anonymous: heuristic score and rank
+            from app.services.scoring_service import ScoringService
+
             filtered = await apartment_service.search_apartments(
                 city=request.city,
                 budget=request.budget,
@@ -194,7 +196,14 @@ async def search_apartments(
                 property_type=request.property_type,
                 move_in_date=request.move_in_date,
             )
-            total_count = len(filtered)
+            scored = ScoringService.score_apartments_list(
+                apartments=filtered,
+                budget=request.budget,
+                bedrooms=request.bedrooms,
+                bathrooms=request.bathrooms,
+                other_preferences=request.other_preferences,
+            )
+            total_count = len(scored)
             apartments_out = [
                 {
                     **apt,
@@ -202,7 +211,7 @@ async def search_apartments(
                     "reasoning": None,
                     "highlights": [],
                 }
-                for apt in filtered[:10]
+                for apt in scored[:10]
             ]
 
         # ── Increment counter for free users (after successful search) ──

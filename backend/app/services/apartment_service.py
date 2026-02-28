@@ -223,25 +223,36 @@ class ApartmentService:
         Returns:
             Tuple of (list of apartments with scores, total count)
         """
-        # Step 1: Filter apartments by basic criteria
+        from app.services.scoring_service import ScoringService
+
+        # Step 1: Filter (with soft budget)
         filtered_apartments = await self.search_apartments(
             city=city,
             budget=budget,
             bedrooms=bedrooms,
             bathrooms=bathrooms,
             property_type=property_type,
-            move_in_date=move_in_date
+            move_in_date=move_in_date,
         )
 
-        # If no apartments match, return empty results
         if not filtered_apartments:
             return [], 0
 
-        # Cap the number of apartments sent to Claude to keep API calls fast
-        max_to_score = top_n * 2
-        apartments_to_score = filtered_apartments[:max_to_score]
+        # Step 2: Heuristic score and sort ALL filtered results
+        scored = ScoringService.score_apartments_list(
+            apartments=filtered_apartments,
+            budget=budget,
+            bedrooms=bedrooms,
+            bathrooms=bathrooms,
+            other_preferences=other_preferences,
+        )
 
-        # Step 2: Score apartments using Claude AI (run in thread to not block async loop)
+        total_count = len(scored)
+
+        # Step 3: Send top 20 (by heuristic) to Claude for AI re-scoring
+        max_to_score = top_n * 2
+        apartments_to_score = scored[:max_to_score]
+
         scores = await asyncio.to_thread(
             self.claude_service.score_apartments,
             city=city,
@@ -254,31 +265,23 @@ class ApartmentService:
             apartments=apartments_to_score,
         )
 
-        # Step 3: Merge apartment data with scores
+        # Step 4: Merge Claude scores
         scored_apartments = []
         score_map = {score["apartment_id"]: score for score in scores}
-
         for apt in apartments_to_score:
             apt_id = apt["id"]
             if apt_id in score_map:
                 score_data = score_map[apt_id]
-                # Combine apartment data with score
                 scored_apt = {
                     **apt,
                     "match_score": score_data["match_score"],
                     "reasoning": score_data["reasoning"],
-                    "highlights": score_data["highlights"]
+                    "highlights": score_data["highlights"],
                 }
                 scored_apartments.append(scored_apt)
 
-        # Step 4: Sort by match score (highest first)
         scored_apartments.sort(key=lambda x: x["match_score"], reverse=True)
-
-        # Step 5: Return top N results
-        top_apartments = scored_apartments[:top_n]
-        total_count = len(top_apartments)
-
-        return top_apartments, total_count
+        return scored_apartments[:top_n], total_count
 
     async def get_apartment_count_async(self) -> int:
         """Get total number of apartments (async version for database)."""

@@ -81,9 +81,11 @@ class ApartmentScore(BaseModel):
 
 class ApartmentWithScore(Apartment):
     """Model combining apartment data with its match score"""
-    match_score: int = Field(..., ge=0, le=100)
-    reasoning: str
-    highlights: List[str]
+    match_score: Optional[int] = Field(None, ge=0, le=100)
+    reasoning: Optional[str] = None
+    highlights: List[str] = Field(default_factory=list)
+    heuristic_score: Optional[int] = Field(None, ge=0, le=100)
+    match_label: Optional[str] = None
 
     class Config:
         json_schema_extra = {
