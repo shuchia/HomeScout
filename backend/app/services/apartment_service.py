@@ -76,7 +76,7 @@ class ApartmentService:
                 and_(
                     ApartmentModel.is_active == 1,
                     ApartmentModel.freshness_confidence >= 40,
-                    ApartmentModel.rent <= budget,
+                    ApartmentModel.rent <= int(budget * 1.10),
                     ApartmentModel.bedrooms == bedrooms,
                     ApartmentModel.bathrooms >= bathrooms,
                     ApartmentModel.property_type.in_(property_types),
@@ -132,8 +132,8 @@ class ApartmentService:
             if city.lower() not in apt["address"].lower():
                 continue
 
-            # Filter by budget (strict maximum)
-            if apt["rent"] > budget:
+            # Filter by budget (with 10% buffer)
+            if apt["rent"] > int(budget * 1.10):
                 continue
 
             # Filter by bedrooms (exact match)
