@@ -47,6 +47,8 @@ export interface ApartmentWithScore extends Apartment {
   match_score: number | null;
   reasoning: string | null;
   highlights: string[];
+  heuristic_score?: number;
+  match_label?: string | null;
 }
 
 /**

@@ -39,6 +39,16 @@ const getScoreColor = (score: number): string => {
   return 'bg-gray-500';
 };
 
+const getLabelColor = (label: string): string => {
+  switch (label) {
+    case 'Excellent Match': return 'bg-green-500 text-white';
+    case 'Great Match': return 'bg-blue-500 text-white';
+    case 'Good Match': return 'bg-slate-500 text-white';
+    case 'Fair Match': return 'bg-gray-400 text-gray-800';
+    default: return 'bg-gray-300 text-gray-600';
+  }
+};
+
 export default function ApartmentCard({ apartment }: ApartmentCardProps) {
   const {
     id,
@@ -76,6 +86,10 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
             )} text-white px-3 py-1 rounded-full font-bold text-sm shadow-md`}
           >
             {match_score}% Match
+          </div>
+        ) : apartment.match_label ? (
+          <div className={`absolute top-3 right-3 ${getLabelColor(apartment.match_label)} px-3 py-1 rounded-full font-bold text-sm shadow-md`}>
+            {apartment.match_label}
           </div>
         ) : (
           <div className="absolute top-3 right-3 bg-gray-300 text-gray-600 px-3 py-1 rounded-full font-bold text-sm shadow-md">
