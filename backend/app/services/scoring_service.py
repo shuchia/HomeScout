@@ -5,6 +5,9 @@ using weighted components: budget fit, freshness, data quality,
 amenity match, and space fit. No AI calls — pure math.
 """
 
+from datetime import datetime
+from typing import Optional
+
 
 class ScoringService:
     """Stateless heuristic scoring for apartments."""
@@ -24,3 +27,35 @@ class ScoringService:
         if overshoot >= 0.10:
             return 0
         return int(100 * (1 - overshoot / 0.10))
+
+    @staticmethod
+    def freshness_score(
+        freshness_confidence: Optional[int],
+        last_seen_at: Optional[str],
+    ) -> int:
+        """Score listing freshness (0-100).
+
+        Blends the DB freshness_confidence (70% weight) with
+        recency of last_seen_at (30% weight).
+        """
+        conf = freshness_confidence if freshness_confidence is not None else 50
+        conf = max(0, min(100, conf))
+
+        if last_seen_at:
+            try:
+                last_seen = datetime.fromisoformat(last_seen_at.replace("Z", "+00:00"))
+                age_days = (datetime.utcnow() - last_seen.replace(tzinfo=None)).total_seconds() / 86400
+                recency = max(0, int(100 * (1 - age_days / 30)))
+            except (ValueError, TypeError):
+                recency = 50
+        else:
+            recency = 50
+
+        return int(conf * 0.7 + recency * 0.3)
+
+    @staticmethod
+    def data_quality_score(quality: Optional[int]) -> int:
+        """Score based on DB data_quality_score (0-100). Returns 50 if missing."""
+        if quality is None:
+            return 50
+        return max(0, min(100, quality))
