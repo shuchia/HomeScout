@@ -70,3 +70,70 @@ class TestDataQualityScore:
     def test_clamps_to_100(self):
         score = ScoringService.data_quality_score(quality=120)
         assert score == 100
+
+
+class TestAmenityMatchScore:
+    """Amenity match component: 20% weight."""
+
+    def test_all_preferences_matched(self):
+        score = ScoringService.amenity_match_score(
+            other_preferences="I need parking and a gym",
+            amenities=["Covered Parking", "Fitness Center", "Pool"],
+        )
+        assert score == 100
+
+    def test_partial_match(self):
+        score = ScoringService.amenity_match_score(
+            other_preferences="pet-friendly with parking and gym",
+            amenities=["Fitness Center"],
+        )
+        assert 30 <= score <= 35
+
+    def test_no_match(self):
+        score = ScoringService.amenity_match_score(
+            other_preferences="I need a pool",
+            amenities=["Parking", "Gym"],
+        )
+        assert score == 0
+
+    def test_no_preferences_returns_100(self):
+        score = ScoringService.amenity_match_score(
+            other_preferences=None,
+            amenities=["Parking"],
+        )
+        assert score == 100
+
+    def test_empty_preferences_returns_100(self):
+        score = ScoringService.amenity_match_score(
+            other_preferences="",
+            amenities=["Parking"],
+        )
+        assert score == 100
+
+    def test_case_insensitive(self):
+        score = ScoringService.amenity_match_score(
+            other_preferences="PET FRIENDLY",
+            amenities=["pet-friendly"],
+        )
+        assert score == 100
+
+
+class TestExtractPreferenceCategories:
+
+    def test_extracts_multiple_categories(self):
+        categories = ScoringService.extract_preference_categories(
+            "I need parking and a gym, must be pet-friendly"
+        )
+        assert "parking" in categories
+        assert "gym" in categories
+        assert "pet" in categories
+
+    def test_returns_empty_for_none(self):
+        categories = ScoringService.extract_preference_categories(None)
+        assert categories == set()
+
+    def test_returns_empty_for_no_match(self):
+        categories = ScoringService.extract_preference_categories(
+            "I want a nice apartment"
+        )
+        assert categories == set()
