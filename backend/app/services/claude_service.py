@@ -17,6 +17,25 @@ class ClaudeService:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
         self.client = Anthropic(api_key=api_key)
 
+    @staticmethod
+    def prepare_apartment_for_scoring(apt: dict) -> dict:
+        """Prepare apartment data for Claude scoring. No truncation."""
+        return {
+            "id": apt["id"],
+            "address": apt.get("address", ""),
+            "rent": apt.get("rent", 0),
+            "bedrooms": apt.get("bedrooms", 0),
+            "bathrooms": apt.get("bathrooms", 0),
+            "sqft": apt.get("sqft", 0),
+            "property_type": apt.get("property_type", ""),
+            "available_date": apt.get("available_date", ""),
+            "neighborhood": apt.get("neighborhood", ""),
+            "description": apt.get("description", "") or "",
+            "amenities": apt.get("amenities", []) or [],
+            "data_quality_score": apt.get("data_quality_score"),
+            "heuristic_score": apt.get("heuristic_score"),
+        }
+
     def score_apartments(
         self,
         city: str,
@@ -45,23 +64,9 @@ class ClaudeService:
             List of apartment scores with match_score, reasoning, and highlights
         """
 
-        # Slim down apartment data to reduce prompt size and speed up API call
-        slim_apartments = []
-        for apt in apartments:
-            slim_apt = {
-                "id": apt["id"],
-                "address": apt.get("address", ""),
-                "rent": apt.get("rent", 0),
-                "bedrooms": apt.get("bedrooms", 0),
-                "bathrooms": apt.get("bathrooms", 0),
-                "sqft": apt.get("sqft", 0),
-                "property_type": apt.get("property_type", ""),
-                "available_date": apt.get("available_date", ""),
-                "neighborhood": apt.get("neighborhood", ""),
-                "description": (apt.get("description", "") or "")[:300],
-                "amenities": (apt.get("amenities", []) or [])[:15],
-            }
-            slim_apartments.append(slim_apt)
+        slim_apartments = [
+            self.prepare_apartment_for_scoring(apt) for apt in apartments
+        ]
 
         apartments_json = json.dumps(slim_apartments, indent=2)
 
@@ -207,22 +212,9 @@ Be honest and practical in your scoring. A perfect 100% match is rare. Most good
         Deep head-to-head comparison of 2-3 apartments.
         Returns dict with winner, categories, and per-apartment scores.
         """
-        slim_apartments = []
-        for apt in apartments:
-            slim_apt = {
-                "id": apt["id"],
-                "address": apt.get("address", ""),
-                "rent": apt.get("rent", 0),
-                "bedrooms": apt.get("bedrooms", 0),
-                "bathrooms": apt.get("bathrooms", 0),
-                "sqft": apt.get("sqft", 0),
-                "property_type": apt.get("property_type", ""),
-                "available_date": apt.get("available_date", ""),
-                "neighborhood": apt.get("neighborhood", ""),
-                "description": (apt.get("description", "") or "")[:300],
-                "amenities": (apt.get("amenities", []) or [])[:15],
-            }
-            slim_apartments.append(slim_apt)
+        slim_apartments = [
+            self.prepare_apartment_for_scoring(apt) for apt in apartments
+        ]
 
         apartments_json = json.dumps(slim_apartments, indent=2)
 
