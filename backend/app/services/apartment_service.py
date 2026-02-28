@@ -2,6 +2,7 @@
 Service for managing apartment search and matching.
 Supports both database (PostgreSQL) and JSON file fallback.
 """
+import hashlib
 import json
 import os
 import asyncio
@@ -24,9 +25,28 @@ class ApartmentService:
         self._apartments_data: Optional[List[Dict]] = None
         self._use_database = is_database_enabled()
 
+        # Redis client for Claude score caching
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        try:
+            import redis as redis_lib
+            self._redis = redis_lib.from_url(redis_url)
+        except Exception:
+            self._redis = None
+
         if not self._use_database:
             logger.info("Database not enabled, using JSON fallback")
             self._apartments_data = self._load_apartments_from_json()
+
+    @staticmethod
+    def build_score_cache_key(
+        city: str, budget: int, bedrooms: int, bathrooms: float,
+        property_type: str, move_in_date: str,
+        other_preferences: str, apartment_ids: list[str],
+    ) -> str:
+        """Build deterministic Redis key for Claude score cache."""
+        raw = f"{city}|{budget}|{bedrooms}|{bathrooms}|{property_type}|{move_in_date}|{other_preferences}|{','.join(sorted(apartment_ids))}"
+        digest = hashlib.sha256(raw.encode()).hexdigest()[:16]
+        return f"claude_score:{digest}"
 
     def _load_apartments_from_json(self) -> List[Dict]:
         """Load apartment data from JSON file (fallback mode)"""
@@ -253,17 +273,43 @@ class ApartmentService:
         max_to_score = top_n * 2
         apartments_to_score = scored[:max_to_score]
 
-        scores = await asyncio.to_thread(
-            self.claude_service.score_apartments,
-            city=city,
-            budget=budget,
-            bedrooms=bedrooms,
-            bathrooms=bathrooms,
-            property_type=property_type,
-            move_in_date=move_in_date,
-            other_preferences=other_preferences or "None specified",
-            apartments=apartments_to_score,
+        # Check Claude score cache
+        apt_ids = [a["id"] for a in apartments_to_score]
+        cache_key = self.build_score_cache_key(
+            city, budget, bedrooms, bathrooms, property_type,
+            move_in_date, other_preferences or "", apt_ids,
         )
+
+        cached = None
+        if self._redis:
+            try:
+                cached = self._redis.get(cache_key)
+            except Exception:
+                pass
+
+        if cached:
+            scores = json.loads(cached)
+            logger.info(f"Claude score cache HIT for {cache_key}")
+        else:
+            # Call Claude
+            scores = await asyncio.to_thread(
+                self.claude_service.score_apartments,
+                city=city,
+                budget=budget,
+                bedrooms=bedrooms,
+                bathrooms=bathrooms,
+                property_type=property_type,
+                move_in_date=move_in_date,
+                other_preferences=other_preferences or "None specified",
+                apartments=apartments_to_score,
+            )
+            # Cache the result (1 hour TTL)
+            if self._redis:
+                try:
+                    self._redis.setex(cache_key, 3600, json.dumps(scores))
+                    logger.info(f"Claude score cache MISS, stored {cache_key}")
+                except Exception:
+                    pass
 
         # Step 4: Merge Claude scores
         scored_apartments = []
