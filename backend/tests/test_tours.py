@@ -1,5 +1,5 @@
 """Tests for tour pipeline CRUD endpoints."""
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user, UserContext
@@ -150,18 +150,22 @@ class TestGetTour:
             def table_router(table_name):
                 mock_table = MagicMock()
                 if table_name == "tour_pipeline":
+                    # .select().eq(id).eq(user_id).execute()
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TOUR]
                     )
                 elif table_name == "tour_notes":
+                    # .select().eq(tour_pipeline_id).order().execute()
                     mock_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_NOTE]
                     )
                 elif table_name == "tour_photos":
+                    # .select().eq(tour_pipeline_id).order().execute()
                     mock_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_PHOTO]
                     )
                 elif table_name == "tour_tags":
+                    # .select().eq(tour_pipeline_id).execute()
                     mock_table.select.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TAG]
                     )
@@ -227,6 +231,66 @@ class TestUpdateTour:
 
             assert response.status_code == 200
             assert response.json()["tour"]["stage"] == "scheduled"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_toured_stage_auto_sets_toured_at(self):
+        """PATCH to 'toured' stage auto-sets toured_at timestamp."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            updated_tour = {
+                **SAMPLE_TOUR,
+                "stage": "toured",
+                "toured_at": "2026-03-15T12:00:00+00:00",
+            }
+            mock_sb = MagicMock()
+            mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[updated_tour]
+            )
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.patch(
+                    "/api/tours/tour-001",
+                    json={"stage": "toured"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            # Verify the update call included toured_at
+            call_args = mock_sb.table.return_value.update.call_args
+            update_payload = call_args[0][0]
+            assert "toured_at" in update_payload
+            assert "stage" in update_payload
+            assert update_payload["stage"] == "toured"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_outreach_sent_auto_sets_outreach_sent_at(self):
+        """PATCH to 'outreach_sent' stage auto-sets outreach_sent_at."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            updated_tour = {
+                **SAMPLE_TOUR,
+                "stage": "outreach_sent",
+                "outreach_sent_at": "2026-03-15T12:00:00+00:00",
+            }
+            mock_sb = MagicMock()
+            mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[updated_tour]
+            )
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.patch(
+                    "/api/tours/tour-001",
+                    json={"stage": "outreach_sent"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            call_args = mock_sb.table.return_value.update.call_args
+            update_payload = call_args[0][0]
+            assert "outreach_sent_at" in update_payload
+            assert update_payload["stage"] == "outreach_sent"
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 

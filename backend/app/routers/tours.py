@@ -145,7 +145,7 @@ async def get_tour(
         notes_result = (
             supabase_admin.table("tour_notes")
             .select("id, content, source, transcription_status, created_at")
-            .eq("tour_id", tour_id)
+            .eq("tour_pipeline_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -153,7 +153,7 @@ async def get_tour(
         photos_result = (
             supabase_admin.table("tour_photos")
             .select("id, thumbnail_url, caption, created_at")
-            .eq("tour_id", tour_id)
+            .eq("tour_pipeline_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -161,7 +161,7 @@ async def get_tour(
         tags_result = (
             supabase_admin.table("tour_tags")
             .select("id, tag, sentiment")
-            .eq("tour_id", tour_id)
+            .eq("tour_pipeline_id", tour_id)
             .execute()
         )
 
