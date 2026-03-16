@@ -295,6 +295,35 @@ class TestUpdateTour:
             app.dependency_overrides.pop(get_current_user, None)
 
 
+    def test_invalid_stage_returns_422(self):
+        """PATCH with invalid stage returns 422."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            response = client.patch(
+                "/api/tours/tour-001",
+                json={"stage": "invalid_stage"},
+                headers={"Authorization": "Bearer fake-token"},
+            )
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_empty_update_returns_400(self):
+        """PATCH with no fields returns 400."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()):
+                response = client.patch(
+                    "/api/tours/tour-001",
+                    json={},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 400
+            assert "No fields" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
 class TestDeleteTour:
     def test_removes_tour(self):
         """DELETE /api/tours/{id} removes tour and returns status."""
