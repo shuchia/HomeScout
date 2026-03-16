@@ -1,4 +1,5 @@
 """Tests for tour pipeline CRUD endpoints."""
+from io import BytesIO
 from unittest.mock import patch, MagicMock, ANY
 from fastapi.testclient import TestClient
 
@@ -469,16 +470,26 @@ class TestNotes:
 SAMPLE_PHOTO_CREATED = {
     "id": "photo-002",
     "tour_pipeline_id": "tour-001",
-    "s3_key": "tours/tour-001/photo1.jpg",
-    "thumbnail_url": "https://example.com/thumb.jpg",
+    "user_id": "user-123",
+    "s3_key": "tours/user-123/tour-001/abc.jpg",
+    "thumbnail_s3_key": "tours/user-123/tour-001/thumbs/abc.jpg",
+    "thumbnail_url": "https://s3.example.com/presigned-thumb",
     "caption": "Kitchen",
     "created_at": "2026-03-15T02:00:00+00:00",
 }
 
 
+def _make_test_jpeg() -> bytes:
+    """Create a minimal valid JPEG for upload tests."""
+    from PIL import Image
+    buf = BytesIO()
+    Image.new("RGB", (10, 10), color="blue").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
 class TestPhotos:
     def test_create_photo(self):
-        """POST /api/tours/{id}/photos creates photo entry (201)."""
+        """POST /api/tours/{id}/photos uploads file and creates photo entry (201)."""
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
         try:
             mock_sb = MagicMock()
@@ -497,16 +508,24 @@ class TestPhotos:
 
             mock_sb.table.side_effect = table_router
 
-            with patch("app.routers.tours.supabase_admin", mock_sb):
+            mock_upload_result = {
+                "s3_key": "tours/user-123/tour-001/abc.jpg",
+                "thumbnail_s3_key": "tours/user-123/tour-001/thumbs/abc.jpg",
+            }
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.PhotoService.upload_photo", return_value=mock_upload_result), \
+                 patch("app.routers.tours.PhotoService.get_presigned_url", return_value="https://s3.example.com/presigned-thumb"):
+                jpeg_data = _make_test_jpeg()
                 response = client.post(
-                    "/api/tours/tour-001/photos",
-                    json={"s3_key": "tours/tour-001/photo1.jpg", "caption": "Kitchen"},
+                    "/api/tours/tour-001/photos?caption=Kitchen",
+                    files={"file": ("photo.jpg", BytesIO(jpeg_data), "image/jpeg")},
                     headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 201
             photo = response.json()["photo"]
-            assert photo["s3_key"] == "tours/tour-001/photo1.jpg"
+            assert photo["s3_key"] == "tours/user-123/tour-001/abc.jpg"
             assert photo["caption"] == "Kitchen"
         finally:
             app.dependency_overrides.pop(get_current_user, None)
@@ -545,7 +564,7 @@ class TestPhotos:
             app.dependency_overrides.pop(get_current_user, None)
 
     def test_delete_photo(self):
-        """DELETE /api/tours/{id}/photos/{photo_id} removes photo."""
+        """DELETE /api/tours/{id}/photos/{photo_id} removes photo and deletes from S3."""
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
         try:
             mock_sb = MagicMock()
@@ -564,7 +583,10 @@ class TestPhotos:
 
             mock_sb.table.side_effect = table_router
 
-            with patch("app.routers.tours.supabase_admin", mock_sb):
+            mock_delete = MagicMock()
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.PhotoService.delete_photo", mock_delete):
                 response = client.delete(
                     "/api/tours/tour-001/photos/photo-002",
                     headers={"Authorization": "Bearer fake-token"},
@@ -572,6 +594,11 @@ class TestPhotos:
 
             assert response.status_code == 200
             assert response.json()["status"] == "deleted"
+            # Verify S3 deletion was called
+            mock_delete.assert_called_once_with(
+                s3_key="tours/user-123/tour-001/abc.jpg",
+                thumbnail_s3_key="tours/user-123/tour-001/thumbs/abc.jpg",
+            )
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 

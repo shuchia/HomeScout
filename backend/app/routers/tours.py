@@ -2,10 +2,11 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 
 from app.auth import get_current_user, UserContext
 from app.services.tier_service import supabase_admin
+from app.services.storage.photo_service import PhotoService
 from app.schemas import (
     CreateTourRequest,
     UpdateTourRequest,
@@ -448,20 +449,37 @@ async def delete_note(
 @router.post("/api/tours/{tour_id}/photos", status_code=201)
 async def create_photo(
     tour_id: str,
-    body: CreatePhotoRequest,
+    file: UploadFile = File(...),
+    caption: str | None = Query(None),
     user: UserContext = Depends(get_current_user),
 ):
-    """Add a photo entry to a tour (metadata only; S3 upload is Task 4)."""
+    """Upload a photo to S3 and save metadata to the tour."""
     _ensure_supabase()
 
     try:
         _verify_tour_ownership(tour_id, user.user_id)
 
+        file_data = await file.read()
+        content_type = file.content_type or "application/octet-stream"
+
+        # Upload to S3 with thumbnail generation
+        upload_result = PhotoService.upload_photo(
+            file_data=file_data,
+            content_type=content_type,
+            user_id=user.user_id,
+            tour_id=tour_id,
+        )
+
+        # Generate a presigned URL for the thumbnail
+        thumbnail_url = PhotoService.get_presigned_url(upload_result["thumbnail_s3_key"])
+
         row = {
             "tour_pipeline_id": tour_id,
-            "s3_key": body.s3_key,
-            "thumbnail_url": body.thumbnail_url,
-            "caption": body.caption,
+            "user_id": user.user_id,
+            "s3_key": upload_result["s3_key"],
+            "thumbnail_s3_key": upload_result["thumbnail_s3_key"],
+            "thumbnail_url": thumbnail_url,
+            "caption": caption,
         }
         result = (
             supabase_admin.table("tour_photos")
@@ -470,6 +488,8 @@ async def create_photo(
         )
         photo = result.data[0] if result.data else row
         return {"photo": photo}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -482,7 +502,7 @@ async def list_photos(
     tour_id: str,
     user: UserContext = Depends(get_current_user),
 ):
-    """List all photos for a tour."""
+    """List all photos for a tour with fresh presigned URLs."""
     _ensure_supabase()
 
     try:
@@ -490,12 +510,21 @@ async def list_photos(
 
         result = (
             supabase_admin.table("tour_photos")
-            .select("id, s3_key, thumbnail_url, caption, created_at")
+            .select("id, s3_key, thumbnail_s3_key, thumbnail_url, caption, created_at")
             .eq("tour_pipeline_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
-        return {"photos": result.data or []}
+
+        photos = result.data or []
+        # Generate fresh presigned URLs for each photo
+        for photo in photos:
+            if photo.get("s3_key"):
+                photo["url"] = PhotoService.get_presigned_url(photo["s3_key"])
+            if photo.get("thumbnail_s3_key"):
+                photo["thumbnail_url"] = PhotoService.get_presigned_url(photo["thumbnail_s3_key"])
+
+        return {"photos": photos}
     except HTTPException:
         raise
     except Exception as e:
@@ -540,7 +569,7 @@ async def delete_photo(
     photo_id: str,
     user: UserContext = Depends(get_current_user),
 ):
-    """Delete a photo from a tour."""
+    """Delete a photo from a tour and remove from S3."""
     _ensure_supabase()
 
     try:
@@ -555,6 +584,16 @@ async def delete_photo(
         )
         if not result.data:
             raise HTTPException(status_code=404, detail="Photo not found")
+
+        # Delete from S3
+        deleted_photo = result.data[0]
+        try:
+            PhotoService.delete_photo(
+                s3_key=deleted_photo.get("s3_key", ""),
+                thumbnail_s3_key=deleted_photo.get("thumbnail_s3_key"),
+            )
+        except Exception as s3_err:
+            logger.warning(f"Failed to delete photo from S3 (non-fatal): {s3_err}")
 
         return {"status": "deleted"}
     except HTTPException:
