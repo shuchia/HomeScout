@@ -74,5 +74,8 @@ coverage/
 # Local env overrides
 .env.local
 
+# Worktrees
+.worktrees/
+
 # Misc
 *.tsbuildinfo
