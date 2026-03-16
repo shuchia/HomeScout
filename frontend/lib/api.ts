@@ -4,7 +4,7 @@
  */
 
 import { SearchParams, SearchResponse, HealthResponse, Apartment, ApartmentWithScore, SearchContext, ComparisonAnalysis } from '@/types/apartment';
-import { Tour } from '@/types/tour';
+import { Tour, TourTag, TourNote } from '@/types/tour';
 import { getAccessToken } from './auth-store';
 
 // Get API URL from environment variable, fallback to localhost
@@ -295,4 +295,120 @@ export async function deleteTour(tourId: string): Promise<void> {
     headers: authHeaders,
   })
   if (!response.ok) throw new ApiError('Failed to delete tour', response.status)
+}
+
+/**
+ * Get a single tour by ID
+ * Calls GET /api/tours/:id endpoint
+ */
+export async function getTour(tourId: string): Promise<{ tour: Tour }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}`, {
+    headers: authHeaders,
+  })
+  if (!response.ok) {
+    if (response.status === 404) throw new ApiError('Tour not found', 404)
+    throw new ApiError('Failed to load tour', response.status)
+  }
+  return response.json()
+}
+
+/**
+ * Update a tour's fields
+ * Calls PATCH /api/tours/:id endpoint
+ */
+export async function updateTour(tourId: string, updates: Partial<{
+  stage: string
+  scheduled_date: string
+  scheduled_time: string
+  tour_rating: number
+  decision: string
+  decision_reason: string
+}>): Promise<{ tour: Tour }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify(updates),
+  })
+  if (!response.ok) throw new ApiError('Failed to update tour', response.status)
+  return response.json()
+}
+
+/**
+ * Add a note to a tour
+ * Calls POST /api/tours/:id/notes endpoint
+ */
+export async function addTourNote(tourId: string, content: string): Promise<{ note: TourNote }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ content }),
+  })
+  if (!response.ok) throw new ApiError('Failed to add note', response.status)
+  return response.json()
+}
+
+/**
+ * Delete a note from a tour
+ * Calls DELETE /api/tours/:id/notes/:noteId endpoint
+ */
+export async function deleteTourNote(tourId: string, noteId: string): Promise<void> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/notes/${noteId}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new ApiError('Failed to delete note', response.status)
+}
+
+/**
+ * Tag suggestion from the API
+ */
+export interface TagSuggestion {
+  tag: string
+  sentiment: 'pro' | 'con'
+  count: number
+}
+
+/**
+ * Get tag suggestions for tours
+ * Calls GET /api/tours/tags/suggestions endpoint
+ */
+export async function getTagSuggestions(): Promise<{ suggestions: TagSuggestion[] }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/tags/suggestions`, {
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new ApiError('Failed to load tag suggestions', response.status)
+  return response.json()
+}
+
+/**
+ * Add a tag to a tour
+ * Calls POST /api/tours/:id/tags endpoint
+ */
+export async function addTourTag(tourId: string, tag: string, sentiment: 'pro' | 'con'): Promise<{ tag: TourTag }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ tag, sentiment }),
+  })
+  if (!response.ok) throw new ApiError('Failed to add tag', response.status)
+  return response.json()
+}
+
+/**
+ * Remove a tag from a tour
+ * Calls DELETE /api/tours/:id/tags/:tagId endpoint
+ */
+export async function removeTourTag(tourId: string, tagId: string): Promise<void> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/tags/${tagId}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new ApiError('Failed to remove tag', response.status)
 }
