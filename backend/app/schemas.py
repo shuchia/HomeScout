@@ -276,7 +276,7 @@ class TagResponse(BaseModel):
 
 class CreateNoteRequest(BaseModel):
     """Request model to add a typed note to a tour."""
-    content: str
+    content: str = Field(..., min_length=1)
 
 
 class CreatePhotoRequest(BaseModel):
@@ -293,7 +293,7 @@ class UpdatePhotoRequest(BaseModel):
 
 class CreateTagRequest(BaseModel):
     """Request model to add a pro/con tag to a tour."""
-    tag: str
+    tag: str = Field(..., min_length=1, max_length=100)
     sentiment: str
 
     @field_validator("sentiment")

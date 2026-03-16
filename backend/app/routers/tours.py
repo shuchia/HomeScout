@@ -13,7 +13,6 @@ from app.schemas import (
     CreatePhotoRequest,
     UpdatePhotoRequest,
     CreateTagRequest,
-    TagSuggestion,
     TourResponse,
     NoteResponse,
     PhotoResponse,
@@ -120,7 +119,6 @@ async def get_tag_suggestions(
             ]
 
         # Build defaults with count=0
-        default_keys = {(d["tag"], d["sentiment"]) for d in DEFAULT_TAGS}
         user_keys = {(t["tag"], t["sentiment"]) for t in user_tags}
 
         suggestions = list(user_tags)
