@@ -274,6 +274,43 @@ class TagResponse(BaseModel):
     sentiment: str
 
 
+class CreateNoteRequest(BaseModel):
+    """Request model to add a typed note to a tour."""
+    content: str
+
+
+class CreatePhotoRequest(BaseModel):
+    """Request model to add a photo entry to a tour."""
+    s3_key: str
+    thumbnail_url: Optional[str] = None
+    caption: Optional[str] = None
+
+
+class UpdatePhotoRequest(BaseModel):
+    """Request model to update a photo caption."""
+    caption: str
+
+
+class CreateTagRequest(BaseModel):
+    """Request model to add a pro/con tag to a tour."""
+    tag: str
+    sentiment: str
+
+    @field_validator("sentiment")
+    @classmethod
+    def validate_sentiment(cls, v: str) -> str:
+        if v not in ("pro", "con"):
+            raise ValueError("sentiment must be 'pro' or 'con'")
+        return v
+
+
+class TagSuggestion(BaseModel):
+    """A suggested tag with usage count."""
+    tag: str
+    sentiment: str
+    count: int
+
+
 class TourResponse(BaseModel):
     """Response model for a single tour pipeline entry."""
     id: str

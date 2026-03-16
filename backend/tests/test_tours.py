@@ -344,3 +344,362 @@ class TestDeleteTour:
             assert response.json()["status"] == "deleted"
         finally:
             app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Notes sub-resource tests ─────────────────────────────────────────
+
+SAMPLE_NOTE_CREATED = {
+    "id": "note-002",
+    "tour_pipeline_id": "tour-001",
+    "content": "Great natural light",
+    "source": "typed",
+    "transcription_status": "complete",
+    "created_at": "2026-03-15T02:00:00+00:00",
+}
+
+
+class TestNotes:
+    def test_create_note_requires_auth(self):
+        """POST /api/tours/{id}/notes without auth returns 401."""
+        response = client.post(
+            "/api/tours/tour-001/notes",
+            json={"content": "Nice place"},
+        )
+        assert response.status_code == 401
+
+    def test_create_note(self):
+        """POST /api/tours/{id}/notes creates a typed note (201)."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_notes":
+                    mock_table.insert.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_NOTE_CREATED]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.post(
+                    "/api/tours/tour-001/notes",
+                    json={"content": "Great natural light"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 201
+            note = response.json()["note"]
+            assert note["content"] == "Great natural light"
+            assert note["source"] == "typed"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_list_notes(self):
+        """GET /api/tours/{id}/notes lists notes chronologically."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_notes":
+                    mock_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_NOTE_CREATED]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.get(
+                    "/api/tours/tour-001/notes",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            assert len(response.json()["notes"]) == 1
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_delete_note(self):
+        """DELETE /api/tours/{id}/notes/{note_id} removes note."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_notes":
+                    mock_table.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_NOTE_CREATED]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.delete(
+                    "/api/tours/tour-001/notes/note-002",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "deleted"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Photos sub-resource tests ────────────────────────────────────────
+
+SAMPLE_PHOTO_CREATED = {
+    "id": "photo-002",
+    "tour_pipeline_id": "tour-001",
+    "s3_key": "tours/tour-001/photo1.jpg",
+    "thumbnail_url": "https://example.com/thumb.jpg",
+    "caption": "Kitchen",
+    "created_at": "2026-03-15T02:00:00+00:00",
+}
+
+
+class TestPhotos:
+    def test_create_photo(self):
+        """POST /api/tours/{id}/photos creates photo entry (201)."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_photos":
+                    mock_table.insert.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_PHOTO_CREATED]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.post(
+                    "/api/tours/tour-001/photos",
+                    json={"s3_key": "tours/tour-001/photo1.jpg", "caption": "Kitchen"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 201
+            photo = response.json()["photo"]
+            assert photo["s3_key"] == "tours/tour-001/photo1.jpg"
+            assert photo["caption"] == "Kitchen"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_update_photo_caption(self):
+        """PATCH /api/tours/{id}/photos/{photo_id} updates caption."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+            updated_photo = {**SAMPLE_PHOTO_CREATED, "caption": "Updated kitchen"}
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_photos":
+                    mock_table.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[updated_photo]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.patch(
+                    "/api/tours/tour-001/photos/photo-002",
+                    json={"caption": "Updated kitchen"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            assert response.json()["photo"]["caption"] == "Updated kitchen"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_delete_photo(self):
+        """DELETE /api/tours/{id}/photos/{photo_id} removes photo."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_photos":
+                    mock_table.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_PHOTO_CREATED]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.delete(
+                    "/api/tours/tour-001/photos/photo-002",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "deleted"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Tags sub-resource tests ──────────────────────────────────────────
+
+SAMPLE_TAG_CREATED = {
+    "id": "tag-002",
+    "tour_pipeline_id": "tour-001",
+    "tag": "Great light",
+    "sentiment": "pro",
+}
+
+
+class TestTags:
+    def test_create_tag(self):
+        """POST /api/tours/{id}/tags creates tag (201)."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_tags":
+                    mock_table.insert.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_TAG_CREATED]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.post(
+                    "/api/tours/tour-001/tags",
+                    json={"tag": "Great light", "sentiment": "pro"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 201
+            tag = response.json()["tag"]
+            assert tag["tag"] == "Great light"
+            assert tag["sentiment"] == "pro"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_create_tag_invalid_sentiment(self):
+        """POST /api/tours/{id}/tags with invalid sentiment returns 422."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            response = client.post(
+                "/api/tours/tour-001/tags",
+                json={"tag": "Great light", "sentiment": "neutral"},
+                headers={"Authorization": "Bearer fake-token"},
+            )
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_delete_tag(self):
+        """DELETE /api/tours/{id}/tags/{tag_id} removes tag."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_tags":
+                    mock_table.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_TAG_CREATED]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.delete(
+                    "/api/tours/tour-001/tags/tag-002",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "deleted"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_tag_suggestions(self):
+        """GET /api/tours/tags/suggestions returns defaults + user tags."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    # User has one tour
+                    mock_table.select.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_tags":
+                    # User has used "Great light" once
+                    mock_table.select.return_value.in_.return_value.execute.return_value = MagicMock(
+                        data=[{"tag": "Great light", "sentiment": "pro"}]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.get(
+                    "/api/tours/tags/suggestions",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            suggestions = response.json()["suggestions"]
+            # Should have user tag (count=1) + remaining defaults (count=0)
+            tags_by_name = {s["tag"]: s for s in suggestions}
+            assert tags_by_name["Great light"]["count"] == 1
+            assert tags_by_name["Small kitchen"]["count"] == 0
+            # Total: 1 user tag + 9 remaining defaults = 10
+            assert len(suggestions) == 10
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
