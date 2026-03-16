@@ -59,6 +59,7 @@ create table public.tour_photos (
   tour_pipeline_id uuid references tour_pipeline(id) on delete cascade not null,
   user_id uuid references auth.users(id) on delete cascade not null,
   s3_key text not null,
+  thumbnail_s3_key text,
   thumbnail_url text,
   caption text,
   created_at timestamptz default now()

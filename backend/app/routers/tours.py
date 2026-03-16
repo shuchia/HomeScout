@@ -11,7 +11,6 @@ from app.schemas import (
     CreateTourRequest,
     UpdateTourRequest,
     CreateNoteRequest,
-    CreatePhotoRequest,
     UpdatePhotoRequest,
     CreateTagRequest,
     TourResponse,
