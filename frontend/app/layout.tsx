@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ComparisonBar } from "@/components/ComparisonBar";
+import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 
 const geistSans = Geist({
@@ -32,8 +33,9 @@ export default function RootLayout({
       >
         <AuthProvider>
           <Header />
-          <main>{children}</main>
+          <main className="pb-16 md:pb-0">{children}</main>
           <ComparisonBar />
+          <BottomNav />
         </AuthProvider>
       </body>
     </html>

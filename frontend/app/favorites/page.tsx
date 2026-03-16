@@ -1,9 +1,12 @@
 'use client'
+import { useEffect, useState } from 'react'
 import { useFavorites } from '@/hooks/useFavorites'
 import { useAuth } from '@/contexts/AuthContext'
 import ApartmentCard from '@/components/ApartmentCard'
+import { TourPrompt } from '@/components/TourPrompt'
 import Link from 'next/link'
 import { Apartment, ApartmentWithScore } from '@/types/apartment'
+import { listTours } from '@/lib/api'
 
 // Convert a basic Apartment to ApartmentWithScore with default values
 function toApartmentWithScore(apartment: Apartment): ApartmentWithScore {
@@ -18,6 +21,18 @@ function toApartmentWithScore(apartment: Apartment): ApartmentWithScore {
 export default function FavoritesPage() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth()
   const { favorites, loading } = useFavorites()
+  const [touringApartmentIds, setTouringApartmentIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!user) return
+    listTours()
+      .then(({ tours }) => {
+        setTouringApartmentIds(new Set(tours.map(t => t.apartment_id)))
+      })
+      .catch(() => {
+        // Silently fail — tour status is non-critical
+      })
+  }, [user])
 
   // Debug logging
   console.log('FavoritesPage render:', {
@@ -90,7 +105,15 @@ export default function FavoritesPage() {
                 </div>
               )}
               {fav.apartment ? (
-                <ApartmentCard apartment={toApartmentWithScore(fav.apartment)} />
+                <>
+                  <ApartmentCard apartment={toApartmentWithScore(fav.apartment)} />
+                  <div className="mt-2">
+                    <TourPrompt
+                      apartmentId={fav.apartment_id}
+                      alreadyInTours={touringApartmentIds.has(fav.apartment_id)}
+                    />
+                  </div>
+                </>
               ) : (
                 <div className="bg-gray-100 rounded-lg p-4 h-64 flex items-center justify-center">
                   <p className="text-gray-500 text-sm">
