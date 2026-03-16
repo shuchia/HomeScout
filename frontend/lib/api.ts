@@ -4,6 +4,7 @@
  */
 
 import { SearchParams, SearchResponse, HealthResponse, Apartment, ApartmentWithScore, SearchContext, ComparisonAnalysis } from '@/types/apartment';
+import { Tour } from '@/types/tour';
 import { getAccessToken } from './auth-store';
 
 // Get API URL from environment variable, fallback to localhost
@@ -240,4 +241,58 @@ export async function compareApartments(
       error instanceof Error ? error.message : 'Unknown error'
     );
   }
+}
+
+/**
+ * List all tours for the current user
+ * Calls GET /api/tours endpoint
+ *
+ * @returns Promise with array of tours
+ * @throws ApiError if request fails
+ */
+export async function listTours(): Promise<{ tours: Tour[] }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours`, {
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new ApiError('Failed to load tours', response.status)
+  return response.json()
+}
+
+/**
+ * Create a new tour pipeline entry for an apartment
+ * Calls POST /api/tours endpoint
+ *
+ * @param apartmentId - The apartment ID to create a tour for
+ * @returns Promise with the created tour
+ * @throws ApiError if request fails
+ */
+export async function createTour(apartmentId: string): Promise<{ tour: Tour }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ apartment_id: apartmentId }),
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new ApiError(data.detail || 'Failed to create tour', response.status)
+  }
+  return response.json()
+}
+
+/**
+ * Delete a tour pipeline entry
+ * Calls DELETE /api/tours/:id endpoint
+ *
+ * @param tourId - The tour ID to delete
+ * @throws ApiError if request fails
+ */
+export async function deleteTour(tourId: string): Promise<void> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new ApiError('Failed to delete tour', response.status)
 }

@@ -23,6 +23,9 @@ export function Header() {
               <Link href="/favorites" className="text-gray-600 hover:text-gray-900">
                 Favorites
               </Link>
+              <Link href="/tours" className="text-gray-600 hover:text-gray-900">
+                Tours
+              </Link>
               <Link href="/compare" className="text-gray-600 hover:text-gray-900">
                 Compare
               </Link>
