@@ -27,6 +27,7 @@ create table public.tour_pipeline (
 );
 
 create index idx_tour_pipeline_user on tour_pipeline(user_id);
+create index idx_tour_pipeline_user_stage on tour_pipeline(user_id, stage);
 
 -- ============================================
 -- TOUR NOTES
@@ -39,6 +40,10 @@ create table public.tour_notes (
   source text not null default 'typed'
     check (source in ('voice', 'typed')),
   audio_s3_key text,
+  check (
+    (source = 'typed' and content is not null) or
+    (source = 'voice' and audio_s3_key is not null)
+  ),
   transcription_status text not null default 'complete'
     check (transcription_status in ('pending', 'complete', 'failed')),
   created_at timestamptz default now()
@@ -69,7 +74,9 @@ create table public.tour_tags (
   tour_pipeline_id uuid references tour_pipeline(id) on delete cascade not null,
   tag text not null,
   sentiment text not null
-    check (sentiment in ('pro', 'con'))
+    check (sentiment in ('pro', 'con')),
+
+  unique(tour_pipeline_id, tag)
 );
 
 create index idx_tour_tags_pipeline on tour_tags(tour_pipeline_id);
@@ -86,10 +93,6 @@ alter table tour_tags enable row level security;
 create policy "Users manage own tour pipeline" on tour_pipeline
   for all using (auth.uid() = user_id);
 
--- Service role can update tour_pipeline (for backend operations)
-create policy "Service can manage tour pipeline" on tour_pipeline
-  for all using (true) with check (true);
-
 -- Tour notes: users manage own records
 create policy "Users manage own tour notes" on tour_notes
   for all using (auth.uid() = user_id);
@@ -101,6 +104,13 @@ create policy "Users manage own tour photos" on tour_photos
 -- Tour tags: users manage via tour_pipeline ownership
 create policy "Users manage own tour tags" on tour_tags
   for all using (
+    exists (
+      select 1 from tour_pipeline
+      where tour_pipeline.id = tour_tags.tour_pipeline_id
+        and tour_pipeline.user_id = auth.uid()
+    )
+  )
+  with check (
     exists (
       select 1 from tour_pipeline
       where tour_pipeline.id = tour_tags.tour_pipeline_id
