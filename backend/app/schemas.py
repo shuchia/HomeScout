@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
-from datetime import date
+from datetime import date, time
 
 
 class SearchRequest(BaseModel):
@@ -206,3 +206,89 @@ class CompareResponse(BaseModel):
                 "comparison_fields": ["rent", "bedrooms", "bathrooms", "sqft", "property_type", "amenities", "available_date", "neighborhood"]
             }
         }
+
+
+# ── Tour Pipeline Schemas ─────────────────────────────────────────────
+
+VALID_TOUR_STAGES = {"interested", "outreach_sent", "scheduled", "toured", "deciding"}
+VALID_TOUR_DECISIONS = {"applied", "passed"}
+
+
+class CreateTourRequest(BaseModel):
+    """Request model to add an apartment to the tour pipeline."""
+    apartment_id: str
+
+
+class UpdateTourRequest(BaseModel):
+    """Request model to update a tour pipeline entry."""
+    stage: Optional[str] = None
+    scheduled_date: Optional[date] = None
+    scheduled_time: Optional[time] = None
+    tour_rating: Optional[int] = None
+    decision: Optional[str] = None
+    decision_reason: Optional[str] = None
+
+    @field_validator("stage")
+    @classmethod
+    def validate_stage(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in VALID_TOUR_STAGES:
+            raise ValueError(f"Invalid stage '{v}'. Must be one of: {', '.join(sorted(VALID_TOUR_STAGES))}")
+        return v
+
+    @field_validator("tour_rating")
+    @classmethod
+    def validate_tour_rating(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and (v < 1 or v > 5):
+            raise ValueError("tour_rating must be between 1 and 5")
+        return v
+
+    @field_validator("decision")
+    @classmethod
+    def validate_decision(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in VALID_TOUR_DECISIONS:
+            raise ValueError(f"Invalid decision '{v}'. Must be one of: {', '.join(sorted(VALID_TOUR_DECISIONS))}")
+        return v
+
+
+class NoteResponse(BaseModel):
+    """Response model for a tour note."""
+    id: str
+    content: Optional[str] = None
+    source: str
+    transcription_status: Optional[str] = None
+    created_at: str
+
+
+class PhotoResponse(BaseModel):
+    """Response model for a tour photo."""
+    id: str
+    thumbnail_url: Optional[str] = None
+    caption: Optional[str] = None
+    created_at: str
+
+
+class TagResponse(BaseModel):
+    """Response model for a tour tag."""
+    id: str
+    tag: str
+    sentiment: str
+
+
+class TourResponse(BaseModel):
+    """Response model for a single tour pipeline entry."""
+    id: str
+    apartment_id: str
+    stage: str
+    inquiry_email_draft: Optional[str] = None
+    outreach_sent_at: Optional[str] = None
+    scheduled_date: Optional[str] = None
+    scheduled_time: Optional[str] = None
+    tour_rating: Optional[int] = None
+    toured_at: Optional[str] = None
+    notes: List[NoteResponse] = Field(default_factory=list)
+    photos: List[PhotoResponse] = Field(default_factory=list)
+    tags: List[TagResponse] = Field(default_factory=list)
+    decision: Optional[str] = None
+    decision_reason: Optional[str] = None
+    created_at: str
+    updated_at: str
