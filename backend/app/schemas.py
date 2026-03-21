@@ -311,6 +311,20 @@ class TagSuggestion(BaseModel):
     count: int
 
 
+class InquiryEmailResponse(BaseModel):
+    """Response model for a generated inquiry email."""
+    subject: str
+    body: str
+
+
+class InquiryEmailRequest(BaseModel):
+    """Optional request body for inquiry email generation."""
+    name: Optional[str] = None
+    move_in_date: Optional[str] = None
+    budget: Optional[int] = None
+    preferences: Optional[str] = None
+
+
 class TourResponse(BaseModel):
     """Response model for a single tour pipeline entry."""
     id: str

@@ -412,3 +412,29 @@ export async function removeTourTag(tourId: string, tagId: string): Promise<void
   })
   if (!response.ok) throw new ApiError('Failed to remove tag', response.status)
 }
+
+/**
+ * Generate an AI inquiry email draft for a tour's apartment
+ * Calls POST /api/tours/:id/inquiry-email endpoint
+ *
+ * @param tourId - The tour ID to generate an email for
+ * @param context - Optional user context (name, move_in_date, budget, preferences)
+ * @returns Promise with subject and body
+ * @throws ApiError if request fails
+ */
+export async function generateInquiryEmail(
+  tourId: string,
+  context?: { name?: string; move_in_date?: string; budget?: number; preferences?: string }
+): Promise<{ subject: string; body: string; inquiry_email_draft: string }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/inquiry-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: context ? JSON.stringify(context) : undefined,
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new ApiError(data.detail || 'Failed to generate email', response.status)
+  }
+  return response.json()
+}

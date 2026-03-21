@@ -275,6 +275,87 @@ Return valid JSON only, no additional text."""
             print(f"Error calling Claude API for comparison: {str(e)}")
             raise
 
+    def generate_inquiry_email(
+        self,
+        apartment: dict,
+        user_context: dict,
+    ) -> dict:
+        """Generate a personalized inquiry email for an apartment.
+
+        Args:
+            apartment: Apartment listing data (address, rent, beds, baths, amenities, etc.)
+            user_context: User info (name, move_in_date, budget, preferences)
+
+        Returns:
+            {"subject": "...", "body": "..."}
+        """
+        apartment_json = json.dumps(apartment, indent=2)
+        user_json = json.dumps(user_context, indent=2)
+
+        system_prompt = (
+            "You are a helpful assistant writing a polite, professional inquiry "
+            "email about an apartment listing. The email should be warm but "
+            "concise — landlords receive many inquiries."
+        )
+
+        user_prompt = f"""Write an inquiry email for the following apartment listing.
+
+## Apartment Details
+{apartment_json}
+
+## About the Prospective Tenant
+{user_json}
+
+Instructions:
+- Write a subject line and email body.
+- Address the landlord/property manager politely.
+- Mention the user's name, desired move-in date, and budget if provided.
+- Reference specific apartment details (address, rent, beds/baths, amenities) to show genuine interest.
+- Ask smart questions based on what is MISSING from the listing:
+  - No sqft listed? Ask about the apartment size.
+  - No pet policy mentioned? Ask about pets if the user mentioned pets in preferences.
+  - No parking info? Ask about parking if relevant.
+  - No utilities info? Ask what's included.
+  - No lease term info? Ask about lease length and terms.
+- Keep it to 150-250 words for the body.
+- Be professional but personable.
+
+Return ONLY a JSON object with "subject" and "body" fields. No additional text."""
+
+        try:
+            message = self.client.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=1024,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+
+            response_text = message.content[0].text
+            result = self._parse_dict_response(response_text)
+            return result
+
+        except Exception as e:
+            print(f"Error calling Claude API for inquiry email: {str(e)}")
+            raise
+
+    def _parse_dict_response(self, response_text: str) -> dict:
+        """Parse a JSON dict from Claude's response, handling markdown code blocks."""
+        if "```json" in response_text:
+            json_start = response_text.find("```json") + 7
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.find("```") + 3
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+
+        result = json.loads(response_text)
+
+        if not isinstance(result, dict):
+            raise ValueError("Response is not a JSON object")
+
+        return result
+
     def _parse_comparison_response(self, response_text: str) -> Dict:
         """Parse the comparison analysis JSON from Claude's response."""
         if "```json" in response_text:

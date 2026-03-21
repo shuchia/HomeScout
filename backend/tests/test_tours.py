@@ -1,6 +1,6 @@
 """Tests for tour pipeline CRUD endpoints."""
 from io import BytesIO
-from unittest.mock import patch, MagicMock, ANY
+from unittest.mock import patch, MagicMock, ANY, AsyncMock
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user, UserContext
@@ -728,5 +728,93 @@ class TestTags:
             assert tags_by_name["Small kitchen"]["count"] == 0
             # Total: 1 user tag + 9 remaining defaults = 10
             assert len(suggestions) == 10
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Inquiry email tests ─────────────────────────────────────────────
+
+SAMPLE_APARTMENT = {
+    "id": "apt-001",
+    "address": "123 Main St, Philadelphia, PA 19103",
+    "rent": 2200,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 0,
+    "property_type": "Apartment",
+    "available_date": "2026-04-01",
+    "amenities": ["Laundry", "Gym"],
+    "neighborhood": "Center City",
+    "description": "Bright 2BR apartment in Center City.",
+    "images": [],
+}
+
+
+class TestInquiryEmail:
+    def test_requires_auth(self):
+        """POST /api/tours/{id}/inquiry-email without auth returns 401."""
+        response = client.post("/api/tours/tour-001/inquiry-email")
+        assert response.status_code == 401
+
+    def test_generates_email(self):
+        """POST /api/tours/{id}/inquiry-email calls Claude and returns email."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    # For the select (fetch tour)
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_TOUR]
+                    )
+                    # For the update (save draft)
+                    mock_table.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{**SAMPLE_TOUR, "inquiry_email_draft": "Subject: Hi\n\nBody"}]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            mock_claude_result = {
+                "subject": "Inquiry About 2BR at 123 Main St",
+                "body": "Dear Property Manager,\n\nI am writing to inquire about the 2-bedroom apartment...",
+            }
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.database.is_database_enabled", return_value=False), \
+                 patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT]), \
+                 patch("app.services.claude_service.ClaudeService.generate_inquiry_email", return_value=mock_claude_result):
+                response = client.post(
+                    "/api/tours/tour-001/inquiry-email",
+                    json={"name": "Jane Doe", "budget": 2500},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["subject"] == "Inquiry About 2BR at 123 Main St"
+            assert "inquire" in data["body"].lower()
+            assert "inquiry_email_draft" in data
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_tour_not_found_returns_404(self):
+        """POST /api/tours/{id}/inquiry-email for non-existent tour returns 404."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+            mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[]
+            )
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.post(
+                    "/api/tours/nonexistent/inquiry-email",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 404
         finally:
             app.dependency_overrides.pop(get_current_user, None)

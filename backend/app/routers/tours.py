@@ -1,6 +1,8 @@
 """Tour pipeline CRUD endpoints."""
+import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 
@@ -13,6 +15,8 @@ from app.schemas import (
     CreateNoteRequest,
     UpdatePhotoRequest,
     CreateTagRequest,
+    InquiryEmailRequest,
+    InquiryEmailResponse,
     TourResponse,
     NoteResponse,
     PhotoResponse,
@@ -349,6 +353,104 @@ async def delete_tour(
     except Exception as e:
         logger.error(f"Failed to delete tour: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete tour")
+
+
+# ── Inquiry email endpoint ───────────────────────────────────────────
+
+
+@router.post("/api/tours/{tour_id}/inquiry-email")
+async def generate_inquiry_email(
+    tour_id: str,
+    body: Optional[InquiryEmailRequest] = None,
+    user: UserContext = Depends(get_current_user),
+):
+    """Generate an AI inquiry email draft for this tour's apartment."""
+    _ensure_supabase()
+
+    try:
+        # Verify ownership and fetch tour data
+        result = (
+            supabase_admin.table("tour_pipeline")
+            .select("*")
+            .eq("id", tour_id)
+            .eq("user_id", user.user_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Tour not found")
+
+        tour_row = result.data[0]
+        apartment_id = tour_row["apartment_id"]
+
+        # Fetch apartment data (DB or JSON)
+        apartment = None
+        from app.database import is_database_enabled, get_session_context
+
+        if is_database_enabled():
+            from sqlalchemy import select
+            from app.models.apartment import ApartmentModel
+
+            async with get_session_context() as session:
+                stmt = select(ApartmentModel).where(ApartmentModel.id == apartment_id)
+                db_result = await session.execute(stmt)
+                apt = db_result.scalar_one_or_none()
+                if apt:
+                    apartment = apt.to_dict()
+        else:
+            from app.routers.apartments import _get_apartments_data
+
+            apartments_data = _get_apartments_data()
+            apt_map = {a.get("id"): a for a in apartments_data}
+            apartment = apt_map.get(apartment_id)
+
+        if not apartment:
+            raise HTTPException(
+                status_code=404,
+                detail="Apartment not found",
+            )
+
+        # Build user context from request body + auth info
+        user_context = {
+            "email": user.email,
+        }
+        if body:
+            if body.name:
+                user_context["name"] = body.name
+            if body.move_in_date:
+                user_context["move_in_date"] = body.move_in_date
+            if body.budget:
+                user_context["budget"] = body.budget
+            if body.preferences:
+                user_context["preferences"] = body.preferences
+
+        # Call Claude to generate the email
+        from app.services.claude_service import ClaudeService
+
+        claude = ClaudeService()
+        email_result = await asyncio.to_thread(
+            claude.generate_inquiry_email,
+            apartment=apartment,
+            user_context=user_context,
+        )
+
+        # Save draft to tour_pipeline
+        draft_text = f"Subject: {email_result['subject']}\n\n{email_result['body']}"
+        supabase_admin.table("tour_pipeline").update(
+            {"inquiry_email_draft": draft_text}
+        ).eq("id", tour_id).eq("user_id", user.user_id).execute()
+
+        return {
+            "subject": email_result["subject"],
+            "body": email_result["body"],
+            "inquiry_email_draft": draft_text,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate inquiry email: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to generate inquiry email"
+        )
 
 
 # ── Notes sub-resource endpoints ─────────────────────────────────────
