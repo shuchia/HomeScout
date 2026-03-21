@@ -27,7 +27,8 @@ from app.routers.tours import router as tours_router
 from app.database import is_database_enabled, init_db, close_db
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+from app.logging_config import setup_logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -74,9 +75,13 @@ app.add_middleware(RateLimitMiddleware)
 
 # Configure CORS (added last = runs first = wraps all responses with CORS headers)
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+cors_origins = [frontend_url]
+if "localhost" not in frontend_url:
+    # In deployed environments, also allow localhost for development
+    cors_origins.append("http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url, "http://localhost:3000"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

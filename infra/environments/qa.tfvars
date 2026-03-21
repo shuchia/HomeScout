@@ -1,0 +1,24 @@
+environment          = "qa"
+vpc_cidr             = "10.1.0.0/16"
+enable_redundant_nat = false
+frontend_url         = "https://qa.homescout.app"
+log_level            = "INFO"
+
+# RDS
+rds_instance_class    = "db.t4g.micro"
+rds_allocated_storage = 20
+rds_multi_az          = false
+rds_backup_retention  = 1
+rds_deletion_protection = false
+
+# Redis
+redis_node_type = "cache.t4g.micro"
+redis_num_nodes = 1
+
+# ECS
+api_cpu            = 256
+api_memory         = 512
+api_desired_count  = 1
+worker_cpu         = 256
+worker_memory      = 512
+worker_desired_count = 1

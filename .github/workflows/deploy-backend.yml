@@ -1,0 +1,229 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+
+concurrency:
+  group: deploy-backend-${{ github.event.inputs.environment || 'dev' }}
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: homescout-backend
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: |
+          ENV=${{ github.event.inputs.environment || 'dev' }}
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "image_tag=${ENV}-${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.image_tag }}
+          docker build -t $IMAGE ./backend
+          docker push $IMAGE
+
+  deploy-dev:
+    name: Deploy to Dev
+    needs: build-and-push
+    if: github.event.inputs.environment == 'dev' || github.event.inputs.environment == '' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Run Alembic migrations
+        run: |
+          aws ecs run-task \
+            --cluster homescout-dev \
+            --task-definition homescout-dev-api \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=${{ secrets.DEV_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.DEV_ECS_SG }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster homescout-dev --tasks {}
+
+      - name: Deploy ECS services
+        run: |
+          for SERVICE in api worker beat; do
+            aws ecs update-service \
+              --cluster homescout-dev \
+              --service $SERVICE \
+              --force-new-deployment \
+              --no-cli-pager
+          done
+
+      - name: Wait for API service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster homescout-dev \
+            --services api
+
+      - name: Smoke test
+        run: |
+          sleep 10
+          curl -sf https://api-dev.homescout.app/health || exit 1
+          echo "Smoke test passed"
+
+  deploy-qa:
+    name: Deploy to QA
+    needs: build-and-push
+    if: github.event.inputs.environment == 'qa'
+    runs-on: ubuntu-latest
+    environment: qa
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Retag image for QA
+        run: |
+          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          # Pull the dev image and retag as qa
+          docker pull ${REGISTRY}:dev-${SHA}
+          docker tag ${REGISTRY}:dev-${SHA} ${REGISTRY}:qa-${SHA}
+          docker push ${REGISTRY}:qa-${SHA}
+
+      - name: Run Alembic migrations
+        run: |
+          aws ecs run-task \
+            --cluster homescout-qa \
+            --task-definition homescout-qa-api \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=${{ secrets.QA_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.QA_ECS_SG }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster homescout-qa --tasks {}
+
+      - name: Deploy ECS services
+        run: |
+          for SERVICE in api worker beat; do
+            aws ecs update-service \
+              --cluster homescout-qa \
+              --service $SERVICE \
+              --force-new-deployment \
+              --no-cli-pager
+          done
+
+      - name: Wait for stability
+        run: aws ecs wait services-stable --cluster homescout-qa --services api
+
+      - name: Smoke test
+        run: |
+          sleep 10
+          curl -sf https://api-qa.homescout.app/health || exit 1
+
+  deploy-prod:
+    name: Deploy to Prod
+    needs: build-and-push
+    if: github.event.inputs.environment == 'prod'
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+      # GitHub Environment protection rules enforce manual approval
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Retag image for Prod
+        run: |
+          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          docker pull ${REGISTRY}:qa-${SHA}
+          docker tag ${REGISTRY}:qa-${SHA} ${REGISTRY}:prod-${SHA}
+          docker push ${REGISTRY}:prod-${SHA}
+
+      - name: Run Alembic migrations
+        run: |
+          aws ecs run-task \
+            --cluster homescout-prod \
+            --task-definition homescout-prod-api \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=${{ secrets.PROD_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.PROD_ECS_SG }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster homescout-prod --tasks {}
+
+      - name: Deploy ECS services
+        run: |
+          for SERVICE in api worker beat; do
+            aws ecs update-service \
+              --cluster homescout-prod \
+              --service $SERVICE \
+              --force-new-deployment \
+              --no-cli-pager
+          done
+
+      - name: Wait for stability
+        run: aws ecs wait services-stable --cluster homescout-prod --services api
+
+      - name: Smoke test
+        run: |
+          sleep 10
+          curl -sf https://api.homescout.app/health || exit 1
