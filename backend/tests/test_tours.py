@@ -1,6 +1,7 @@
 """Tests for tour pipeline CRUD endpoints."""
 from io import BytesIO
 from unittest.mock import patch, MagicMock, ANY, AsyncMock
+
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user, UserContext
@@ -783,6 +784,7 @@ class TestInquiryEmail:
             }
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
                  patch("app.database.is_database_enabled", return_value=False), \
                  patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT]), \
                  patch("app.services.claude_service.ClaudeService.generate_inquiry_email", return_value=mock_claude_result):
@@ -809,7 +811,8 @@ class TestInquiryEmail:
                 data=[]
             )
 
-            with patch("app.routers.tours.supabase_admin", mock_sb):
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"):
                 response = client.post(
                     "/api/tours/nonexistent/inquiry-email",
                     headers={"Authorization": "Bearer fake-token"},
@@ -875,6 +878,7 @@ class TestDayPlan:
             }
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
                  patch("app.database.is_database_enabled", return_value=False), \
                  patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT, {**SAMPLE_APARTMENT, "id": "apt-002", "address": "456 Oak Ave"}]), \
                  patch("app.services.claude_service.ClaudeService.generate_day_plan", return_value=mock_claude_result):
@@ -936,6 +940,7 @@ class TestEnhanceNote:
             }
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
                  patch("app.database.is_database_enabled", return_value=False), \
                  patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT]), \
                  patch("app.services.claude_service.ClaudeService.enhance_note", return_value=mock_claude_result):
@@ -1026,6 +1031,7 @@ class TestDecisionBrief:
             }
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
                  patch("app.database.is_database_enabled", return_value=False), \
                  patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT, {**SAMPLE_APARTMENT, "id": "apt-002", "address": "456 Oak Ave"}]), \
                  patch("app.services.claude_service.ClaudeService.generate_decision_brief", return_value=mock_claude_result):
@@ -1039,5 +1045,74 @@ class TestDecisionBrief:
             assert len(data["apartments"]) == 2
             assert data["recommendation"]["apartment_id"] == "apt-001"
             assert "reasoning" in data["recommendation"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Pro tier gating tests ──────────────────────────────────────────
+
+
+class TestProTierGating:
+    """AI tour endpoints require Pro tier; free users get 403."""
+
+    def test_inquiry_email_free_tier_returns_403(self):
+        """POST /api/tours/{id}/inquiry-email as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/tour-001/inquiry-email",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_day_plan_free_tier_returns_403(self):
+        """POST /api/tours/day-plan as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/day-plan",
+                    json={"date": "2026-03-25", "tour_ids": ["tour-001", "tour-002"]},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_enhance_note_free_tier_returns_403(self):
+        """POST /api/tours/{id}/enhance-note as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/tour-001/enhance-note",
+                    json={"note_id": "note-001"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_decision_brief_free_tier_returns_403(self):
+        """POST /api/tours/decision-brief as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/decision-brief",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
         finally:
             app.dependency_overrides.pop(get_current_user, None)
