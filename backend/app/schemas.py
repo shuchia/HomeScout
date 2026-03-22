@@ -325,6 +325,50 @@ class InquiryEmailRequest(BaseModel):
     preferences: Optional[str] = None
 
 
+class DayPlanRequest(BaseModel):
+    """Request model for generating a day plan."""
+    date: date
+    tour_ids: List[str]
+
+
+class DayPlanResponse(BaseModel):
+    """Response model for a generated day plan."""
+    tours_ordered: List[dict]
+    travel_notes: List[str]
+    tips: List[str]
+
+
+class EnhanceNoteRequest(BaseModel):
+    """Request model for enhancing a tour note."""
+    note_id: str
+
+
+class EnhanceNoteResponse(BaseModel):
+    """Response model for an enhanced tour note."""
+    enhanced_text: str
+    suggested_tags: List[dict]
+
+
+class DecisionApartment(BaseModel):
+    """AI analysis for a single toured apartment."""
+    apartment_id: str
+    ai_take: str
+    strengths: List[str]
+    concerns: List[str]
+
+
+class Recommendation(BaseModel):
+    """AI recommendation for which apartment to choose."""
+    apartment_id: str
+    reasoning: str
+
+
+class DecisionBriefResponse(BaseModel):
+    """Response model for a decision brief."""
+    apartments: List[DecisionApartment]
+    recommendation: Recommendation
+
+
 class TourResponse(BaseModel):
     """Response model for a single tour pipeline entry."""
     id: str

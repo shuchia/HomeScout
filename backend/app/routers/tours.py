@@ -17,6 +17,8 @@ from app.schemas import (
     CreateTagRequest,
     InquiryEmailRequest,
     InquiryEmailResponse,
+    DayPlanRequest,
+    EnhanceNoteRequest,
     TourResponse,
     NoteResponse,
     PhotoResponse,
@@ -136,6 +138,192 @@ async def get_tag_suggestions(
     except Exception as e:
         logger.error(f"Failed to get tag suggestions: {e}")
         raise HTTPException(status_code=500, detail="Failed to get tag suggestions")
+
+
+# ── AI day plan endpoint (must be before /{tour_id}) ──────────────────
+
+
+@router.post("/api/tours/day-plan")
+async def generate_day_plan(
+    body: DayPlanRequest,
+    user: UserContext = Depends(get_current_user),
+):
+    """Generate an optimized day plan for multiple scheduled tours."""
+    _ensure_supabase()
+
+    try:
+        # Fetch the specified tours and verify ownership
+        result = (
+            supabase_admin.table("tour_pipeline")
+            .select("*")
+            .eq("user_id", user.user_id)
+            .in_("id", body.tour_ids)
+            .execute()
+        )
+        tours = result.data or []
+        if len(tours) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 tours are required for a day plan",
+            )
+
+        # Fetch apartment data for each tour
+        apartment_ids = [t["apartment_id"] for t in tours]
+        from app.database import is_database_enabled, get_session_context
+
+        apartments_by_id: dict = {}
+        if is_database_enabled():
+            from sqlalchemy import select
+            from app.models.apartment import ApartmentModel
+
+            async with get_session_context() as session:
+                stmt = select(ApartmentModel).where(
+                    ApartmentModel.id.in_(apartment_ids)
+                )
+                db_result = await session.execute(stmt)
+                for apt in db_result.scalars():
+                    apartments_by_id[apt.id] = apt.to_dict()
+        else:
+            from app.routers.apartments import _get_apartments_data
+
+            for a in _get_apartments_data():
+                if a.get("id") in apartment_ids:
+                    apartments_by_id[a["id"]] = a
+
+        # Build tour data for Claude
+        tour_data = []
+        for t in tours:
+            apt = apartments_by_id.get(t["apartment_id"], {})
+            tour_data.append({
+                "apartment_id": t["apartment_id"],
+                "address": apt.get("address", "Unknown"),
+                "scheduled_date": t.get("scheduled_date"),
+                "scheduled_time": t.get("scheduled_time"),
+            })
+
+        from app.services.claude_service import ClaudeService
+
+        claude = ClaudeService()
+        plan = await asyncio.to_thread(
+            claude.generate_day_plan, tours=tour_data
+        )
+
+        return plan
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate day plan: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate day plan")
+
+
+# ── AI decision brief endpoint (must be before /{tour_id}) ───────────
+
+
+@router.post("/api/tours/decision-brief")
+async def generate_decision_brief(
+    user: UserContext = Depends(get_current_user),
+):
+    """Generate a decision brief for all toured apartments."""
+    _ensure_supabase()
+
+    try:
+        # Fetch all tours in "toured" or "deciding" stage
+        result = (
+            supabase_admin.table("tour_pipeline")
+            .select("*")
+            .eq("user_id", user.user_id)
+            .in_("stage", ["toured", "deciding"])
+            .execute()
+        )
+        tours = result.data or []
+        if len(tours) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 toured apartments are required for a decision brief",
+            )
+
+        # Fetch apartment data
+        apartment_ids = [t["apartment_id"] for t in tours]
+        from app.database import is_database_enabled, get_session_context
+
+        apartments_by_id: dict = {}
+        if is_database_enabled():
+            from sqlalchemy import select
+            from app.models.apartment import ApartmentModel
+
+            async with get_session_context() as session:
+                stmt = select(ApartmentModel).where(
+                    ApartmentModel.id.in_(apartment_ids)
+                )
+                db_result = await session.execute(stmt)
+                for apt in db_result.scalars():
+                    apartments_by_id[apt.id] = apt.to_dict()
+        else:
+            from app.routers.apartments import _get_apartments_data
+
+            for a in _get_apartments_data():
+                if a.get("id") in apartment_ids:
+                    apartments_by_id[a["id"]] = a
+
+        # Fetch notes and tags for each tour
+        tour_ids = [t["id"] for t in tours]
+
+        notes_result = (
+            supabase_admin.table("tour_notes")
+            .select("tour_pipeline_id, content")
+            .in_("tour_pipeline_id", tour_ids)
+            .execute()
+        )
+        notes_by_tour: dict[str, list[str]] = {}
+        for n in (notes_result.data or []):
+            notes_by_tour.setdefault(n["tour_pipeline_id"], []).append(
+                n.get("content", "")
+            )
+
+        tags_result = (
+            supabase_admin.table("tour_tags")
+            .select("tour_pipeline_id, tag, sentiment")
+            .in_("tour_pipeline_id", tour_ids)
+            .execute()
+        )
+        tags_by_tour: dict[str, list[dict]] = {}
+        for tg in (tags_result.data or []):
+            tags_by_tour.setdefault(tg["tour_pipeline_id"], []).append(
+                {"tag": tg["tag"], "sentiment": tg["sentiment"]}
+            )
+
+        # Build data for Claude
+        toured_apartments = []
+        for t in tours:
+            apt = apartments_by_id.get(t["apartment_id"], {})
+            toured_apartments.append({
+                "apartment_id": t["apartment_id"],
+                "address": apt.get("address", "Unknown"),
+                "rent": apt.get("rent"),
+                "bedrooms": apt.get("bedrooms"),
+                "bathrooms": apt.get("bathrooms"),
+                "amenities": apt.get("amenities", []),
+                "tour_rating": t.get("tour_rating"),
+                "tags": tags_by_tour.get(t["id"], []),
+                "notes": notes_by_tour.get(t["id"], []),
+            })
+
+        from app.services.claude_service import ClaudeService
+
+        claude = ClaudeService()
+        brief = await asyncio.to_thread(
+            claude.generate_decision_brief,
+            toured_apartments=toured_apartments,
+        )
+
+        return brief
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate decision brief: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to generate decision brief"
+        )
 
 
 @router.post("/api/tours", status_code=201)
@@ -451,6 +639,85 @@ async def generate_inquiry_email(
         raise HTTPException(
             status_code=500, detail="Failed to generate inquiry email"
         )
+
+
+# ── Note enhancement endpoint ────────────────────────────────────────
+
+
+@router.post("/api/tours/{tour_id}/enhance-note")
+async def enhance_note(
+    tour_id: str,
+    body: EnhanceNoteRequest,
+    user: UserContext = Depends(get_current_user),
+):
+    """Enhance a tour note with AI — clean up text and suggest tags."""
+    _ensure_supabase()
+
+    try:
+        _verify_tour_ownership(tour_id, user.user_id)
+
+        # Fetch the note
+        note_result = (
+            supabase_admin.table("tour_notes")
+            .select("id, content")
+            .eq("id", body.note_id)
+            .eq("tour_pipeline_id", tour_id)
+            .execute()
+        )
+        if not note_result.data:
+            raise HTTPException(status_code=404, detail="Note not found")
+
+        raw_note = note_result.data[0].get("content", "")
+
+        # Fetch the tour to get apartment_id
+        tour_result = (
+            supabase_admin.table("tour_pipeline")
+            .select("apartment_id")
+            .eq("id", tour_id)
+            .eq("user_id", user.user_id)
+            .execute()
+        )
+        apartment_id = tour_result.data[0]["apartment_id"]
+
+        # Fetch apartment data
+        apartment = {}
+        from app.database import is_database_enabled, get_session_context
+
+        if is_database_enabled():
+            from sqlalchemy import select
+            from app.models.apartment import ApartmentModel
+
+            async with get_session_context() as session:
+                stmt = select(ApartmentModel).where(
+                    ApartmentModel.id == apartment_id
+                )
+                db_result = await session.execute(stmt)
+                apt = db_result.scalar_one_or_none()
+                if apt:
+                    apartment = apt.to_dict()
+        else:
+            from app.routers.apartments import _get_apartments_data
+
+            for a in _get_apartments_data():
+                if a.get("id") == apartment_id:
+                    apartment = a
+                    break
+
+        from app.services.claude_service import ClaudeService
+
+        claude = ClaudeService()
+        result = await asyncio.to_thread(
+            claude.enhance_note,
+            raw_note=raw_note,
+            apartment_context=apartment,
+        )
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to enhance note: {e}")
+        raise HTTPException(status_code=500, detail="Failed to enhance note")
 
 
 # ── Notes sub-resource endpoints ─────────────────────────────────────
