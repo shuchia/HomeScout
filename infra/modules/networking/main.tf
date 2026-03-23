@@ -13,7 +13,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name        = "homescout-${var.environment}"
+    Name        = "snugd-${var.environment}"
     Environment = var.environment
   }
 }
@@ -23,7 +23,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name        = "homescout-${var.environment}-igw"
+    Name        = "snugd-${var.environment}-igw"
     Environment = var.environment
   }
 }
@@ -37,7 +37,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name        = "homescout-${var.environment}-public-${local.azs[count.index]}"
+    Name        = "snugd-${var.environment}-public-${local.azs[count.index]}"
     Environment = var.environment
   }
 }
@@ -50,7 +50,7 @@ resource "aws_subnet" "private" {
   availability_zone = local.azs[count.index]
 
   tags = {
-    Name        = "homescout-${var.environment}-private-${local.azs[count.index]}"
+    Name        = "snugd-${var.environment}-private-${local.azs[count.index]}"
     Environment = var.environment
   }
 }
@@ -61,7 +61,7 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 
   tags = {
-    Name        = "homescout-${var.environment}-nat-eip-${count.index}"
+    Name        = "snugd-${var.environment}-nat-eip-${count.index}"
     Environment = var.environment
   }
 }
@@ -72,7 +72,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[count.index].id
 
   tags = {
-    Name        = "homescout-${var.environment}-nat-${count.index}"
+    Name        = "snugd-${var.environment}-nat-${count.index}"
     Environment = var.environment
   }
 
@@ -89,7 +89,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name        = "homescout-${var.environment}-public-rt"
+    Name        = "snugd-${var.environment}-public-rt"
     Environment = var.environment
   }
 }
@@ -110,7 +110,7 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name        = "homescout-${var.environment}-private-rt-${count.index}"
+    Name        = "snugd-${var.environment}-private-rt-${count.index}"
     Environment = var.environment
   }
 }
@@ -123,7 +123,7 @@ resource "aws_route_table_association" "private" {
 
 # --- Security Groups ---
 resource "aws_security_group" "alb" {
-  name_prefix = "homescout-${var.environment}-alb-"
+  name_prefix = "snugd-${var.environment}-alb-"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -148,13 +148,13 @@ resource "aws_security_group" "alb" {
   }
 
   tags = {
-    Name        = "homescout-${var.environment}-alb-sg"
+    Name        = "snugd-${var.environment}-alb-sg"
     Environment = var.environment
   }
 }
 
 resource "aws_security_group" "ecs" {
-  name_prefix = "homescout-${var.environment}-ecs-"
+  name_prefix = "snugd-${var.environment}-ecs-"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -172,13 +172,13 @@ resource "aws_security_group" "ecs" {
   }
 
   tags = {
-    Name        = "homescout-${var.environment}-ecs-sg"
+    Name        = "snugd-${var.environment}-ecs-sg"
     Environment = var.environment
   }
 }
 
 resource "aws_security_group" "rds" {
-  name_prefix = "homescout-${var.environment}-rds-"
+  name_prefix = "snugd-${var.environment}-rds-"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -189,13 +189,13 @@ resource "aws_security_group" "rds" {
   }
 
   tags = {
-    Name        = "homescout-${var.environment}-rds-sg"
+    Name        = "snugd-${var.environment}-rds-sg"
     Environment = var.environment
   }
 }
 
 resource "aws_security_group" "redis" {
-  name_prefix = "homescout-${var.environment}-redis-"
+  name_prefix = "snugd-${var.environment}-redis-"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -206,7 +206,7 @@ resource "aws_security_group" "redis" {
   }
 
   tags = {
-    Name        = "homescout-${var.environment}-redis-sg"
+    Name        = "snugd-${var.environment}-redis-sg"
     Environment = var.environment
   }
 }

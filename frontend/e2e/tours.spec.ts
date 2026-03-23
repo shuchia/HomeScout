@@ -52,7 +52,7 @@ const MOCK_SUGGESTIONS = {
 
 /**
  * Mock Supabase auth so tests bypass the sign-in gate.
- * Same pattern as homescout.spec.ts.
+ * Same pattern as snugd.spec.ts.
  */
 async function mockAuth(page: Page) {
   const mockUser = {

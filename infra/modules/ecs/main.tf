@@ -1,5 +1,5 @@
 resource "aws_ecs_cluster" "main" {
-  name = "homescout-${var.environment}"
+  name = "snugd-${var.environment}"
 
   setting {
     name  = "containerInsights"
@@ -13,17 +13,17 @@ resource "aws_ecs_cluster" "main" {
 
 # --- CloudWatch Log Groups ---
 resource "aws_cloudwatch_log_group" "api" {
-  name              = "/ecs/homescout-${var.environment}/api"
+  name              = "/ecs/snugd-${var.environment}/api"
   retention_in_days = var.environment == "prod" ? 30 : (var.environment == "qa" ? 14 : 7)
 }
 
 resource "aws_cloudwatch_log_group" "worker" {
-  name              = "/ecs/homescout-${var.environment}/worker"
+  name              = "/ecs/snugd-${var.environment}/worker"
   retention_in_days = var.environment == "prod" ? 30 : (var.environment == "qa" ? 14 : 7)
 }
 
 resource "aws_cloudwatch_log_group" "beat" {
-  name              = "/ecs/homescout-${var.environment}/beat"
+  name              = "/ecs/snugd-${var.environment}/beat"
   retention_in_days = var.environment == "prod" ? 30 : (var.environment == "qa" ? 14 : 7)
 }
 
@@ -60,7 +60,7 @@ locals {
 
 # --- API Task Definition ---
 resource "aws_ecs_task_definition" "api" {
-  family                   = "homescout-${var.environment}-api"
+  family                   = "snugd-${var.environment}-api"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = var.api_cpu
@@ -96,7 +96,7 @@ resource "aws_ecs_task_definition" "api" {
 
 # --- Worker Task Definition ---
 resource "aws_ecs_task_definition" "worker" {
-  family                   = "homescout-${var.environment}-worker"
+  family                   = "snugd-${var.environment}-worker"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = var.worker_cpu
@@ -127,7 +127,7 @@ resource "aws_ecs_task_definition" "worker" {
 
 # --- Beat Task Definition ---
 resource "aws_ecs_task_definition" "beat" {
-  family                   = "homescout-${var.environment}-beat"
+  family                   = "snugd-${var.environment}-beat"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = 256

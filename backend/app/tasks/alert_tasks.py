@@ -9,7 +9,7 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 resend.api_key = os.getenv("RESEND_API_KEY", "")
-FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL", "alerts@homescout.app")
+FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL", "alerts@snugd.app")
 
 
 @shared_task(name="app.tasks.alert_tasks.send_daily_alerts")
@@ -80,7 +80,7 @@ def send_daily_alerts():
                 f"We found {len(apartments)} new apartment(s) matching your "
                 f"\"{search['name']}\" search in {search['city']}:\n\n"
                 + "\n".join(apartment_lines)
-                + f"\n\nView them on HomeScout: {frontend_url}"
+                + f"\n\nView them on Snugd: {frontend_url}"
                 + f"\n\nManage your alerts: {frontend_url}/settings"
             )
 

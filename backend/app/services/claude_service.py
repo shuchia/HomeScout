@@ -107,7 +107,7 @@ Please return a JSON array with match scores for each apartment. For each apartm
 Format your response as valid JSON only, with no additional text."""
 
         # System prompt defines Claude's role and scoring guidelines
-        system_prompt = """You are an expert apartment matching assistant for HomeScout, an app that helps young professionals find their ideal apartment efficiently. Your task is to analyze apartment listings against user preferences and provide accurate match scores.
+        system_prompt = """You are an expert apartment matching assistant for Snugd, an app that helps young professionals find their ideal apartment efficiently. Your task is to analyze apartment listings against user preferences and provide accurate match scores.
 
 Analyze each apartment based on:
 1. Budget fit (how well the rent matches their budget)
@@ -257,7 +257,7 @@ Return a JSON object with this exact structure:
 
 Return valid JSON only, no additional text."""
 
-        system_prompt = """You are an expert apartment comparison analyst for HomeScout. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
+        system_prompt = """You are an expert apartment comparison analyst for Snugd. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
 
         try:
             message = self.client.messages.create(

@@ -1,7 +1,7 @@
 # --- SNS Topic for Alerts ---
 resource "aws_sns_topic" "alerts" {
   count = var.environment == "prod" ? 1 : 0
-  name  = "homescout-${var.environment}-alerts"
+  name  = "snugd-${var.environment}-alerts"
 }
 
 resource "aws_sns_topic_subscription" "email" {
@@ -14,7 +14,7 @@ resource "aws_sns_topic_subscription" "email" {
 # --- API 5xx Error Rate ---
 resource "aws_cloudwatch_metric_alarm" "api_5xx" {
   count               = var.environment == "prod" ? 1 : 0
-  alarm_name          = "homescout-${var.environment}-api-5xx"
+  alarm_name          = "snugd-${var.environment}-api-5xx"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 5
@@ -33,7 +33,7 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
 # --- API Latency p95 ---
 resource "aws_cloudwatch_metric_alarm" "api_latency" {
   count               = var.environment == "prod" ? 1 : 0
-  alarm_name          = "homescout-${var.environment}-api-latency-p95"
+  alarm_name          = "snugd-${var.environment}-api-latency-p95"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   threshold           = 3
@@ -52,7 +52,7 @@ resource "aws_cloudwatch_metric_alarm" "api_latency" {
 # --- RDS CPU ---
 resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   count               = var.environment == "prod" ? 1 : 0
-  alarm_name          = "homescout-${var.environment}-rds-cpu"
+  alarm_name          = "snugd-${var.environment}-rds-cpu"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   threshold           = 80
@@ -70,7 +70,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
 # --- RDS Free Storage ---
 resource "aws_cloudwatch_metric_alarm" "rds_storage" {
   count               = var.environment == "prod" ? 1 : 0
-  alarm_name          = "homescout-${var.environment}-rds-low-storage"
+  alarm_name          = "snugd-${var.environment}-rds-low-storage"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 1
   threshold           = 5368709120 # 5GB in bytes

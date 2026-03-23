@@ -11,7 +11,7 @@ export function Header() {
     <header className="border-b bg-white sticky top-0 z-40">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
         <Link href="/" className="text-xl font-bold text-blue-600">
-          HomeScout
+          Snugd
         </Link>
 
         <nav className="flex items-center gap-6">

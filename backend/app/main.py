@@ -1,5 +1,5 @@
 """
-FastAPI application for HomeScout API.
+FastAPI application for Snugd API.
 """
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Response
@@ -39,7 +39,7 @@ load_dotenv()
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
     # Startup
-    logger.info("Starting HomeScout API...")
+    logger.info("Starting Snugd API...")
 
     if is_database_enabled():
         logger.info("Database enabled - initializing connection")
@@ -55,14 +55,14 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("Shutting down HomeScout API...")
+    logger.info("Shutting down Snugd API...")
     if is_database_enabled():
         await close_db()
 
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="HomeScout API",
+    title="Snugd API",
     description="API for finding apartments tailored to young professionals",
     version="1.0.0",
     lifespan=lifespan
@@ -103,7 +103,7 @@ async def root():
     """Root endpoint - basic health check"""
     return HealthResponse(
         status="healthy",
-        message="HomeScout API is running. Visit /docs for API documentation."
+        message="Snugd API is running. Visit /docs for API documentation."
     )
 
 
@@ -112,7 +112,7 @@ async def health_check():
     """Health check endpoint"""
     return HealthResponse(
         status="healthy",
-        message="HomeScout API is healthy and ready to serve requests"
+        message="Snugd API is healthy and ready to serve requests"
     )
 
 

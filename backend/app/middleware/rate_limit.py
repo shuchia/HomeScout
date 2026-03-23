@@ -10,9 +10,9 @@ import redis
 logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-GLOBAL_LIMIT = 60       # requests per minute per user
-EXPENSIVE_LIMIT = 10    # requests per minute for search/compare
-ANON_LIMIT = 10         # requests per minute for anonymous
+GLOBAL_LIMIT = 120      # requests per minute per user
+EXPENSIVE_LIMIT = 20    # requests per minute for search/compare
+ANON_LIMIT = 30         # requests per minute for anonymous
 
 EXPENSIVE_PATHS = {"/api/search", "/api/apartments/compare"}
 

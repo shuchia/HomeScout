@@ -1,10 +1,10 @@
 resource "aws_elasticache_subnet_group" "main" {
-  name       = "homescout-${var.environment}"
+  name       = "snugd-${var.environment}"
   subnet_ids = var.private_subnet_ids
 }
 
 resource "aws_elasticache_cluster" "main" {
-  cluster_id           = "homescout-${var.environment}"
+  cluster_id           = "snugd-${var.environment}"
   engine               = "redis"
   engine_version       = "7.1"
   node_type            = var.node_type
@@ -16,7 +16,7 @@ resource "aws_elasticache_cluster" "main" {
   security_group_ids = [var.security_group_id]
 
   tags = {
-    Name        = "homescout-${var.environment}"
+    Name        = "snugd-${var.environment}"
     Environment = var.environment
   }
 }

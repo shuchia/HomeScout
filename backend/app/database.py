@@ -1,5 +1,5 @@
 """
-Database configuration and session management for HomeScout.
+Database configuration and session management for Snugd.
 Uses SQLAlchemy async with PostgreSQL.
 """
 import os
@@ -13,7 +13,7 @@ from sqlalchemy.pool import NullPool
 # Get database URL from environment
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/homescout"
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/snugd"
 )
 
 # Feature flag to enable/disable database

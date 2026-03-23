@@ -1,13 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-# HomeScout deployment helper
+# Snugd deployment helper
 # Usage: ./scripts/deploy.sh <command> [environment]
 
 COMMAND=${1:-help}
 ENV=${2:-dev}
 AWS_REGION=${AWS_REGION:-us-east-1}
-ECR_REPO="homescout-backend"
+ECR_REPO="snugd-backend"
 
 usage() {
   echo "Usage: ./scripts/deploy.sh <command> [environment]"
@@ -52,44 +52,44 @@ case "$COMMAND" in
     echo "Deploying to ${ENV}..."
     for SERVICE in api worker beat; do
       aws ecs update-service \
-        --cluster homescout-${ENV} \
+        --cluster snugd-${ENV} \
         --service ${SERVICE} \
         --force-new-deployment \
         --no-cli-pager
       echo "Deployed: ${SERVICE}"
     done
     echo "Waiting for API stability..."
-    aws ecs wait services-stable --cluster homescout-${ENV} --services api
+    aws ecs wait services-stable --cluster snugd-${ENV} --services api
     echo "Deploy complete."
     ;;
 
   migrate)
     echo "Running migrations on ${ENV}..."
     TASK_ARN=$(aws ecs run-task \
-      --cluster homescout-${ENV} \
-      --task-definition homescout-${ENV}-api \
+      --cluster snugd-${ENV} \
+      --task-definition snugd-${ENV}-api \
       --launch-type FARGATE \
-      --network-configuration "awsvpcConfiguration={subnets=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=homescout-${ENV}-private-*" --query 'Subnets[*].SubnetId' --output text | tr '\t' ','),assignPublicIp=DISABLED}" \
+      --network-configuration "awsvpcConfiguration={subnets=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=snugd-${ENV}-private-*" --query 'Subnets[*].SubnetId' --output text | tr '\t' ','),assignPublicIp=DISABLED}" \
       --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
       --query 'tasks[0].taskArn' \
       --output text)
     echo "Migration task: ${TASK_ARN}"
-    aws ecs wait tasks-stopped --cluster homescout-${ENV} --tasks ${TASK_ARN}
+    aws ecs wait tasks-stopped --cluster snugd-${ENV} --tasks ${TASK_ARN}
     echo "Migrations complete."
     ;;
 
   status)
-    echo "ECS services in homescout-${ENV}:"
+    echo "ECS services in snugd-${ENV}:"
     aws ecs describe-services \
-      --cluster homescout-${ENV} \
+      --cluster snugd-${ENV} \
       --services api worker beat \
       --query 'services[].{name:serviceName,status:status,desired:desiredCount,running:runningCount,pending:pendingCount}' \
       --output table
     ;;
 
   logs)
-    echo "Tailing logs for homescout-${ENV}/api..."
-    aws logs tail /ecs/homescout-${ENV}/api --follow --since 5m
+    echo "Tailing logs for snugd-${ENV}/api..."
+    aws logs tail /ecs/snugd-${ENV}/api --follow --since 5m
     ;;
 
   tf-plan)

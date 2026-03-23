@@ -61,7 +61,7 @@ function SettingsContent() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'homescout-data.json'
+    a.download = 'snugd-data.json'
     a.click()
     URL.revokeObjectURL(url)
   }

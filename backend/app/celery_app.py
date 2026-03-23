@@ -1,5 +1,5 @@
 """
-Celery application configuration for HomeScout background tasks.
+Celery application configuration for Snugd background tasks.
 Uses Redis as message broker.
 """
 import os
@@ -15,7 +15,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # Create Celery app
 celery_app = Celery(
-    "homescout",
+    "snugd",
     broker=REDIS_URL,
     backend=REDIS_URL,
     include=[

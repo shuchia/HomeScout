@@ -1,5 +1,5 @@
 """
-ORM models for HomeScout database.
+ORM models for Snugd database.
 """
 from app.models.apartment import ApartmentModel
 from app.models.scrape_job import ScrapeJobModel

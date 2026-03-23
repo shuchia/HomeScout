@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t homescout-backend:ci ./backend
+        run: docker build -t snugd-backend:ci ./backend
 
   frontend-lint-build:
     name: Frontend Lint & Build

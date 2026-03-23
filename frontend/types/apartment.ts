@@ -1,5 +1,5 @@
 /**
- * TypeScript interfaces for HomeScout
+ * TypeScript interfaces for Snugd
  * These types mirror the backend Pydantic models for type safety
  */
 

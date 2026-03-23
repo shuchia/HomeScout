@@ -2,10 +2,10 @@ terraform {
   required_version = ">= 1.5"
 
   backend "s3" {
-    bucket         = "homescout-terraform-state"
+    bucket         = "snugd-terraform-state"
     key            = "infra/terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "homescout-terraform-locks"
+    dynamodb_table = "snugd-terraform-locks"
     encrypt        = true
   }
 
@@ -26,7 +26,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "homescout"
+      Project     = "snugd"
       Environment = var.environment
       ManagedBy   = "terraform"
     }
@@ -35,13 +35,13 @@ provider "aws" {
 
 # --- Secrets Manager (application secrets — populated manually) ---
 resource "aws_secretsmanager_secret" "app_secrets" {
-  name = "homescout/${var.environment}/secrets"
+  name = "snugd/${var.environment}/secrets"
 }
 
 # --- Modules ---
 module "ecr" {
   source          = "./modules/ecr"
-  repository_name = "homescout-backend"
+  repository_name = "snugd-backend"
 }
 
 module "networking" {

@@ -45,7 +45,7 @@ const useComparisonStore = create(
       setSearchContext: (ctx) => set({ searchContext: ctx }),
     }),
     {
-      name: 'homescout-comparison',
+      name: 'snugd-comparison',
       storage: createJSONStorage(() => localStorage),
     }
   )

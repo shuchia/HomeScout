@@ -37,10 +37,10 @@ variable "security_group_id" {
 
 variable "db_name" {
   type    = string
-  default = "homescout"
+  default = "snugd"
 }
 
 variable "db_username" {
   type    = string
-  default = "homescout"
+  default = "snugd"
 }

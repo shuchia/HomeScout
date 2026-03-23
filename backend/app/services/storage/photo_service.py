@@ -8,7 +8,7 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-S3_BUCKET = os.getenv("S3_BUCKET_NAME", "homescout-tours")
+S3_BUCKET = os.getenv("S3_BUCKET_NAME", "snugd-tours")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 THUMBNAIL_MAX_SIZE = (300, 300)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB

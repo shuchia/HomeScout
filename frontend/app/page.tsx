@@ -39,25 +39,6 @@ export default function Home() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center p-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Find Your Perfect Apartment</h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
-            Sign in to search apartments with AI-powered matching.
-          </p>
-          <button
-            onClick={signInWithGoogle}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-          >
-            Sign In with Google
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -68,8 +49,7 @@ export default function Home() {
               Find Your Perfect Apartment
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Tell us what you&apos;re looking for, and our AI will find the best matches
-              based on your preferences, budget, and needs.
+              Tell us what you&apos;re looking for{user ? ', and our AI will find the best matches based on your preferences, budget, and needs' : '. Sign in for AI-powered matching'}.
             </p>
           </div>
         )}

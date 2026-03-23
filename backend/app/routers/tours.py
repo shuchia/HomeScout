@@ -368,6 +368,7 @@ async def create_note(
 
         row = {
             "tour_pipeline_id": tour_id,
+            "user_id": user.user_id,
             "content": body.content,
             "source": "typed",
             "transcription_status": "complete",

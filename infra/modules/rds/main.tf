@@ -4,17 +4,17 @@ resource "random_password" "db_password" {
 }
 
 resource "aws_db_subnet_group" "main" {
-  name       = "homescout-${var.environment}"
+  name       = "snugd-${var.environment}"
   subnet_ids = var.private_subnet_ids
 
   tags = {
-    Name        = "homescout-${var.environment}-db-subnet"
+    Name        = "snugd-${var.environment}-db-subnet"
     Environment = var.environment
   }
 }
 
 resource "aws_db_instance" "main" {
-  identifier     = "homescout-${var.environment}"
+  identifier     = "snugd-${var.environment}"
   engine         = "postgres"
   engine_version = "16.4"
   instance_class = var.instance_class
@@ -37,17 +37,17 @@ resource "aws_db_instance" "main" {
   deletion_protection     = var.deletion_protection
 
   skip_final_snapshot       = var.environment != "prod"
-  final_snapshot_identifier = var.environment == "prod" ? "homescout-prod-final" : null
+  final_snapshot_identifier = var.environment == "prod" ? "snugd-prod-final" : null
 
   tags = {
-    Name        = "homescout-${var.environment}"
+    Name        = "snugd-${var.environment}"
     Environment = var.environment
   }
 }
 
 # Store password in Secrets Manager
 resource "aws_secretsmanager_secret" "db_password" {
-  name = "homescout/${var.environment}/db-password"
+  name = "snugd/${var.environment}/db-password"
 }
 
 resource "aws_secretsmanager_secret_version" "db_password" {

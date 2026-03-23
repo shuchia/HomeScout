@@ -1,18 +1,18 @@
 resource "aws_lb" "main" {
-  name               = "homescout-${var.environment}"
+  name               = "snugd-${var.environment}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [var.security_group_id]
   subnets            = var.public_subnet_ids
 
   tags = {
-    Name        = "homescout-${var.environment}"
+    Name        = "snugd-${var.environment}"
     Environment = var.environment
   }
 }
 
 resource "aws_lb_target_group" "api" {
-  name        = "homescout-${var.environment}-api"
+  name        = "snugd-${var.environment}-api"
   port        = 8000
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -29,7 +29,7 @@ resource "aws_lb_target_group" "api" {
   }
 
   tags = {
-    Name        = "homescout-${var.environment}-api"
+    Name        = "snugd-${var.environment}-api"
     Environment = var.environment
   }
 }

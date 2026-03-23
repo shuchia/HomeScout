@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HomeScout - AI-Powered Apartment Finder",
-  description: "Find your perfect apartment with AI-powered recommendations. HomeScout analyzes your preferences to match you with the best apartments in your city.",
+  title: "Snugd - AI-Powered Apartment Finder",
+  description: "Find your perfect apartment with AI-powered recommendations. Snugd analyzes your preferences to match you with the best apartments in your city.",
 };
 
 export default function RootLayout({

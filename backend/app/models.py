@@ -130,6 +130,6 @@ class HealthResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "status": "healthy",
-                "message": "HomeScout API is running"
+                "message": "Snugd API is running"
             }
         }

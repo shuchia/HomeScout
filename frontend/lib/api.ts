@@ -1,5 +1,5 @@
 /**
- * API client for HomeScout backend
+ * API client for Snugd backend
  * Handles all communication with the FastAPI server
  */
 

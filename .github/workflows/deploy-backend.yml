@@ -22,7 +22,7 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: homescout-backend
+  ECR_REPOSITORY: snugd-backend
 
 jobs:
   build-and-push:
@@ -81,19 +81,19 @@ jobs:
       - name: Run Alembic migrations
         run: |
           aws ecs run-task \
-            --cluster homescout-dev \
-            --task-definition homescout-dev-api \
+            --cluster snugd-dev \
+            --task-definition snugd-dev-api \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=${{ secrets.DEV_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.DEV_ECS_SG }}],assignPublicIp=DISABLED}" \
             --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
             --query 'tasks[0].taskArn' \
-            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster homescout-dev --tasks {}
+            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster snugd-dev --tasks {}
 
       - name: Deploy ECS services
         run: |
           for SERVICE in api worker beat; do
             aws ecs update-service \
-              --cluster homescout-dev \
+              --cluster snugd-dev \
               --service $SERVICE \
               --force-new-deployment \
               --no-cli-pager
@@ -102,7 +102,7 @@ jobs:
       - name: Wait for API service stability
         run: |
           aws ecs wait services-stable \
-            --cluster homescout-dev \
+            --cluster snugd-dev \
             --services api
 
       - name: Smoke test
@@ -143,26 +143,26 @@ jobs:
       - name: Run Alembic migrations
         run: |
           aws ecs run-task \
-            --cluster homescout-qa \
-            --task-definition homescout-qa-api \
+            --cluster snugd-qa \
+            --task-definition snugd-qa-api \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=${{ secrets.QA_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.QA_ECS_SG }}],assignPublicIp=DISABLED}" \
             --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
             --query 'tasks[0].taskArn' \
-            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster homescout-qa --tasks {}
+            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster snugd-qa --tasks {}
 
       - name: Deploy ECS services
         run: |
           for SERVICE in api worker beat; do
             aws ecs update-service \
-              --cluster homescout-qa \
+              --cluster snugd-qa \
               --service $SERVICE \
               --force-new-deployment \
               --no-cli-pager
           done
 
       - name: Wait for stability
-        run: aws ecs wait services-stable --cluster homescout-qa --services api
+        run: aws ecs wait services-stable --cluster snugd-qa --services api
 
       - name: Smoke test
         run: |
@@ -202,26 +202,26 @@ jobs:
       - name: Run Alembic migrations
         run: |
           aws ecs run-task \
-            --cluster homescout-prod \
-            --task-definition homescout-prod-api \
+            --cluster snugd-prod \
+            --task-definition snugd-prod-api \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=${{ secrets.PROD_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.PROD_ECS_SG }}],assignPublicIp=DISABLED}" \
             --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
             --query 'tasks[0].taskArn' \
-            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster homescout-prod --tasks {}
+            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster snugd-prod --tasks {}
 
       - name: Deploy ECS services
         run: |
           for SERVICE in api worker beat; do
             aws ecs update-service \
-              --cluster homescout-prod \
+              --cluster snugd-prod \
               --service $SERVICE \
               --force-new-deployment \
               --no-cli-pager
           done
 
       - name: Wait for stability
-        run: aws ecs wait services-stable --cluster homescout-prod --services api
+        run: aws ecs wait services-stable --cluster snugd-prod --services api
 
       - name: Smoke test
         run: |

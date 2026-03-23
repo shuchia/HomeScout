@@ -1,6 +1,6 @@
 # Task execution role (used by ECS to pull images, write logs, read secrets)
 resource "aws_iam_role" "ecs_execution" {
-  name = "homescout-${var.environment}-ecs-execution"
+  name = "snugd-${var.environment}-ecs-execution"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -37,7 +37,7 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
 
 # Task role (used by the application itself)
 resource "aws_iam_role" "ecs_task" {
-  name = "homescout-${var.environment}-ecs-task"
+  name = "snugd-${var.environment}-ecs-task"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -64,7 +64,7 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
         "s3:GetObject",
         "s3:PutObject"
       ]
-      Resource = "arn:aws:s3:::homescout-images/*"
+      Resource = "arn:aws:s3:::snugd-images/*"
     }]
   })
 }
