@@ -6,6 +6,8 @@ import { listTours, getApartmentsBatch } from '@/lib/api'
 import { Tour, TourStage } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
 import TourCard from '@/components/TourCard'
+import DayPlanner from '@/components/DayPlanner'
+import DecisionBrief from '@/components/DecisionBrief'
 import Link from 'next/link'
 
 type Tab = 'today' | 'upcoming' | 'all'
@@ -37,7 +39,7 @@ function isFuture(dateStr: string): boolean {
 }
 
 export default function ToursPage() {
-  const { user, loading: authLoading, signInWithGoogle } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, isPro } = useAuth()
   const [tours, setTours] = useState<Tour[]>([])
   const [apartments, setApartments] = useState<Record<string, Apartment>>({})
   const [loading, setLoading] = useState(true)
@@ -109,6 +111,34 @@ export default function ToursPage() {
   // Ready to decide: 2+ tours in "toured" stage
   const touredTours = useMemo(() => tours.filter((t) => t.stage === 'toured'), [tours])
   const readyToDecide = touredTours.length >= 2
+
+  // Group tours by date for DayPlanner (only dates with 2+ tours)
+  const toursByDate = useMemo(() => {
+    const grouped: Record<string, string[]> = {}
+    for (const tour of tours) {
+      if (tour.scheduled_date) {
+        if (!grouped[tour.scheduled_date]) grouped[tour.scheduled_date] = []
+        grouped[tour.scheduled_date].push(tour.id)
+      }
+    }
+    // Only keep dates with 2+ tours
+    const result: Record<string, string[]> = {}
+    for (const [date, ids] of Object.entries(grouped)) {
+      if (ids.length >= 2) result[date] = ids
+    }
+    return result
+  }, [tours])
+
+  // Get dates that qualify for day planning within a given set of tours
+  const getDayPlanDates = (tourList: Tour[]): string[] => {
+    const dates = new Set<string>()
+    for (const tour of tourList) {
+      if (tour.scheduled_date && toursByDate[tour.scheduled_date]) {
+        dates.add(tour.scheduled_date)
+      }
+    }
+    return Array.from(dates).sort()
+  }
 
   // Auto-select best tab
   useEffect(() => {
@@ -195,12 +225,14 @@ export default function ToursPage() {
             </div>
           )}
 
-          {/* Ready to Decide Banner */}
+          {/* Ready to Decide */}
           {readyToDecide && (
-            <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-3">
-              <p className="text-sm font-medium text-orange-800">
-                You&apos;ve toured {touredTours.length} apartments &mdash; ready to make a decision?
-              </p>
+            <div className="mb-4">
+              <DecisionBrief
+                isPro={isPro}
+                touredTours={touredTours}
+                apartments={apartments}
+              />
             </div>
           )}
 
@@ -240,6 +272,14 @@ export default function ToursPage() {
               <p className="text-center text-gray-500 py-8 text-sm">No tours scheduled for today.</p>
             ) : (
               <div className="space-y-3">
+                {getDayPlanDates(todayTours).map((date) => (
+                  <DayPlanner
+                    key={`plan-${date}`}
+                    date={date}
+                    tourIds={toursByDate[date]}
+                    isPro={isPro}
+                  />
+                ))}
                 {todayTours.map((tour) => (
                   <TourCard key={tour.id} tour={tour} apartment={apartments[tour.apartment_id]} />
                 ))}
@@ -252,6 +292,14 @@ export default function ToursPage() {
               <p className="text-center text-gray-500 py-8 text-sm">No upcoming tours scheduled.</p>
             ) : (
               <div className="space-y-3">
+                {getDayPlanDates(upcomingTours).map((date) => (
+                  <DayPlanner
+                    key={`plan-${date}`}
+                    date={date}
+                    tourIds={toursByDate[date]}
+                    isPro={isPro}
+                  />
+                ))}
                 {upcomingTours.map((tour) => (
                   <TourCard key={tour.id} tour={tour} apartment={apartments[tour.apartment_id]} />
                 ))}
