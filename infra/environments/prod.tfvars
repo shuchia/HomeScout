@@ -1,7 +1,7 @@
 environment          = "prod"
 vpc_cidr             = "10.2.0.0/16"
 enable_redundant_nat = true
-frontend_url         = "https://homescout.app"
+frontend_url         = "https://snugd.ai"
 log_level            = "WARNING"
 
 # RDS

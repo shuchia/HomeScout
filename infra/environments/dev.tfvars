@@ -1,7 +1,7 @@
 environment          = "dev"
 vpc_cidr             = "10.0.0.0/16"
 enable_redundant_nat = false
-frontend_url         = "https://dev.homescout.app"
+frontend_url         = "https://dev.snugd.ai"
 log_level            = "DEBUG"
 
 # RDS

@@ -108,7 +108,7 @@ jobs:
       - name: Smoke test
         run: |
           sleep 10
-          curl -sf https://api-dev.homescout.app/health || exit 1
+          curl -sf https://api-dev.snugd.ai/health || exit 1
           echo "Smoke test passed"
 
   deploy-qa:
@@ -167,7 +167,7 @@ jobs:
       - name: Smoke test
         run: |
           sleep 10
-          curl -sf https://api-qa.homescout.app/health || exit 1
+          curl -sf https://api-qa.snugd.ai/health || exit 1
 
   deploy-prod:
     name: Deploy to Prod
@@ -226,4 +226,4 @@ jobs:
       - name: Smoke test
         run: |
           sleep 10
-          curl -sf https://api.homescout.app/health || exit 1
+          curl -sf https://api.snugd.ai/health || exit 1

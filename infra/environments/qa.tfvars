@@ -1,7 +1,7 @@
 environment          = "qa"
 vpc_cidr             = "10.1.0.0/16"
 enable_redundant_nat = false
-frontend_url         = "https://qa.homescout.app"
+frontend_url         = "https://qa.snugd.ai"
 log_level            = "INFO"
 
 # RDS
