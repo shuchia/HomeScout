@@ -38,6 +38,21 @@ const MOCK_APARTMENT = {
   images: [],
 }
 
+const MOCK_APARTMENT_2 = {
+  id: 'test-002',
+  address: '456 Oak Ave, Pittsburgh, PA 15213',
+  rent: 1800,
+  bedrooms: 2,
+  bathrooms: 1,
+  sqft: 900,
+  property_type: 'Apartment',
+  available_date: '2026-03-01',
+  amenities: ['Parking', 'Gym'],
+  neighborhood: 'Test Neighborhood',
+  description: 'A spacious apartment',
+  images: [],
+}
+
 const MOCK_SUGGESTIONS = {
   suggestions: [
     { tag: 'Great light', sentiment: 'pro', count: 0 },
@@ -79,6 +94,42 @@ async function mockAuth(page: Page) {
 }
 
 /**
+ * Mock Supabase auth with Pro tier.
+ * The AuthContext reads __test_auth_profile from localStorage to set the profile
+ * (and thus isPro) during the E2E test bypass flow.
+ */
+async function mockProAuth(page: Page) {
+  const mockUser = {
+    id: 'test-user-id',
+    email: 'test@example.com',
+    aud: 'authenticated',
+    role: 'authenticated',
+    app_metadata: { provider: 'google' },
+    user_metadata: { name: 'Test User' },
+    created_at: '2024-01-01T00:00:00Z',
+  }
+
+  const mockProfile = {
+    id: 'test-user-id',
+    user_tier: 'pro',
+    subscription_status: 'active',
+  }
+
+  await page.addInitScript(({ user, profile }: { user: string; profile: string }) => {
+    localStorage.setItem('__test_auth_user', user)
+    localStorage.setItem('__test_auth_profile', profile)
+  }, { user: JSON.stringify(mockUser), profile: JSON.stringify(mockProfile) })
+
+  await page.route('**/placeholder.supabase.co/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(null),
+    })
+  })
+}
+
+/**
  * Mock all tour-related API endpoints.
  */
 async function mockTourApis(
@@ -87,11 +138,59 @@ async function mockTourApis(
     tours?: Record<string, unknown>[]
     tour?: Record<string, unknown>
     apartment?: Record<string, unknown>
+    apartments?: Record<string, unknown>[]
   },
 ) {
   const tours = options?.tours ?? [MOCK_TOUR]
   const tour = options?.tour ?? MOCK_TOUR
   const apartment = options?.apartment ?? MOCK_APARTMENT
+  const allApartments = options?.apartments ?? [apartment]
+
+  // --- AI endpoint mocks (registered before single-tour route) ---
+
+  // Inquiry email
+  await page.route('**/api/tours/*/inquiry-email', async (route) => {
+    const emailDraft = 'Subject: Inquiry about 123 Test St\n\nDear Property Manager,\n\nI am interested in the apartment at 123 Test St.'
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        subject: 'Inquiry about 123 Test St',
+        body: 'Dear Property Manager,\n\nI am interested in the apartment at 123 Test St.',
+        inquiry_email_draft: emailDraft,
+      }),
+    })
+  })
+
+  // Day plan
+  await page.route('**/api/tours/day-plan', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tours_ordered: [
+          { apartment_id: 'test-001', address: '123 Test St', suggested_time: '10:00 AM' },
+        ],
+        travel_notes: ['5 min walk between stops'],
+        tips: ['Both apartments are close together'],
+      }),
+    })
+  })
+
+  // Decision brief
+  await page.route('**/api/tours/decision-brief', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        apartments: [
+          { apartment_id: 'test-001', ai_take: 'Great value', strengths: ['Under budget'], concerns: ['Small kitchen'] },
+          { apartment_id: 'test-002', ai_take: 'More space', strengths: ['Larger'], concerns: ['Over budget'] },
+        ],
+        recommendation: { apartment_id: 'test-001', reasoning: 'Best overall value for the price' },
+      }),
+    })
+  })
 
   // List tours
   await page.route('**/api/tours', async (route, request) => {
@@ -118,7 +217,8 @@ async function mockTourApis(
     if (
       url.includes('/notes') ||
       url.includes('/photos') ||
-      url.includes('/tags')
+      url.includes('/tags') ||
+      url.includes('/inquiry-email')
     ) {
       await route.continue()
       return
@@ -209,7 +309,7 @@ async function mockTourApis(
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([apartment]),
+      body: JSON.stringify(allApartments),
     })
   })
 }
@@ -346,5 +446,164 @@ test.describe('Tour Pipeline E2E Tests', () => {
     // On mobile (< md breakpoint) it should be visible.
     const nav = page.locator('nav.fixed').filter({ hasText: 'Tours' })
     await expect(nav).toBeVisible({ timeout: 10000 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// AI Feature E2E Tests (Phase 2)
+// ---------------------------------------------------------------------------
+
+test.describe('Tour AI Features E2E Tests', () => {
+  test('email tab shows upgrade prompt for free users', async ({ page }) => {
+    // Default mockAuth creates a free-tier user (no profile = free)
+    await mockAuth(page)
+    await mockTourApis(page)
+    await page.goto('/tours/tour-001')
+
+    // Click Email tab
+    await page.locator('button:has-text("email")').first().click()
+
+    // Free users should see the UpgradePrompt with "Upgrade" text
+    await expect(
+      page.locator('text=Upgrade').first(),
+    ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('email tab shows generate button for pro users', async ({ page }) => {
+    await mockProAuth(page)
+    await mockTourApis(page)
+    await page.goto('/tours/tour-001')
+
+    // Click Email tab
+    await page.locator('button:has-text("email")').first().click()
+
+    // Pro users should see the "Generate Inquiry Email" button
+    await expect(
+      page.locator('button:has-text("Generate Inquiry Email")'),
+    ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('email generation works for pro users', async ({ page }) => {
+    await mockProAuth(page)
+
+    // Track whether the inquiry-email endpoint has been called so we can
+    // return the updated tour (with draft) on subsequent GET requests.
+    let emailGenerated = false
+    const tourWithDraft = {
+      ...MOCK_TOUR,
+      inquiry_email_draft:
+        'Subject: Inquiry about 123 Test St\n\nDear Property Manager,\n\nI am interested in the apartment at 123 Test St.',
+    }
+
+    // Override the single-tour GET to return draft after generation
+    await page.route('**/api/tours/tour-*', async (route, request) => {
+      const url = request.url()
+      if (
+        url.includes('/notes') ||
+        url.includes('/photos') ||
+        url.includes('/tags') ||
+        url.includes('/inquiry-email')
+      ) {
+        await route.continue()
+        return
+      }
+      if (request.method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ tour: emailGenerated ? tourWithDraft : MOCK_TOUR }),
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
+    // Mock inquiry-email endpoint
+    await page.route('**/api/tours/*/inquiry-email', async (route) => {
+      emailGenerated = true
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          subject: 'Inquiry about 123 Test St',
+          body: 'Dear Property Manager,\n\nI am interested in the apartment at 123 Test St.',
+          inquiry_email_draft: tourWithDraft.inquiry_email_draft,
+        }),
+      })
+    })
+
+    // Mock remaining APIs
+    await page.route('**/api/tours/tags/suggestions', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_SUGGESTIONS),
+      })
+    })
+    await page.route('**/api/apartments/batch', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([MOCK_APARTMENT]),
+      })
+    })
+
+    await page.goto('/tours/tour-001')
+
+    // Click Email tab
+    await page.locator('button:has-text("email")').first().click()
+
+    // Click Generate
+    const generateBtn = page.locator('button:has-text("Generate Inquiry Email")')
+    await expect(generateBtn).toBeVisible({ timeout: 10000 })
+    await generateBtn.click()
+
+    // After generation, the draft should appear with the subject text
+    await expect(
+      page.locator('text=Inquiry about 123 Test St').first(),
+    ).toBeVisible({ timeout: 10000 })
+
+    // Body should also be visible
+    await expect(
+      page.locator('text=Dear Property Manager').first(),
+    ).toBeVisible()
+  })
+
+  test('day planner shows on tours page with multiple same-day tours', async ({ page }) => {
+    await mockProAuth(page)
+
+    // Use today's date so the tours appear in the "Today" tab
+    const today = new Date().toISOString().split('T')[0]
+    const tour1 = { ...MOCK_TOUR, id: 'tour-001', apartment_id: 'test-001', stage: 'scheduled', scheduled_date: today, scheduled_time: '10:00' }
+    const tour2 = { ...MOCK_TOUR, id: 'tour-002', apartment_id: 'test-002', stage: 'scheduled', scheduled_date: today, scheduled_time: '14:00' }
+
+    await mockTourApis(page, {
+      tours: [tour1, tour2],
+      apartments: [MOCK_APARTMENT, MOCK_APARTMENT_2],
+    })
+    await page.goto('/tours')
+
+    // Should show "Plan This Day" button (DayPlanner for pro users)
+    await expect(
+      page.locator('button:has-text("Plan This Day")'),
+    ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('decision brief shows when 2+ tours are in toured stage', async ({ page }) => {
+    await mockProAuth(page)
+
+    const tour1 = { ...MOCK_TOUR, id: 'tour-001', apartment_id: 'test-001', stage: 'toured', tour_rating: 4 }
+    const tour2 = { ...MOCK_TOUR, id: 'tour-002', apartment_id: 'test-002', stage: 'toured', tour_rating: 3 }
+
+    await mockTourApis(page, {
+      tours: [tour1, tour2],
+      apartments: [MOCK_APARTMENT, MOCK_APARTMENT_2],
+    })
+    await page.goto('/tours')
+
+    // Should show "Get AI Recommendation" button (DecisionBrief for pro users)
+    await expect(
+      page.locator('button:has-text("Get AI Recommendation")'),
+    ).toBeVisible({ timeout: 10000 })
   })
 })
