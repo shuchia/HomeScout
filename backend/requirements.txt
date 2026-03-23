@@ -54,7 +54,7 @@ supabase==2.11.0
 stripe==11.4.1
 
 # Email
-resend==2.5.0
+resend==2.5.1
 
 # Development
 pytest==8.0.0
