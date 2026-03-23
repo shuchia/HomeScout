@@ -15,8 +15,10 @@ import {
   removeTourTag,
   getTagSuggestions,
   getApartmentsBatch,
+  generateInquiryEmail,
   ApiError,
 } from '@/lib/api'
+import UpgradePrompt from '@/components/UpgradePrompt'
 import { Tour, TourStage, TourNote } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
 
@@ -339,7 +341,7 @@ export default function TourDetailPage() {
             />
           )}
           {activeTab === 'email' && (
-            <EmailTab tour={tour} isPro={isPro} />
+            <EmailTab tour={tour} isPro={isPro} onTourUpdate={setTour} />
           )}
         </div>
       </main>
@@ -684,13 +686,30 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
 // Email Tab
 // ---------------------------------------------------------------------------
 
-function EmailTab({ tour, isPro }: { tour: Tour; isPro: boolean }) {
+function EmailTab({ tour, isPro, onTourUpdate }: { tour: Tour; isPro: boolean; onTourUpdate: (tour: Tour) => void }) {
   const [copied, setCopied] = useState(false)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
+  // Parse the draft into subject and body
+  const emailDraft = tour.inquiry_email_draft
+  let emailSubject = ''
+  let emailBody = ''
+  if (emailDraft) {
+    const doubleNewline = emailDraft.indexOf('\n\n')
+    if (doubleNewline !== -1) {
+      const firstLine = emailDraft.slice(0, doubleNewline)
+      emailSubject = firstLine.startsWith('Subject: ') ? firstLine.slice(9) : firstLine
+      emailBody = emailDraft.slice(doubleNewline + 2)
+    } else {
+      emailBody = emailDraft
+    }
+  }
 
   async function handleCopy() {
-    if (!tour.inquiry_email_draft) return
+    if (!emailDraft) return
     try {
-      await navigator.clipboard.writeText(tour.inquiry_email_draft)
+      await navigator.clipboard.writeText(emailDraft)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -698,28 +717,93 @@ function EmailTab({ tour, isPro }: { tour: Tour; isPro: boolean }) {
     }
   }
 
-  if (tour.inquiry_email_draft) {
+  async function handleGenerate() {
+    setEmailLoading(true)
+    setEmailError(null)
+    try {
+      const result = await generateInquiryEmail(tour.id)
+      // Refresh tour data to pick up saved draft
+      const res = await getTour(tour.id)
+      onTourUpdate(res.tour)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setEmailError(err.message)
+      } else {
+        setEmailError('Failed to generate email. Please try again.')
+      }
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
+  if (!isPro) {
+    return (
+      <div className="py-8">
+        <UpgradePrompt feature="AI-generated inquiry emails" />
+      </div>
+    )
+  }
+
+  if (emailDraft) {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900">Inquiry Email Draft</h3>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4">
+          {emailSubject && (
+            <p className="font-medium text-gray-900">{emailSubject}</p>
+          )}
+          <div className={`text-gray-700 whitespace-pre-wrap text-sm leading-relaxed ${emailSubject ? 'mt-3' : ''}`}>
+            {emailBody}
+          </div>
+        </div>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={handleCopy}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
           >
-            {copied ? 'Copied!' : 'Copy'}
+            {copied ? (
+              <>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy
+              </>
+            )}
           </button>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
-            {tour.inquiry_email_draft}
-          </p>
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={emailLoading}
+            className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {emailLoading ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Regenerating...
+              </>
+            ) : (
+              'Regenerate'
+            )}
+          </button>
         </div>
       </div>
     )
   }
 
+  // No draft yet - show generate button
   return (
     <div className="flex flex-col items-center justify-center py-12">
       <svg className="h-12 w-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -729,17 +813,29 @@ function EmailTab({ tour, isPro }: { tour: Tour; isPro: boolean }) {
       <p className="text-sm text-gray-500 mb-4 text-center">
         Generate a personalized inquiry email for this listing.
       </p>
+      {emailError && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+          {emailError}
+        </div>
+      )}
       <button
         type="button"
-        disabled
-        className="relative bg-gray-100 text-gray-400 px-5 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed"
+        onClick={handleGenerate}
+        disabled={emailLoading}
+        className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
-        Generate Inquiry Email
-        <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-          PRO
-        </span>
+        {emailLoading ? (
+          <>
+            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Generating...
+          </>
+        ) : (
+          'Generate Inquiry Email'
+        )}
       </button>
-      <p className="text-xs text-gray-400 mt-3">AI email generation coming in Phase 2</p>
     </div>
   )
 }

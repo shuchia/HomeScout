@@ -1,6 +1,7 @@
 """Tests for tour pipeline CRUD endpoints."""
 from io import BytesIO
-from unittest.mock import patch, MagicMock, ANY
+from unittest.mock import patch, MagicMock, ANY, AsyncMock
+
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user, UserContext
@@ -728,5 +729,390 @@ class TestTags:
             assert tags_by_name["Small kitchen"]["count"] == 0
             # Total: 1 user tag + 9 remaining defaults = 10
             assert len(suggestions) == 10
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Inquiry email tests ─────────────────────────────────────────────
+
+SAMPLE_APARTMENT = {
+    "id": "apt-001",
+    "address": "123 Main St, Philadelphia, PA 19103",
+    "rent": 2200,
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "sqft": 0,
+    "property_type": "Apartment",
+    "available_date": "2026-04-01",
+    "amenities": ["Laundry", "Gym"],
+    "neighborhood": "Center City",
+    "description": "Bright 2BR apartment in Center City.",
+    "images": [],
+}
+
+
+class TestInquiryEmail:
+    def test_requires_auth(self):
+        """POST /api/tours/{id}/inquiry-email without auth returns 401."""
+        response = client.post("/api/tours/tour-001/inquiry-email")
+        assert response.status_code == 401
+
+    def test_generates_email(self):
+        """POST /api/tours/{id}/inquiry-email calls Claude and returns email."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    # For the select (fetch tour)
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_TOUR]
+                    )
+                    # For the update (save draft)
+                    mock_table.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{**SAMPLE_TOUR, "inquiry_email_draft": "Subject: Hi\n\nBody"}]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            mock_claude_result = {
+                "subject": "Inquiry About 2BR at 123 Main St",
+                "body": "Dear Property Manager,\n\nI am writing to inquire about the 2-bedroom apartment...",
+            }
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.database.is_database_enabled", return_value=False), \
+                 patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT]), \
+                 patch("app.services.claude_service.ClaudeService.generate_inquiry_email", return_value=mock_claude_result):
+                response = client.post(
+                    "/api/tours/tour-001/inquiry-email",
+                    json={"name": "Jane Doe", "budget": 2500},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["subject"] == "Inquiry About 2BR at 123 Main St"
+            assert "inquire" in data["body"].lower()
+            assert "inquiry_email_draft" in data
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_tour_not_found_returns_404(self):
+        """POST /api/tours/{id}/inquiry-email for non-existent tour returns 404."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+            mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[]
+            )
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"):
+                response = client.post(
+                    "/api/tours/nonexistent/inquiry-email",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 404
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Day Plan tests ─────────────────────────────────────────────────
+
+SAMPLE_TOUR_SCHEDULED = {
+    **SAMPLE_TOUR,
+    "stage": "scheduled",
+    "scheduled_date": "2026-03-25",
+    "scheduled_time": "10:00:00",
+}
+
+SAMPLE_TOUR_SCHEDULED_2 = {
+    **SAMPLE_TOUR,
+    "id": "tour-002",
+    "apartment_id": "apt-002",
+    "stage": "scheduled",
+    "scheduled_date": "2026-03-25",
+    "scheduled_time": "14:00:00",
+}
+
+
+class TestDayPlan:
+    def test_requires_auth(self):
+        """POST /api/tours/day-plan without auth returns 401."""
+        response = client.post(
+            "/api/tours/day-plan",
+            json={"date": "2026-03-25", "tour_ids": ["tour-001", "tour-002"]},
+        )
+        assert response.status_code == 401
+
+    def test_generates_day_plan(self):
+        """POST /api/tours/day-plan calls Claude and returns plan."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    # in_ query for fetching tours by IDs
+                    mock_table.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_TOUR_SCHEDULED, SAMPLE_TOUR_SCHEDULED_2]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            mock_claude_result = {
+                "tours_ordered": [
+                    {"apartment_id": "apt-001", "address": "123 Main St", "suggested_time": "10:00", "order": 1},
+                    {"apartment_id": "apt-002", "address": "456 Oak Ave", "suggested_time": "11:30", "order": 2},
+                ],
+                "travel_notes": ["15 min drive between stops"],
+                "tips": ["These two are close — book back-to-back"],
+            }
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.database.is_database_enabled", return_value=False), \
+                 patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT, {**SAMPLE_APARTMENT, "id": "apt-002", "address": "456 Oak Ave"}]), \
+                 patch("app.services.claude_service.ClaudeService.generate_day_plan", return_value=mock_claude_result):
+                response = client.post(
+                    "/api/tours/day-plan",
+                    json={"date": "2026-03-25", "tour_ids": ["tour-001", "tour-002"]},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["tours_ordered"]) == 2
+            assert len(data["travel_notes"]) >= 1
+            assert len(data["tips"]) >= 1
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Enhance Note tests ─────────────────────────────────────────────
+
+
+class TestEnhanceNote:
+    def test_requires_auth(self):
+        """POST /api/tours/{id}/enhance-note without auth returns 401."""
+        response = client.post(
+            "/api/tours/tour-001/enhance-note",
+            json={"note_id": "note-001"},
+        )
+        assert response.status_code == 401
+
+    def test_enhances_note(self):
+        """POST /api/tours/{id}/enhance-note calls Claude and returns enhanced note."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    # _verify_tour_ownership: select().eq().eq().execute()
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_TOUR]
+                    )
+                elif table_name == "tour_notes":
+                    # Fetch note by id + tour_pipeline_id
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "note-001", "content": "uh kitchen was like really nice, kinda small tho"}]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            mock_claude_result = {
+                "enhanced_text": "The kitchen was well-appointed but compact in size.",
+                "suggested_tags": [
+                    {"tag": "Nice kitchen", "sentiment": "pro"},
+                    {"tag": "Small kitchen", "sentiment": "con"},
+                ],
+            }
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.database.is_database_enabled", return_value=False), \
+                 patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT]), \
+                 patch("app.services.claude_service.ClaudeService.enhance_note", return_value=mock_claude_result):
+                response = client.post(
+                    "/api/tours/tour-001/enhance-note",
+                    json={"note_id": "note-001"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "enhanced_text" in data
+            assert len(data["suggested_tags"]) == 2
+            assert data["suggested_tags"][0]["sentiment"] in ("pro", "con")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Decision Brief tests ──────────────────────────────────────────
+
+SAMPLE_TOUR_TOURED = {
+    **SAMPLE_TOUR,
+    "stage": "toured",
+    "tour_rating": 4,
+    "toured_at": "2026-03-20T12:00:00+00:00",
+}
+
+SAMPLE_TOUR_TOURED_2 = {
+    **SAMPLE_TOUR,
+    "id": "tour-002",
+    "apartment_id": "apt-002",
+    "stage": "toured",
+    "tour_rating": 3,
+    "toured_at": "2026-03-21T12:00:00+00:00",
+}
+
+
+class TestDecisionBrief:
+    def test_requires_auth(self):
+        """POST /api/tours/decision-brief without auth returns 401."""
+        response = client.post("/api/tours/decision-brief")
+        assert response.status_code == 401
+
+    def test_generates_brief(self):
+        """POST /api/tours/decision-brief calls Claude and returns brief."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    # Fetch toured/deciding tours
+                    mock_table.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_TOUR_TOURED, SAMPLE_TOUR_TOURED_2]
+                    )
+                elif table_name == "tour_notes":
+                    mock_table.select.return_value.in_.return_value.execute.return_value = MagicMock(
+                        data=[{"tour_pipeline_id": "tour-001", "content": "Great light"}]
+                    )
+                elif table_name == "tour_tags":
+                    mock_table.select.return_value.in_.return_value.execute.return_value = MagicMock(
+                        data=[{"tour_pipeline_id": "tour-001", "tag": "Spacious", "sentiment": "pro"}]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            mock_claude_result = {
+                "apartments": [
+                    {
+                        "apartment_id": "apt-001",
+                        "ai_take": "Strong option with great natural light and spacious layout.",
+                        "strengths": ["Great light", "Spacious"],
+                        "concerns": ["Higher rent"],
+                    },
+                    {
+                        "apartment_id": "apt-002",
+                        "ai_take": "Budget-friendly but smaller.",
+                        "strengths": ["Lower rent"],
+                        "concerns": ["Less space"],
+                    },
+                ],
+                "recommendation": {
+                    "apartment_id": "apt-001",
+                    "reasoning": "Better overall value with superior space and light.",
+                },
+            }
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.database.is_database_enabled", return_value=False), \
+                 patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT, {**SAMPLE_APARTMENT, "id": "apt-002", "address": "456 Oak Ave"}]), \
+                 patch("app.services.claude_service.ClaudeService.generate_decision_brief", return_value=mock_claude_result):
+                response = client.post(
+                    "/api/tours/decision-brief",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["apartments"]) == 2
+            assert data["recommendation"]["apartment_id"] == "apt-001"
+            assert "reasoning" in data["recommendation"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Pro tier gating tests ──────────────────────────────────────────
+
+
+class TestProTierGating:
+    """AI tour endpoints require Pro tier; free users get 403."""
+
+    def test_inquiry_email_free_tier_returns_403(self):
+        """POST /api/tours/{id}/inquiry-email as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/tour-001/inquiry-email",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_day_plan_free_tier_returns_403(self):
+        """POST /api/tours/day-plan as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/day-plan",
+                    json={"date": "2026-03-25", "tour_ids": ["tour-001", "tour-002"]},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_enhance_note_free_tier_returns_403(self):
+        """POST /api/tours/{id}/enhance-note as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/tour-001/enhance-note",
+                    json={"note_id": "note-001"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_decision_brief_free_tier_returns_403(self):
+        """POST /api/tours/decision-brief as free user returns 403."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            with patch("app.routers.tours.supabase_admin", MagicMock()), \
+                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+                response = client.post(
+                    "/api/tours/decision-brief",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            assert response.status_code == 403
+            assert "Pro" in response.json()["detail"]
         finally:
             app.dependency_overrides.pop(get_current_user, None)

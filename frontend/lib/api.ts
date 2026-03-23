@@ -412,3 +412,95 @@ export async function removeTourTag(tourId: string, tagId: string): Promise<void
   })
   if (!response.ok) throw new ApiError('Failed to remove tag', response.status)
 }
+
+/**
+ * Generate an AI inquiry email draft for a tour's apartment
+ * Calls POST /api/tours/:id/inquiry-email endpoint
+ *
+ * @param tourId - The tour ID to generate an email for
+ * @param context - Optional user context (name, move_in_date, budget, preferences)
+ * @returns Promise with subject and body
+ * @throws ApiError if request fails
+ */
+export async function generateInquiryEmail(
+  tourId: string,
+  context?: { name?: string; move_in_date?: string; budget?: number; preferences?: string }
+): Promise<{ subject: string; body: string; inquiry_email_draft: string }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/inquiry-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: context ? JSON.stringify(context) : undefined,
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new ApiError(data.detail || 'Failed to generate email', response.status)
+  }
+  return response.json()
+}
+
+/**
+ * Generate an AI-optimized day plan for multiple tours
+ * Calls POST /api/tours/day-plan endpoint
+ *
+ * @param date - The date for the tour day (YYYY-MM-DD)
+ * @param tourIds - Array of tour IDs to include in the plan
+ * @returns Promise with ordered tours, travel notes, and tips
+ * @throws ApiError if request fails
+ */
+export async function generateDayPlan(
+  date: string,
+  tourIds: string[]
+): Promise<{ tours_ordered: Array<Record<string, unknown>>; travel_notes: string[]; tips: string[] }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/day-plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ date, tour_ids: tourIds }),
+  })
+  if (!response.ok) throw new ApiError('Failed to generate day plan', response.status)
+  return response.json()
+}
+
+/**
+ * Enhance a tour note with AI — clean up text and suggest tags
+ * Calls POST /api/tours/:id/enhance-note endpoint
+ *
+ * @param tourId - The tour ID the note belongs to
+ * @param noteId - The note ID to enhance
+ * @returns Promise with enhanced text and suggested tags
+ * @throws ApiError if request fails
+ */
+export async function enhanceNote(
+  tourId: string,
+  noteId: string
+): Promise<{ enhanced_text: string; suggested_tags: Array<{ tag: string; sentiment: string }> }> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/enhance-note`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ note_id: noteId }),
+  })
+  if (!response.ok) throw new ApiError('Failed to enhance note', response.status)
+  return response.json()
+}
+
+/**
+ * Generate an AI decision brief for all toured apartments
+ * Calls POST /api/tours/decision-brief endpoint
+ *
+ * @returns Promise with apartment analyses and recommendation
+ * @throws ApiError if request fails
+ */
+export async function generateDecisionBrief(): Promise<{
+  apartments: Array<{ apartment_id: string; ai_take: string; strengths: string[]; concerns: string[] }>
+  recommendation: { apartment_id: string; reasoning: string }
+}> {
+  const authHeaders = getAuthHeaders()
+  const response = await fetch(`${API_URL}/api/tours/decision-brief`, {
+    method: 'POST',
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new ApiError('Failed to generate decision brief', response.status)
+  return response.json()
+}

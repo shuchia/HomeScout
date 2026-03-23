@@ -55,6 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (testUser) {
         try {
           setUser(JSON.parse(testUser) as User)
+          // Also check for a test profile (e.g., to set user_tier for pro tests)
+          const testProfile = typeof window !== 'undefined'
+            ? localStorage.getItem('__test_auth_profile')
+            : null
+          if (testProfile) {
+            try {
+              setProfile(JSON.parse(testProfile) as Profile)
+            } catch { /* ignore parse errors */ }
+          }
           setLoading(false)
           return
         } catch { /* fall through */ }

@@ -275,6 +275,288 @@ Return valid JSON only, no additional text."""
             print(f"Error calling Claude API for comparison: {str(e)}")
             raise
 
+    def generate_inquiry_email(
+        self,
+        apartment: dict,
+        user_context: dict,
+    ) -> dict:
+        """Generate a personalized inquiry email for an apartment.
+
+        Args:
+            apartment: Apartment listing data (address, rent, beds, baths, amenities, etc.)
+            user_context: User info (name, move_in_date, budget, preferences)
+
+        Returns:
+            {"subject": "...", "body": "..."}
+        """
+        apartment_json = json.dumps(apartment, indent=2)
+        user_json = json.dumps(user_context, indent=2)
+
+        system_prompt = (
+            "You are a helpful assistant writing a polite, professional inquiry "
+            "email about an apartment listing. The email should be warm but "
+            "concise — landlords receive many inquiries."
+        )
+
+        user_prompt = f"""Write an inquiry email for the following apartment listing.
+
+## Apartment Details
+{apartment_json}
+
+## About the Prospective Tenant
+{user_json}
+
+Instructions:
+- Write a subject line and email body.
+- Address the landlord/property manager politely.
+- Mention the user's name, desired move-in date, and budget if provided.
+- Reference specific apartment details (address, rent, beds/baths, amenities) to show genuine interest.
+- Ask smart questions based on what is MISSING from the listing:
+  - No sqft listed? Ask about the apartment size.
+  - No pet policy mentioned? Ask about pets if the user mentioned pets in preferences.
+  - No parking info? Ask about parking if relevant.
+  - No utilities info? Ask what's included.
+  - No lease term info? Ask about lease length and terms.
+- Keep it to 150-250 words for the body.
+- Be professional but personable.
+
+Return ONLY a JSON object with "subject" and "body" fields. No additional text."""
+
+        try:
+            message = self.client.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=1024,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+
+            response_text = message.content[0].text
+            result = self._parse_dict_response(response_text)
+            return result
+
+        except Exception as e:
+            print(f"Error calling Claude API for inquiry email: {str(e)}")
+            raise
+
+    def _parse_dict_response(self, response_text: str) -> dict:
+        """Parse a JSON dict from Claude's response, handling markdown code blocks."""
+        if "```json" in response_text:
+            json_start = response_text.find("```json") + 7
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.find("```") + 3
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+
+        result = json.loads(response_text)
+
+        if not isinstance(result, dict):
+            raise ValueError("Response is not a JSON object")
+
+        return result
+
+    def generate_day_plan(
+        self,
+        tours: list[dict],
+        user_home_address: str | None = None,
+    ) -> dict:
+        """Optimize tour order for a day with multiple scheduled tours.
+
+        Args:
+            tours: List of tours with apartment address, scheduled_date, scheduled_time.
+            user_home_address: Optional starting address for the user.
+
+        Returns:
+            {"tours_ordered": [...], "travel_notes": [...], "tips": [...]}
+        """
+        tours_json = json.dumps(tours, indent=2)
+
+        system_prompt = (
+            "You are a tour day planning assistant. Optimize the order of "
+            "apartment tours for efficiency, considering location proximity "
+            "and travel time."
+        )
+
+        home_section = ""
+        if user_home_address:
+            home_section = f"\n## Starting Address\n{user_home_address}\n"
+
+        user_prompt = f"""Plan the most efficient tour day for the following apartment visits.
+{home_section}
+## Scheduled Tours
+{tours_json}
+
+Instructions:
+- Suggest the optimal visiting order to minimize travel time.
+- Estimate travel times between stops.
+- Provide practical tips (e.g., "these two are 3 blocks apart — book back-to-back").
+- Keep tips concise and actionable.
+
+Return ONLY a JSON object with this structure:
+{{
+  "tours_ordered": [
+    {{"apartment_id": "...", "address": "...", "suggested_time": "HH:MM", "order": 1}}
+  ],
+  "travel_notes": ["Note about travel between stop 1 and 2", ...],
+  "tips": ["Practical tip 1", ...]
+}}
+
+Return valid JSON only, no additional text."""
+
+        try:
+            message = self.client.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+
+            response_text = message.content[0].text
+            return self._parse_dict_response(response_text)
+
+        except Exception as e:
+            print(f"Error calling Claude API for day plan: {str(e)}")
+            raise
+
+    def enhance_note(
+        self,
+        raw_note: str,
+        apartment_context: dict,
+    ) -> dict:
+        """Clean up a tour note — remove filler, structure it, suggest tags.
+
+        Args:
+            raw_note: The raw note text entered by the user.
+            apartment_context: Apartment details for context.
+
+        Returns:
+            {"enhanced_text": "...", "suggested_tags": [{"tag": "...", "sentiment": "pro"|"con"}]}
+        """
+        apartment_json = json.dumps(apartment_context, indent=2)
+
+        system_prompt = (
+            "You are cleaning up rough apartment tour notes. The user jotted "
+            "these down quickly during or after a tour. Remove filler words, "
+            "fix grammar, structure into clear observations. Also suggest "
+            "pro/con tags."
+        )
+
+        user_prompt = f"""Clean up and enhance the following tour note.
+
+## Raw Note
+{raw_note}
+
+## Apartment Context
+{apartment_json}
+
+Instructions:
+- Remove filler words and fix grammar.
+- Structure into clear, concise observations.
+- Suggest pro/con tags based on the content.
+- Keep the enhanced text faithful to the original observations.
+
+Return ONLY a JSON object with this structure:
+{{
+  "enhanced_text": "Cleaned up and structured note text...",
+  "suggested_tags": [
+    {{"tag": "Tag name", "sentiment": "pro"}},
+    {{"tag": "Tag name", "sentiment": "con"}}
+  ]
+}}
+
+Return valid JSON only, no additional text."""
+
+        try:
+            message = self.client.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=1024,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+
+            response_text = message.content[0].text
+            return self._parse_dict_response(response_text)
+
+        except Exception as e:
+            print(f"Error calling Claude API for note enhancement: {str(e)}")
+            raise
+
+    def generate_decision_brief(
+        self,
+        toured_apartments: list[dict],
+        user_preferences: str | None = None,
+    ) -> dict:
+        """Synthesize all toured apartments into a decision brief.
+
+        Args:
+            toured_apartments: List of apartments with tour data (rating, tags, notes).
+            user_preferences: Optional user preferences string.
+
+        Returns:
+            {
+                "apartments": [{"apartment_id": "...", "ai_take": "...", "strengths": [...], "concerns": [...]}],
+                "recommendation": {"apartment_id": "...", "reasoning": "..."}
+            }
+        """
+        apartments_json = json.dumps(toured_apartments, indent=2)
+
+        system_prompt = (
+            "You are helping a renter make a final decision. They've toured "
+            "multiple apartments and captured ratings, notes, and pro/con "
+            "tags. Synthesize everything into a clear, actionable "
+            "recommendation. Respect the user's own ratings — don't override "
+            "their impressions, but add context."
+        )
+
+        preferences_section = ""
+        if user_preferences:
+            preferences_section = f"\n## User Preferences\n{user_preferences}\n"
+
+        user_prompt = f"""Generate a decision brief for these toured apartments.
+{preferences_section}
+## Toured Apartments
+{apartments_json}
+
+Instructions:
+- For each apartment, provide an AI take (1-2 sentence summary), strengths, and concerns.
+- Weight the user's own ratings and tags heavily in your analysis.
+- Pick a recommended apartment with clear reasoning.
+- Be practical and actionable.
+
+Return ONLY a JSON object with this structure:
+{{
+  "apartments": [
+    {{
+      "apartment_id": "...",
+      "ai_take": "1-2 sentence summary of this option",
+      "strengths": ["strength 1", "strength 2"],
+      "concerns": ["concern 1", "concern 2"]
+    }}
+  ],
+  "recommendation": {{
+    "apartment_id": "...",
+    "reasoning": "Clear explanation of why this is the best choice"
+  }}
+}}
+
+Return valid JSON only, no additional text."""
+
+        try:
+            message = self.client.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+
+            response_text = message.content[0].text
+            return self._parse_dict_response(response_text)
+
+        except Exception as e:
+            print(f"Error calling Claude API for decision brief: {str(e)}")
+            raise
+
     def _parse_comparison_response(self, response_text: str) -> Dict:
         """Parse the comparison analysis JSON from Claude's response."""
         if "```json" in response_text:
