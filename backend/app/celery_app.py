@@ -23,6 +23,7 @@ celery_app = Celery(
         "app.tasks.maintenance_tasks",
         "app.tasks.dispatcher",
         "app.tasks.alert_tasks",
+        "app.tasks.transcription_tasks",
     ]
 )
 
