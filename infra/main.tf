@@ -2,10 +2,10 @@ terraform {
   required_version = ">= 1.5"
 
   backend "s3" {
-    bucket         = "snugd-terraform-state"
+    bucket         = "homescout-terraform-state"
     key            = "infra/terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "snugd-terraform-locks"
+    dynamodb_table = "homescout-terraform-locks"
     encrypt        = true
   }
 
