@@ -80,14 +80,18 @@ jobs:
 
       - name: Run Alembic migrations
         run: |
-          aws ecs run-task \
+          SUBNETS='${{ secrets.DEV_PRIVATE_SUBNETS }}'
+          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
+          TASK_ARN=$(aws ecs run-task \
             --cluster snugd-dev \
             --task-definition snugd-dev-api \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=${{ secrets.DEV_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.DEV_ECS_SG }}],assignPublicIp=DISABLED}" \
+            --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${{ secrets.DEV_ECS_SG }}\"],\"assignPublicIp\":\"DISABLED\"}}" \
             --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
             --query 'tasks[0].taskArn' \
-            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster snugd-dev --tasks {}
+            --output text)
+          echo "Waiting for migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster snugd-dev --tasks "$TASK_ARN"
 
       - name: Deploy ECS services
         run: |
@@ -142,14 +146,18 @@ jobs:
 
       - name: Run Alembic migrations
         run: |
-          aws ecs run-task \
+          SUBNETS='${{ secrets.QA_PRIVATE_SUBNETS }}'
+          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
+          TASK_ARN=$(aws ecs run-task \
             --cluster snugd-qa \
             --task-definition snugd-qa-api \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=${{ secrets.QA_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.QA_ECS_SG }}],assignPublicIp=DISABLED}" \
+            --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${{ secrets.QA_ECS_SG }}\"],\"assignPublicIp\":\"DISABLED\"}}" \
             --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
             --query 'tasks[0].taskArn' \
-            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster snugd-qa --tasks {}
+            --output text)
+          echo "Waiting for migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster snugd-qa --tasks "$TASK_ARN"
 
       - name: Deploy ECS services
         run: |
@@ -201,14 +209,18 @@ jobs:
 
       - name: Run Alembic migrations
         run: |
-          aws ecs run-task \
+          SUBNETS='${{ secrets.PROD_PRIVATE_SUBNETS }}'
+          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
+          TASK_ARN=$(aws ecs run-task \
             --cluster snugd-prod \
             --task-definition snugd-prod-api \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=${{ secrets.PROD_PRIVATE_SUBNETS }},securityGroups=[${{ secrets.PROD_ECS_SG }}],assignPublicIp=DISABLED}" \
+            --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${{ secrets.PROD_ECS_SG }}\"],\"assignPublicIp\":\"DISABLED\"}}" \
             --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
             --query 'tasks[0].taskArn' \
-            --output text | xargs -I {} aws ecs wait tasks-stopped --cluster snugd-prod --tasks {}
+            --output text)
+          echo "Waiting for migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster snugd-prod --tasks "$TASK_ARN"
 
       - name: Deploy ECS services
         run: |
