@@ -16,7 +16,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "main" {
   identifier     = "snugd-${var.environment}"
   engine         = "postgres"
-  engine_version = "16.4"
+  engine_version = "16.6"
   instance_class = var.instance_class
 
   allocated_storage     = var.allocated_storage
