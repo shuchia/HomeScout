@@ -41,6 +41,7 @@ locals {
     "STRIPE_PRICE_ID",
     "APIFY_API_TOKEN",
     "RESEND_API_KEY",
+    "SCRAPINGBEE_API_KEY",
   ]
 
   secrets = [
