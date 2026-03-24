@@ -5,12 +5,26 @@ import { SearchParams, ApartmentWithScore } from '@/types/apartment';
 import { searchApartments, ApiError } from '@/lib/api';
 import { useComparison } from '@/hooks/useComparison';
 
-// Available cities — matches scraped data in the database
+// Available cities — matches market_configs in the database
 const AVAILABLE_CITIES = [
+  { value: 'Arlington, VA', label: 'Arlington, VA' },
+  { value: 'Baltimore, MD', label: 'Baltimore, MD' },
   { value: 'Boston, MA', label: 'Boston, MA' },
   { value: 'Bryn Mawr, PA', label: 'Bryn Mawr, PA' },
+  { value: 'Cambridge, MA', label: 'Cambridge, MA' },
+  { value: 'Charlotte, NC', label: 'Charlotte, NC' },
+  { value: 'Hartford, CT', label: 'Hartford, CT' },
+  { value: 'Hoboken, NJ', label: 'Hoboken, NJ' },
+  { value: 'Jersey City, NJ', label: 'Jersey City, NJ' },
+  { value: 'New Haven, CT', label: 'New Haven, CT' },
   { value: 'New York, NY', label: 'New York, NY' },
+  { value: 'Newark, NJ', label: 'Newark, NJ' },
   { value: 'Philadelphia, PA', label: 'Philadelphia, PA' },
+  { value: 'Pittsburgh, PA', label: 'Pittsburgh, PA' },
+  { value: 'Providence, RI', label: 'Providence, RI' },
+  { value: 'Raleigh, NC', label: 'Raleigh, NC' },
+  { value: 'Richmond, VA', label: 'Richmond, VA' },
+  { value: 'Stamford, CT', label: 'Stamford, CT' },
   { value: 'Washington, DC', label: 'Washington, DC' },
 ];
 
@@ -41,7 +55,7 @@ interface SearchFormProps {
 
 export default function SearchForm({ onResults, onLoading, onError, onSearchMeta }: SearchFormProps) {
   // Form state
-  const [city, setCity] = useState('Philadelphia, PA');
+  const [city, setCity] = useState('Arlington, VA');
   const [budget, setBudget] = useState(2000);
   const [bedrooms, setBedrooms] = useState(1);
   const [bathrooms, setBathrooms] = useState(1);
