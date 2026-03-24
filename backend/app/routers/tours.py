@@ -748,6 +748,65 @@ async def enhance_note(
         raise HTTPException(status_code=500, detail="Failed to enhance note")
 
 
+# ── Voice note endpoint (must be before /notes POST) ────────────────
+
+ALLOWED_AUDIO_TYPES = {"audio/webm", "audio/mp4", "audio/m4a", "audio/mpeg", "audio/wav", "audio/ogg"}
+MAX_AUDIO_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("/api/tours/{tour_id}/notes/voice", status_code=202)
+async def create_voice_note(
+    tour_id: str,
+    file: UploadFile = File(...),
+    user: UserContext = Depends(get_current_user),
+):
+    """Upload audio for voice note. Transcription happens async via Celery."""
+    _ensure_supabase()
+
+    try:
+        _verify_tour_ownership(tour_id, user.user_id)
+
+        audio_data = await file.read()
+        content_type = file.content_type or "audio/webm"
+
+        if len(audio_data) > MAX_AUDIO_SIZE:
+            raise HTTPException(status_code=400, detail="Audio file too large (max 5 MB)")
+        if content_type not in ALLOWED_AUDIO_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unsupported audio type: {content_type}")
+
+        # Upload to S3
+        import uuid
+        ext = content_type.split("/")[-1]
+        file_id = str(uuid.uuid4())
+        s3_key = f"tours/{user.user_id}/{tour_id}/voice/{file_id}.{ext}"
+
+        from app.services.storage.photo_service import _get_s3_client, S3_BUCKET
+        s3 = _get_s3_client()
+        s3.put_object(Bucket=S3_BUCKET, Key=s3_key, Body=audio_data, ContentType=content_type)
+
+        # Create note with pending status
+        row = {
+            "tour_pipeline_id": tour_id,
+            "user_id": user.user_id,
+            "source": "voice",
+            "audio_s3_key": s3_key,
+            "transcription_status": "pending",
+        }
+        result = supabase_admin.table("tour_notes").insert(row).execute()
+        note = result.data[0] if result.data else row
+
+        # Dispatch Celery transcription task
+        from app.tasks.transcription_tasks import transcribe_voice_note
+        transcribe_voice_note.delay(note["id"], s3_key, user.user_id, tour_id)
+
+        return {"note": note}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create voice note: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create voice note")
+
+
 # ── Notes sub-resource endpoints ─────────────────────────────────────
 
 

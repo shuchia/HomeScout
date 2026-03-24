@@ -440,6 +440,28 @@ export async function generateInquiryEmail(
 }
 
 /**
+ * Upload a voice note audio recording for a tour
+ * Calls POST /api/tours/:id/notes/voice endpoint
+ *
+ * @param tourId - The tour ID to attach the voice note to
+ * @param audioBlob - The recorded audio Blob
+ * @returns Promise with the created note
+ * @throws ApiError if request fails
+ */
+export async function uploadVoiceNote(tourId: string, audioBlob: Blob): Promise<{ note: TourNote }> {
+  const authHeaders = getAuthHeaders()
+  const formData = new FormData()
+  formData.append('file', audioBlob, 'voice-note.webm')
+  const response = await fetch(`${API_URL}/api/tours/${tourId}/notes/voice`, {
+    method: 'POST',
+    headers: authHeaders,  // No Content-Type — browser sets multipart boundary
+    body: formData,
+  })
+  if (!response.ok) throw new ApiError('Failed to upload voice note', response.status)
+  return response.json()
+}
+
+/**
  * Generate an AI-optimized day plan for multiple tours
  * Calls POST /api/tours/day-plan endpoint
  *

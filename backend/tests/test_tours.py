@@ -1116,3 +1116,98 @@ class TestProTierGating:
             assert "Pro" in response.json()["detail"]
         finally:
             app.dependency_overrides.pop(get_current_user, None)
+
+
+# ── Voice upload tests ──────────────────────────────────────────────
+
+
+SAMPLE_VOICE_NOTE = {
+    "id": "vnote-001",
+    "tour_pipeline_id": "tour-001",
+    "user_id": "user-123",
+    "source": "voice",
+    "audio_s3_key": "tours/user-123/tour-001/voice/abc.webm",
+    "transcription_status": "pending",
+}
+
+
+class TestVoiceUpload:
+    def test_voice_upload_requires_auth(self):
+        """POST /api/tours/{id}/notes/voice without auth returns 401."""
+        response = client.post(
+            "/api/tours/tour-001/notes/voice",
+            files={"file": ("audio.webm", b"fake-audio", "audio/webm")},
+        )
+        assert response.status_code == 401
+
+    def test_voice_upload_creates_pending_note(self):
+        """POST /api/tours/{id}/notes/voice uploads to S3, creates pending note, dispatches Celery task."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif table_name == "tour_notes":
+                    mock_table.insert.return_value.execute.return_value = MagicMock(
+                        data=[SAMPLE_VOICE_NOTE]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            mock_s3 = MagicMock()
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.services.storage.photo_service._get_s3_client", return_value=mock_s3), \
+                 patch("app.tasks.transcription_tasks.transcribe_voice_note") as mock_task:
+                mock_task.delay = MagicMock()
+
+                response = client.post(
+                    "/api/tours/tour-001/notes/voice",
+                    files={"file": ("audio.webm", b"fake-audio-data", "audio/webm")},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 202
+            note = response.json()["note"]
+            assert note["source"] == "voice"
+            assert note["transcription_status"] == "pending"
+            mock_s3.put_object.assert_called_once()
+            mock_task.delay.assert_called_once()
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_voice_upload_rejects_oversized(self):
+        """POST /api/tours/{id}/notes/voice rejects files > 5 MB."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+
+            def table_router(table_name):
+                mock_table = MagicMock()
+                if table_name == "tour_pipeline":
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                return mock_table
+
+            mock_sb.table.side_effect = table_router
+
+            oversized_audio = b"x" * (6 * 1024 * 1024)  # 6 MB
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.post(
+                    "/api/tours/tour-001/notes/voice",
+                    files={"file": ("audio.webm", oversized_audio, "audio/webm")},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 400
+            assert "too large" in response.json()["detail"].lower()
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)

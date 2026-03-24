@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -18,6 +18,7 @@ import {
   generateInquiryEmail,
   ApiError,
 } from '@/lib/api'
+import VoiceCapture from '@/components/VoiceCapture'
 import UpgradePrompt from '@/components/UpgradePrompt'
 import { Tour, TourStage, TourNote } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
@@ -122,6 +123,32 @@ export default function TourDetailPage() {
   }, [authLoading, user, fetchData])
 
   // ------------------------------------------
+  // Transcription polling
+  // ------------------------------------------
+
+  const pendingCount = useMemo(
+    () => tour?.notes?.filter((n) => n.transcription_status === 'pending').length ?? 0,
+    [tour?.notes]
+  )
+
+  useEffect(() => {
+    if (!pendingCount) return
+
+    const interval = setInterval(async () => {
+      try {
+        const { tour: updated } = await getTour(tourId)
+        setTour(updated)
+        const stillPending = updated.notes?.filter((n) => n.transcription_status === 'pending')
+        if (!stillPending?.length) clearInterval(interval)
+      } catch {
+        // Silently retry on next interval
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [pendingCount, tourId])
+
+  // ------------------------------------------
   // Mutation helpers
   // ------------------------------------------
 
@@ -178,6 +205,15 @@ export default function TourDetailPage() {
     if (!tour) return
     try {
       await deleteTourNote(tourId, noteId)
+      const res = await getTour(tourId)
+      setTour(res.tour)
+    } catch {
+      // Silently fail
+    }
+  }
+
+  async function handleVoiceNoteCreated() {
+    try {
       const res = await getTour(tourId)
       setTour(res.tour)
     } catch {
@@ -327,6 +363,7 @@ export default function TourDetailPage() {
           {activeTab === 'capture' && (
             <CaptureTab
               tour={tour}
+              tourId={tourId}
               suggestions={suggestions}
               updatingRating={updatingRating}
               onRatingChange={handleRatingChange}
@@ -335,6 +372,7 @@ export default function TourDetailPage() {
               addingNote={addingNote}
               onAddNote={handleAddNote}
               onDeleteNote={handleDeleteNote}
+              onVoiceNoteCreated={handleVoiceNoteCreated}
               tagLoading={tagLoading}
               onAddTag={handleAddTag}
               onRemoveTag={handleRemoveTag}
@@ -507,6 +545,7 @@ function formatTime(time: string): string {
 
 interface CaptureTabProps {
   tour: Tour
+  tourId: string
   suggestions: TagSuggestion[]
   updatingRating: boolean
   onRatingChange: (rating: number) => void
@@ -515,6 +554,7 @@ interface CaptureTabProps {
   addingNote: boolean
   onAddNote: () => void
   onDeleteNote: (noteId: string) => void
+  onVoiceNoteCreated: () => void
   tagLoading: boolean
   onAddTag: (tag: string, sentiment: 'pro' | 'con') => void
   onRemoveTag: (tagId: string) => void
@@ -522,6 +562,7 @@ interface CaptureTabProps {
 
 function CaptureTab({
   tour,
+  tourId,
   suggestions,
   updatingRating,
   onRatingChange,
@@ -530,6 +571,7 @@ function CaptureTab({
   addingNote,
   onAddNote,
   onDeleteNote,
+  onVoiceNoteCreated,
   tagLoading,
   onAddTag,
   onRemoveTag,
@@ -592,6 +634,9 @@ function CaptureTab({
             </button>
           </div>
 
+          {/* Voice capture */}
+          <VoiceCapture tourId={tourId} onNoteCreated={onVoiceNoteCreated} />
+
           {/* Existing notes */}
           {tour.notes.length > 0 ? (
             <ul className="space-y-2">
@@ -650,13 +695,34 @@ function CaptureTab({
 }
 
 function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) {
+  const renderContent = () => {
+    if (note.source === 'voice') {
+      if (note.transcription_status === 'pending') {
+        return (
+          <span className="text-gray-400 italic animate-pulse text-sm">Transcribing...</span>
+        )
+      }
+      if (note.transcription_status === 'failed') {
+        return (
+          <span className="text-red-500 text-sm">Transcription failed</span>
+        )
+      }
+      return (
+        <p className="text-sm text-gray-700 whitespace-pre-line">{note.content}</p>
+      )
+    }
+    return (
+      <p className="text-sm text-gray-700 whitespace-pre-line">{note.content}</p>
+    )
+  }
+
   return (
     <li className="bg-white border border-gray-200 rounded-lg p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 min-w-0 flex-1">
           {/* Source icon */}
           {note.source === 'voice' ? (
-            <svg className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           ) : (
@@ -664,7 +730,7 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
             </svg>
           )}
-          <p className="text-sm text-gray-700 whitespace-pre-line">{note.content}</p>
+          {renderContent()}
         </div>
         <button
           type="button"

@@ -23,6 +23,8 @@ celery_app = Celery(
         "app.tasks.maintenance_tasks",
         "app.tasks.dispatcher",
         "app.tasks.alert_tasks",
+        "app.tasks.transcription_tasks",
+        "app.tasks.tour_reminder_tasks",
     ]
 )
 
@@ -79,6 +81,12 @@ celery_app.conf.beat_schedule = {
     "send-daily-alerts": {
         "task": "app.tasks.alert_tasks.send_daily_alerts",
         "schedule": crontab(hour=13, minute=0),
+    },
+
+    # Tour reminders every 10 minutes
+    "check-tour-reminders": {
+        "task": "app.tasks.tour_reminder_tasks.check_tour_reminders",
+        "schedule": crontab(minute="*/10"),
     },
 }
 

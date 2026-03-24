@@ -8,6 +8,9 @@ python-multipart==0.0.6
 # Claude API
 anthropic>=0.39.0
 
+# OpenAI (Whisper transcription)
+openai>=1.0.0
+
 # Database - PostgreSQL with async support
 sqlalchemy[asyncio]==2.0.25
 asyncpg==0.29.0
