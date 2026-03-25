@@ -55,7 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (testUser) {
         try {
           setUser(JSON.parse(testUser) as User)
-          // Also check for a test profile (e.g., to set user_tier for pro tests)
           const testProfile = typeof window !== 'undefined'
             ? localStorage.getItem('__test_auth_profile')
             : null
@@ -70,36 +69,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // With the standard createClient (localStorage-based), getSession()
-    // reads from localStorage synchronously — it does NOT hang.
+    // 5-second timeout to prevent infinite loading on stale sessions
+    const timeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn('Auth initialization timed out — clearing stale session')
+        supabase.auth.signOut().catch(() => {})
+        applySession(null)
+        setProfile(null)
+        setLoading(false)
+      }
+    }, 5000)
+
     supabase.auth.getSession().then(({ data: { session: s } }) => {
+      clearTimeout(timeout)
       if (mounted) {
         applySession(s)
         if (s?.user) fetchProfile(s.user.id)
         setLoading(false)
       }
     }).catch(() => {
-      if (mounted) setLoading(false)
+      clearTimeout(timeout)
+      if (mounted) {
+        supabase.auth.signOut().catch(() => {})
+        applySession(null)
+        setLoading(false)
+      }
     })
 
-    // This listener fires on: SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED.
-    // With the standard client, TOKEN_REFRESHED fires reliably every ~55 minutes
-    // (before the 1-hour access token expires).
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, s) => {
-        if (mounted) {
-          applySession(s)
-          if (s?.user) {
-            await fetchProfile(s.user.id)
-          } else {
-            setProfile(null)
-          }
+        if (!mounted) return
+
+        // Handle token refresh failure
+        if (event === 'TOKEN_REFRESHED' && !s) {
+          console.warn('Token refresh failed — signing out')
+          applySession(null)
+          setProfile(null)
+          return
+        }
+
+        applySession(s)
+        if (s?.user) {
+          await fetchProfile(s.user.id)
+        } else {
+          setProfile(null)
         }
       }
     )
 
     return () => {
       mounted = false
+      clearTimeout(timeout)
       subscription.unsubscribe()
     }
   }, [fetchProfile, applySession])
