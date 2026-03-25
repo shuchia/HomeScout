@@ -16,9 +16,11 @@
     "@supabase/supabase-js": "^2.94.0",
     "cookie": "^1.1.1",
     "embla-carousel-react": "^8.6.0",
+    "html2canvas": "^1.4.1",
     "next": "^16.1.6",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-joyride": "^3.0.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

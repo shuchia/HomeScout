@@ -65,7 +65,7 @@ export default function FavoritesPage() {
         <p className="text-gray-600 mb-6">Sign in to save your favorite apartments.</p>
         <button
           onClick={signInWithGoogle}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-light)]"
         >
           Sign In with Google
         </button>

@@ -33,16 +33,16 @@ const getFreshnessBadge = (confidence?: number): { text: string; color: string }
 
 // Get color class based on match score
 const getScoreColor = (score: number): string => {
-  if (score >= 85) return 'bg-green-500';
-  if (score >= 70) return 'bg-blue-500';
-  if (score >= 50) return 'bg-yellow-500';
+  if (score >= 85) return 'bg-emerald-500';
+  if (score >= 70) return 'bg-[var(--color-primary)]';
+  if (score >= 50) return 'bg-amber-500';
   return 'bg-gray-500';
 };
 
 const getLabelColor = (label: string): string => {
   switch (label) {
-    case 'Excellent Match': return 'bg-green-500 text-white';
-    case 'Great Match': return 'bg-blue-500 text-white';
+    case 'Excellent Match': return 'bg-emerald-500 text-white';
+    case 'Great Match': return 'bg-[var(--color-primary)] text-white';
     case 'Good Match': return 'bg-slate-500 text-white';
     case 'Fair Match': return 'bg-gray-400 text-gray-800';
     default: return 'bg-gray-300 text-gray-600';
@@ -68,7 +68,7 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
   } = apartment;
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden transition hover:shadow-lg">
+    <div className="bg-[var(--color-surface)] rounded-xl shadow-sm border border-[var(--color-border)] overflow-hidden transition hover:shadow-md">
       {/* Image Carousel with Match Score Badge and Favorite Button */}
       <div className="relative">
         <ImageCarousel images={images} alt={address} />

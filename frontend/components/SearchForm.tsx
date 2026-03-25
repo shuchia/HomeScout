@@ -141,7 +141,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
           id="city"
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition"
           required
         >
           {AVAILABLE_CITIES.map((option) => (
@@ -165,7 +165,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
           min={500}
           max={15000}
           step={100}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition"
           required
         />
       </div>
@@ -181,7 +181,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
             id="bedrooms"
             value={bedrooms}
             onChange={(e) => setBedrooms(Number(e.target.value))}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition"
           >
             {BEDROOM_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -200,7 +200,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
             id="bathrooms"
             value={bathrooms}
             onChange={(e) => setBathrooms(Number(e.target.value))}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition"
           >
             {BATHROOM_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -222,7 +222,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
               key={type}
               className={`flex items-center p-3 border rounded-lg cursor-pointer transition ${
                 selectedPropertyTypes.includes(type)
-                  ? 'border-blue-500 bg-blue-50'
+                  ? 'border-[var(--color-primary)] bg-[#2D6A4F10]'
                   : 'border-gray-300 hover:border-gray-400'
               }`}
             >
@@ -230,7 +230,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
                 type="checkbox"
                 checked={selectedPropertyTypes.includes(type)}
                 onChange={() => handlePropertyTypeChange(type)}
-                className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                className="h-4 w-4 text-[var(--color-primary)] rounded focus:ring-[var(--color-primary)]"
               />
               <span className="ml-2 text-sm">{type}</span>
             </label>
@@ -248,7 +248,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
           id="moveInDate"
           value={moveInDate}
           onChange={(e) => setMoveInDate(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition"
           required
         />
       </div>
@@ -264,7 +264,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
           onChange={(e) => setOtherPreferences(e.target.value)}
           rows={3}
           placeholder="E.g., Must have in-unit washer/dryer, parking, pet-friendly for a small dog..."
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition resize-none"
         />
       </div>
 
@@ -274,8 +274,8 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         disabled={isSubmitting}
         className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition ${
           isSubmitting
-            ? 'bg-blue-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+            ? 'bg-[var(--color-primary-light)] opacity-70 cursor-not-allowed'
+            : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-light)] active:bg-[var(--color-primary-dark)]'
         }`}
       >
         {isSubmitting ? (

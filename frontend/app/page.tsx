@@ -30,7 +30,7 @@ export default function Home() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
         <div className="animate-pulse text-center">
           <div className="h-8 w-48 bg-gray-200 rounded mb-4 mx-auto"></div>
           <div className="h-4 w-32 bg-gray-200 rounded mx-auto"></div>
@@ -40,7 +40,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Section - only show before first search */}
         {!hasSearched && (
@@ -111,7 +111,7 @@ export default function Home() {
               {/* Loading State */}
               {isLoading && (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--color-primary)] mb-4"></div>
                   <p className="text-gray-600">Finding your perfect apartments...</p>
                 </div>
               )}
