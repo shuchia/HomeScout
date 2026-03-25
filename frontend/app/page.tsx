@@ -143,7 +143,7 @@ export default function Home() {
                       {results.length} Apartment{results.length !== 1 ? 's' : ''} Found
                     </h3>
                   </div>
-                  <div className="grid gap-6 md:grid-cols-2">
+                  <div className="grid gap-6 sm:grid-cols-2">
                     {results.map((apartment) => (
                       <ApartmentCard key={apartment.id} apartment={apartment} />
                     ))}

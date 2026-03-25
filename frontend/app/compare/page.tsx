@@ -17,7 +17,7 @@ const formatSqft = (sqft: number): string =>
   new Intl.NumberFormat('en-US').format(sqft)
 
 const getScoreColor = (score: number): string => {
-  if (score >= 85) return 'bg-green-500'
+  if (score >= 85) return 'bg-emerald-500'
   if (score >= 70) return 'bg-[var(--color-primary)]'
   if (score >= 50) return 'bg-yellow-500'
   return 'bg-gray-500'
@@ -106,7 +106,7 @@ export default function ComparePage() {
   // Auth loading state
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
         <div className="animate-pulse text-center">
           <div className="h-8 w-48 bg-gray-200 rounded mb-4 mx-auto"></div>
           <div className="h-4 w-32 bg-gray-200 rounded mx-auto"></div>
@@ -118,8 +118,8 @@ export default function ComparePage() {
   // Auth gate
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <header className="bg-white shadow-sm">
+      <div className="min-h-screen bg-[var(--color-bg)] flex flex-col">
+        <header className="bg-[var(--color-surface)] border border-[var(--color-border)]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center gap-4">
               <Link href="/" className="text-gray-600 hover:text-gray-900">
@@ -150,8 +150,8 @@ export default function ComparePage() {
   // Not enough apartments
   if (apartmentIds.length < 2 && !loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <header className="bg-white shadow-sm">
+      <div className="min-h-screen bg-[var(--color-bg)] flex flex-col">
+        <header className="bg-[var(--color-surface)] border border-[var(--color-border)]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center gap-4">
               <Link href="/" className="text-gray-600 hover:text-gray-900">
@@ -186,9 +186,9 @@ export default function ComparePage() {
   const winnerApt = apartments.find(a => a.id === winnerAptId)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--color-bg)]">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-[var(--color-surface)] border border-[var(--color-border)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -298,7 +298,7 @@ export default function ComparePage() {
                 return (
                   <div
                     key={score.apartment_id}
-                    className={`flex-1 p-3 rounded-lg ${isWinner ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}
+                    className={`flex-1 p-3 rounded-lg ${isWinner ? 'bg-green-50 border border-green-200' : 'bg-[var(--color-bg)]'}`}
                   >
                     <p className="text-sm text-gray-600 truncate">{apt?.address || score.apartment_id}</p>
                     <div className="flex items-center gap-2 mt-1">
@@ -333,7 +333,7 @@ export default function ComparePage() {
                         return (
                           <div
                             key={aptScore.apartment_id}
-                            className={`p-3 rounded-lg ${isHighest ? 'bg-green-50 border border-green-200' : 'bg-gray-50'}`}
+                            className={`p-3 rounded-lg ${isHighest ? 'bg-green-50 border border-green-200' : 'bg-[var(--color-bg)]'}`}
                           >
                             <div className="flex items-center gap-2">
                               <span className={`inline-block px-2 py-0.5 rounded-full text-white text-sm font-bold ${getScoreColor(catScore?.score || 0)}`}>
@@ -364,7 +364,7 @@ export default function ComparePage() {
               <table className="w-full">
                 <thead>
                   <tr>
-                    <th className="bg-gray-50 px-6 py-4 text-left text-sm font-semibold text-gray-900 w-40">Property</th>
+                    <th className="bg-[var(--color-bg)] px-6 py-4 text-left text-sm font-semibold text-gray-900 w-40">Property</th>
                     {apartments.map((apt) => (
                       <th key={apt.id} className="px-6 py-4 text-center border-l border-gray-200">
                         <div className="relative">
@@ -396,7 +396,7 @@ export default function ComparePage() {
                   {/* Overall Score Row */}
                   {analysis && (
                     <tr>
-                      <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Overall Score</td>
+                      <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Overall Score</td>
                       {apartments.map((apt) => {
                         const aptScore = analysis.apartment_scores.find(s => s.apartment_id === apt.id)
                         const isWinner = apt.id === winnerAptId
@@ -413,7 +413,7 @@ export default function ComparePage() {
 
                   {/* Rent Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Rent</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Rent</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className={`px-6 py-4 text-center border-l border-gray-200 ${apt.rent === lowestRent ? 'bg-green-50' : ''}`}>
                         <span className={`text-lg font-bold ${apt.rent === lowestRent ? 'text-green-600' : 'text-gray-900'}`}>{formatRent(apt.rent)}</span>
@@ -425,7 +425,7 @@ export default function ComparePage() {
 
                   {/* Bedrooms Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Bedrooms</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Bedrooms</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">
                         {apt.bedrooms === 0 ? 'Studio' : `${apt.bedrooms} bed`}
@@ -435,7 +435,7 @@ export default function ComparePage() {
 
                   {/* Bathrooms Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Bathrooms</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Bathrooms</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">{apt.bathrooms} bath</td>
                     ))}
@@ -443,7 +443,7 @@ export default function ComparePage() {
 
                   {/* Square Footage Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Size</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Size</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">{formatSqft(apt.sqft)} sqft</td>
                     ))}
@@ -451,7 +451,7 @@ export default function ComparePage() {
 
                   {/* Property Type Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Type</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Type</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">{apt.property_type}</td>
                     ))}
@@ -459,7 +459,7 @@ export default function ComparePage() {
 
                   {/* Available Date Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Available</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Available</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">
                         {new Date(apt.available_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -469,7 +469,7 @@ export default function ComparePage() {
 
                   {/* Amenities Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900 align-top">Amenities</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900 align-top">Amenities</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 border-l border-gray-200">
                         <div className="flex flex-wrap gap-1 justify-center">
@@ -484,7 +484,7 @@ export default function ComparePage() {
                   {/* AI Reasoning Row */}
                   {analysis && (
                     <tr>
-                      <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900 align-top">AI Analysis</td>
+                      <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900 align-top">AI Analysis</td>
                       {apartments.map((apt) => {
                         const aptScore = analysis.apartment_scores.find(s => s.apartment_id === apt.id)
                         return (
@@ -514,7 +514,7 @@ export default function ComparePage() {
 
                   {/* View Listing Row */}
                   <tr>
-                    <td className="bg-gray-50 px-6 py-4 text-sm font-medium text-gray-900">Actions</td>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Actions</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200">
                         <a

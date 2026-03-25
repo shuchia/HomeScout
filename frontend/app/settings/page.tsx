@@ -18,7 +18,7 @@ function SettingsContent() {
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
         <p className="text-gray-600">Please sign in to view settings.</p>
       </div>
     )

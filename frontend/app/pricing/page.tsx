@@ -41,7 +41,7 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-4xl mx-auto px-4 py-16">
         <h1 className="text-3xl font-bold text-center mb-2">Choose Your Plan</h1>
         <p className="text-gray-600 text-center mb-12">Unlock AI-powered apartment matching</p>

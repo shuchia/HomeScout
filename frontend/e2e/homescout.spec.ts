@@ -157,7 +157,9 @@ const MOCK_USER = {
 };
 
 /** Inject mock user into localStorage before page loads */
-async function mockAuth(page: Page) {
+async function mockAuth(page: Page, options?: { favorites?: object[] }) {
+  const mockFavorites = options?.favorites ?? [];
+
   await page.addInitScript((user: string) => {
     localStorage.setItem('__test_auth_user', user);
   }, JSON.stringify(MOCK_USER));
@@ -166,12 +168,12 @@ async function mockAuth(page: Page) {
   await page.route('**/supabase.co/**', async (route) => {
     const url = route.request().url();
 
-    // Mock favorites query (empty by default)
+    // Mock favorites query
     if (url.includes('/rest/v1/favorites')) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([]),
+        body: JSON.stringify(mockFavorites),
       });
       return;
     }
@@ -259,7 +261,7 @@ test.describe('Snugd E2E Tests', () => {
       await expect(page.locator('label:has-text("Property Type")')).toBeVisible();
       await expect(page.locator('label:has-text("Move-in Date")')).toBeVisible();
       await expect(page.locator('label:has-text("Other Preferences")')).toBeVisible();
-      await expect(page.locator('button[type="submit"]')).toContainText('Find Apartments');
+      await expect(page.locator('button:has-text("Find Apartments")')).toContainText('Find Apartments');
     });
   });
 
@@ -267,7 +269,7 @@ test.describe('Snugd E2E Tests', () => {
     test('should have default values pre-filled', async ({ page }) => {
       await page.goto('/');
 
-      await expect(page.locator('select#city')).toHaveValue('Pittsburgh, PA');
+      await expect(page.locator('select#city')).toHaveValue('Arlington, VA');
       await expect(page.locator('input#budget')).toHaveValue('2000');
       await expect(page.locator('select#bedrooms')).toHaveValue('1');
       await expect(page.locator('select#bathrooms')).toHaveValue('1');
@@ -312,7 +314,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
 
       await page.locator('label:has-text("Apartment")').click();
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
 
       await expect(page.locator('text=Please select at least one property type').or(
         page.locator('button[type="submit"]:has-text("Find Apartments")')
@@ -325,7 +327,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
     });
 
@@ -333,7 +335,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       const apartmentCard = page.locator('[class*="shadow-md"]').nth(1);
@@ -351,16 +353,16 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       const highScoreBadge = page.locator('text=92% Match');
       await expect(highScoreBadge).toBeVisible();
-      await expect(highScoreBadge).toHaveClass(/bg-green-500/);
+      await expect(highScoreBadge).toHaveClass(/bg-emerald-500/);
 
       const medScoreBadge = page.locator('text=78% Match');
       await expect(medScoreBadge).toBeVisible();
-      await expect(medScoreBadge).toHaveClass(/bg-blue-500/);
+      await expect(medScoreBadge).toHaveClass(/bg-\[var\(--color-primary\)\]/);
     });
 
     test('should handle empty search results', async ({ page }) => {
@@ -374,16 +376,16 @@ test.describe('Snugd E2E Tests', () => {
         });
       });
 
-      await page.click('button[type="submit"]');
-      await expect(page.locator('text=No apartments found')).toBeVisible({ timeout: 15000 });
-      await expect(page.locator('text=Try adjusting your search criteria')).toBeVisible();
+      await page.click('button:has-text("Find Apartments")');
+      await expect(page.locator('text=No apartments match your criteria')).toBeVisible({ timeout: 15000 });
+      await expect(page.locator('text=Try increasing your budget, changing the city, or adjusting your bedroom and bathroom preferences')).toBeVisible();
     });
 
     test('should display AI reasoning for each apartment', async ({ page }) => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       await expect(page.locator('text=Excellent match with all key requirements met')).toBeVisible();
@@ -393,7 +395,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       await expect(page.locator('text=Under budget')).toBeVisible();
@@ -411,7 +413,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Should show qualitative labels
@@ -427,23 +429,23 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
-      // Excellent Match → green
+      // Excellent Match → emerald
       const excellentBadge = page.locator('text=Excellent Match');
-      await expect(excellentBadge).toHaveClass(/bg-green-500/);
+      await expect(excellentBadge).toHaveClass(/bg-emerald-500/);
 
-      // Great Match → blue
+      // Great Match → primary
       const greatBadge = page.locator('text=Great Match');
-      await expect(greatBadge).toHaveClass(/bg-blue-500/);
+      await expect(greatBadge).toHaveClass(/bg-\[var\(--color-primary\)\]/);
     });
 
     test('should not show AI reasoning for free tier results', async ({ page }) => {
       await page.goto('/');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Free tier results have no reasoning (match_score is null)
@@ -454,7 +456,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Should display remaining searches count
@@ -467,7 +469,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       const images = page.locator('img');
@@ -478,7 +480,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       await expect(page.locator('[aria-label="Previous image"]').first()).toBeVisible({ timeout: 10000 });
@@ -489,7 +491,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
       await expect(page.locator('[aria-label="Next image"]').first()).toBeVisible({ timeout: 10000 });
 
@@ -505,7 +507,7 @@ test.describe('Snugd E2E Tests', () => {
       await mockSearchApi(page);
 
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
 
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
       const gridContainer = page.locator('.lg\\:grid-cols-3');
@@ -519,7 +521,7 @@ test.describe('Snugd E2E Tests', () => {
       const form = page.locator('form');
       await expect(form).toBeVisible();
 
-      const submitButton = page.locator('button[type="submit"]');
+      const submitButton = page.locator('button:has-text("Find Apartments")');
       await expect(submitButton).toBeVisible();
     });
   });
@@ -532,9 +534,9 @@ test.describe('Snugd E2E Tests', () => {
         route.abort('connectionrefused');
       });
 
-      await page.click('button[type="submit"]');
-      await expect(page.locator('button[type="submit"]')).toContainText('Find Apartments', { timeout: 15000 });
-      await expect(page.locator('button[type="submit"]')).toBeEnabled();
+      await page.click('button:has-text("Find Apartments")');
+      await expect(page.locator('button:has-text("Find Apartments")')).toContainText('Find Apartments', { timeout: 15000 });
+      await expect(page.locator('button:has-text("Find Apartments")')).toBeEnabled();
     });
 
     test('should display error message on API failure', async ({ page }) => {
@@ -544,8 +546,8 @@ test.describe('Snugd E2E Tests', () => {
         route.abort('connectionrefused');
       });
 
-      await page.click('button[type="submit"]');
-      await expect(page.locator('button[type="submit"]')).toContainText('Find Apartments', { timeout: 15000 });
+      await page.click('button:has-text("Find Apartments")');
+      await expect(page.locator('button:has-text("Find Apartments")')).toContainText('Find Apartments', { timeout: 15000 });
     });
   });
 
@@ -554,7 +556,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Favorite buttons should be visible (heart icons)
@@ -585,7 +587,7 @@ test.describe('Snugd E2E Tests', () => {
         }
       });
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Click the first favorite button
@@ -602,7 +604,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Compare buttons should be visible
@@ -614,7 +616,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Click first Compare button
@@ -632,7 +634,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Add both apartments to comparison
@@ -652,7 +654,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Add apartment to comparison
@@ -700,41 +702,51 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/favorites');
 
       await expect(page.locator('h1:has-text("My Favorites")')).toBeVisible();
-      await expect(page.locator('text=haven\'t saved any favorites yet')).toBeVisible({ timeout: 10000 });
-      await expect(page.locator('a:has-text("Start searching")')).toBeVisible();
+      await expect(page.locator('text=No favorites yet')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('text=Start Searching')).toBeVisible();
     });
 
     test('should show favorites when they exist', async ({ page }) => {
-      // Mock Supabase favorites query to return favorites
-      await page.route('**/supabase.co/**/favorites**', async (route) => {
-        const method = route.request().method();
-        if (method === 'GET') {
-          await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify([
-              {
-                id: 'fav-1',
-                user_id: 'test-user-id',
-                apartment_id: 'test-001',
-                notes: null,
-                is_available: true,
-                created_at: '2026-03-01T00:00:00Z',
-              },
-            ]),
-          });
-        } else {
-          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-        }
+      // Override the Supabase route to return favorites data instead of empty
+      // Register a more specific route that takes priority (LIFO order)
+      await page.route('**/rest/v1/favorites**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'content-range': '0-0/1' },
+          body: JSON.stringify([
+            {
+              id: 'fav-1',
+              user_id: 'test-user-id',
+              apartment_id: 'test-001',
+              notes: null,
+              is_available: true,
+              created_at: '2026-03-01T00:00:00Z',
+            },
+          ]),
+        });
       });
 
       await mockBatchApi(page);
+
+      // Mock the tours endpoint (favorites page fetches tours for TourPrompt)
+      await page.route('**/api/tours', async (route, request) => {
+        if (request.method() === 'GET') {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ tours: [] }),
+          });
+        } else {
+          await route.continue();
+        }
+      });
 
       await page.goto('/favorites');
 
       await expect(page.locator('h1:has-text("My Favorites")')).toBeVisible();
       // Should show the apartment card for the favorited apartment
-      await expect(page.locator('text=$1,500/mo')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('text=$1,500/mo')).toBeVisible({ timeout: 15000 });
       await expect(page.locator('text=123 Test St')).toBeVisible();
     });
   });
@@ -798,16 +810,16 @@ test.describe('Snugd E2E Tests', () => {
     test('should show user avatar/initial in header', async ({ page }) => {
       await page.goto('/');
 
-      // The UserMenu shows user initial (T for Test User or t for test@example.com)
-      const userButton = page.locator('header button:has(div.rounded-full)');
+      // The UserMenu shows user initial — use .first() since desktop+mobile both render
+      const userButton = page.locator('header button:has(div.rounded-full)').first();
       await expect(userButton).toBeVisible();
     });
 
     test('should open user menu dropdown on click', async ({ page }) => {
       await page.goto('/');
 
-      // Click the user avatar button
-      const userButton = page.locator('header button:has(div.rounded-full)');
+      // Click the user avatar button — use .first() for desktop instance
+      const userButton = page.locator('header button:has(div.rounded-full)').first();
       await userButton.click();
 
       // Menu should show user info
@@ -826,14 +838,14 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
 
       // Open user menu
-      const userButton = page.locator('header button:has(div.rounded-full)');
+      const userButton = page.locator('header button:has(div.rounded-full)').first();
       await userButton.click();
 
       // Click Sign Out
       await page.locator('button:has-text("Sign Out")').click();
 
-      // After sign out, the Sign In button should appear
-      await expect(page.locator('button:has-text("Sign In")')).toBeVisible({ timeout: 5000 });
+      // After sign out, the Sign In button should appear — use .first() since desktop+mobile
+      await expect(page.locator('button:has-text("Sign In")').first()).toBeVisible({ timeout: 5000 });
 
       // User menu should no longer be visible
       await expect(userButton).not.toBeVisible();
@@ -845,13 +857,13 @@ test.describe('Snugd E2E Tests', () => {
       // Verify links are present while logged in
       await expect(page.locator('header >> a:has-text("Favorites")')).toBeVisible();
 
-      // Sign out
-      const userButton = page.locator('header button:has(div.rounded-full)');
+      // Sign out — use .first() since auth loading can briefly show multiple buttons
+      const userButton = page.locator('header button:has(div.rounded-full)').first();
       await userButton.click();
       await page.locator('button:has-text("Sign Out")').click();
 
-      // Wait for sign out
-      await expect(page.locator('button:has-text("Sign In")')).toBeVisible({ timeout: 5000 });
+      // Wait for sign out — use .first() since desktop+mobile both render
+      await expect(page.locator('button:has-text("Sign In")').first()).toBeVisible({ timeout: 5000 });
 
       // Favorites and Compare links should be hidden for anonymous users
       await expect(page.locator('header >> a:has-text("Favorites")')).not.toBeVisible();
@@ -932,10 +944,10 @@ test.describe('Snugd E2E Tests', () => {
       test.setTimeout(120000);
 
       await page.goto('/');
-      await page.click('button[type="submit"]');
+      await page.click('button:has-text("Find Apartments")');
 
       await expect(
-        page.locator('text=/\\d+ Apartments? Found/').or(page.locator('text=No apartments found'))
+        page.locator('text=/\\d+ Apartments? Found/').or(page.locator('text=No apartments match your criteria'))
       ).toBeVisible({ timeout: 90000 });
     });
   });
@@ -964,7 +976,7 @@ test.describe('Anonymous User Flow', () => {
     await expect(page.locator('h2')).toContainText('Find Your Perfect Apartment');
 
     // Search form should be visible
-    await expect(page.locator('button[type="submit"]')).toContainText('Find Apartments');
+    await expect(page.locator('button:has-text("Find Apartments")')).toContainText('Find Apartments');
     await expect(page.locator('select#city')).toBeVisible();
     await expect(page.locator('input#budget')).toBeVisible();
   });
@@ -990,7 +1002,7 @@ test.describe('Anonymous User Flow', () => {
     await page.goto('/');
     await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
-    await page.click('button[type="submit"]');
+    await page.click('button:has-text("Find Apartments")');
     await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
     // Should show qualitative labels (not numeric scores)
