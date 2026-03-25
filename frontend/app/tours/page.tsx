@@ -177,7 +177,7 @@ export default function ToursPage() {
         <p className="text-gray-600 mb-6">Sign in to manage your apartment tours.</p>
         <button
           onClick={signInWithGoogle}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-light)]"
         >
           Sign In with Google
         </button>
@@ -200,7 +200,7 @@ export default function ToursPage() {
           <p className="text-red-600 mb-4">{error}</p>
           <button
             onClick={fetchTours}
-            className="text-blue-600 hover:underline"
+            className="text-[var(--color-primary)] hover:underline"
           >
             Try again
           </button>
@@ -210,7 +210,7 @@ export default function ToursPage() {
           <p className="text-gray-600 mb-4">
             You haven&apos;t started touring any apartments yet.
           </p>
-          <Link href="/favorites" className="text-blue-600 hover:underline">
+          <Link href="/favorites" className="text-[var(--color-primary)] hover:underline">
             Browse your favorites to get started
           </Link>
         </div>
@@ -218,8 +218,8 @@ export default function ToursPage() {
         <>
           {/* Needs Action Banner */}
           {needsAction.length > 0 && (
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm font-medium text-blue-800">
+            <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+              <p className="text-sm font-medium text-[var(--color-primary-dark)]">
                 {needsAction.length} {needsAction.length === 1 ? 'apartment has' : 'apartments have'} an email draft ready to send
               </p>
             </div>
@@ -248,7 +248,7 @@ export default function ToursPage() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
                   activeTab === tab.key
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -256,7 +256,7 @@ export default function ToursPage() {
                 {tab.count > 0 && (
                   <span className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs ${
                     activeTab === tab.key
-                      ? 'bg-blue-100 text-blue-600'
+                      ? 'bg-emerald-100 text-[var(--color-primary)]'
                       : 'bg-gray-100 text-gray-500'
                   }`}>
                     {tab.count}

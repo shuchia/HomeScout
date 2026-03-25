@@ -58,7 +58,7 @@ export function TourPrompt({ apartmentId, alreadyInTours = false, onStarted }: T
       <button
         onClick={handleClick}
         disabled={loading}
-        className="inline-flex items-center gap-1.5 text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 text-[var(--color-primary)] border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
       >
         {loading ? (
           <>

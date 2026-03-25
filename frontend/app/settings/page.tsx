@@ -101,11 +101,11 @@ function SettingsContent() {
             </p>
           </div>
           {isPro ? (
-            <button onClick={handleManageBilling} className="text-sm text-blue-600 hover:underline">
+            <button onClick={handleManageBilling} className="text-sm text-[var(--color-primary)] hover:underline">
               Manage Billing
             </button>
           ) : (
-            <a href="/pricing" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+            <a href="/pricing" className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm hover:bg-[var(--color-primary-light)]">
               Upgrade to Pro
             </a>
           )}
@@ -115,7 +115,7 @@ function SettingsContent() {
       {/* Data Section */}
       <section className="bg-white rounded-lg border p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">Your Data</h2>
-        <button onClick={handleExportData} className="text-sm text-blue-600 hover:underline">
+        <button onClick={handleExportData} className="text-sm text-[var(--color-primary)] hover:underline">
           Export my data (JSON)
         </button>
       </section>

@@ -75,7 +75,7 @@ export default function DecisionBrief({ isPro, touredTours = [], apartments = {}
       {!brief && !loading && (
         <button
           onClick={handleGenerate}
-          className="w-full py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="w-full py-2 px-4 bg-[var(--color-primary)] text-white text-sm font-medium rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
         >
           Get AI Recommendation
         </button>
@@ -83,7 +83,7 @@ export default function DecisionBrief({ isPro, touredTours = [], apartments = {}
 
       {loading && (
         <div className="flex items-center justify-center py-6">
-          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[var(--color-primary)] mr-2"></div>
           <span className="text-sm text-gray-500">Analyzing your tours...</span>
         </div>
       )}
@@ -93,7 +93,7 @@ export default function DecisionBrief({ isPro, touredTours = [], apartments = {}
           <p className="text-sm text-red-600 mb-2">{error}</p>
           <button
             onClick={handleGenerate}
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm text-[var(--color-primary)] hover:underline"
           >
             Try again
           </button>
@@ -180,7 +180,7 @@ export default function DecisionBrief({ isPro, touredTours = [], apartments = {}
           {/* Regenerate */}
           <button
             onClick={handleGenerate}
-            className="w-full py-1.5 text-xs text-blue-600 hover:underline"
+            className="w-full py-1.5 text-xs text-[var(--color-primary)] hover:underline"
           >
             Regenerate brief
           </button>

@@ -72,7 +72,7 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
         {!plan && !loading && (
           <button
             onClick={handleGeneratePlan}
-            className="w-full py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="w-full py-2 px-4 bg-[var(--color-primary)] text-white text-sm font-medium rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
           >
             Plan This Day
           </button>
@@ -80,7 +80,7 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
 
         {loading && (
           <div className="flex items-center justify-center py-4">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[var(--color-primary)] mr-2"></div>
             <span className="text-sm text-gray-500">Generating plan...</span>
           </div>
         )}
@@ -90,7 +90,7 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
             <p className="text-sm text-red-600 mb-2">{error}</p>
             <button
               onClick={handleGeneratePlan}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-sm text-[var(--color-primary)] hover:underline"
             >
               Try again
             </button>
@@ -107,7 +107,7 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
               <ol className="space-y-2">
                 {plan.tours_ordered.map((tour, idx) => (
                   <li key={idx} className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 text-[var(--color-primary)] text-xs font-bold flex items-center justify-center">
                       {idx + 1}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -151,7 +151,7 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
                 <ul className="space-y-1">
                   {plan.tips.map((tip, idx) => (
                     <li key={idx} className="text-xs text-gray-600 flex items-start gap-1.5">
-                      <span className="text-blue-500 mt-0.5 flex-shrink-0">*</span>
+                      <span className="text-[var(--color-primary)] mt-0.5 flex-shrink-0">*</span>
                       {tip}
                     </li>
                   ))}
@@ -172,7 +172,7 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
             {/* Regenerate */}
             <button
               onClick={handleGeneratePlan}
-              className="w-full py-1.5 text-xs text-blue-600 hover:underline"
+              className="w-full py-1.5 text-xs text-[var(--color-primary)] hover:underline"
             >
               Regenerate plan
             </button>

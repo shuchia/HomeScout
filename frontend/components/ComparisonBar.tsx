@@ -30,12 +30,12 @@ export function ComparisonBar() {
                 key={i}
                 className={`w-8 h-8 rounded border-2 flex items-center justify-center ${
                   apartmentIds[i]
-                    ? 'bg-blue-100 border-blue-500'
+                    ? 'bg-emerald-100 border-[var(--color-primary)]'
                     : 'border-dashed border-gray-300'
                 }`}
               >
                 {apartmentIds[i] && (
-                  <span className="text-blue-600 text-xs font-bold">{i + 1}</span>
+                  <span className="text-[var(--color-primary)] text-xs font-bold">{i + 1}</span>
                 )}
               </div>
             ))}
@@ -53,8 +53,8 @@ export function ComparisonBar() {
           <button
             onClick={() => router.push('/compare')}
             disabled={apartmentIds.length < 2}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium
-                       hover:bg-blue-700 transition-colors
+            className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg font-medium
+                       hover:bg-[var(--color-primary-light)] transition-colors
                        disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             Compare ({apartmentIds.length})

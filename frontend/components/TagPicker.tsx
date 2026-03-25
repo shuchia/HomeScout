@@ -113,7 +113,7 @@ export default function TagPicker({
             onChange={(e) => setCustomText(e.target.value)}
             placeholder="Custom tag..."
             className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 setShowCustom(false)
@@ -159,7 +159,7 @@ export default function TagPicker({
         <button
           type="button"
           onClick={() => setShowCustom(true)}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          className="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary)] font-medium"
         >
           + Custom
         </button>

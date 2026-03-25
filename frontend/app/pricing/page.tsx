@@ -65,8 +65,8 @@ export default function PricingPage() {
           </div>
 
           {/* Pro Plan */}
-          <div className="bg-white rounded-xl border-2 border-blue-600 p-8 relative">
-            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-3 py-1 rounded-full">
+          <div className="bg-white rounded-xl border-2 border-[var(--color-primary)] p-8 relative">
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[var(--color-primary)] text-white text-xs px-3 py-1 rounded-full">
               Recommended
             </span>
             <h2 className="text-xl font-semibold mb-1">Pro</h2>
@@ -88,7 +88,7 @@ export default function PricingPage() {
               <button
                 onClick={handleUpgrade}
                 disabled={!user || loading || upgrading}
-                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+                className="w-full bg-[var(--color-primary)] text-white py-3 rounded-lg hover:bg-[var(--color-primary-light)] transition-colors font-medium disabled:opacity-50"
               >
                 {upgrading ? 'Redirecting...' : user ? 'Upgrade to Pro' : 'Sign in to upgrade'}
               </button>

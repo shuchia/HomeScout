@@ -31,7 +31,7 @@ export function CompareButton({ apartmentId, className = '' }: CompareButtonProp
       disabled={!inComparison && !canAddMore}
       className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
         inComparison
-          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+          ? 'bg-emerald-100 text-[var(--color-primary)] hover:bg-emerald-200'
           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
       } disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       title={

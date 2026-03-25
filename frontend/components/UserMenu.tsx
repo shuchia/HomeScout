@@ -25,7 +25,7 @@ export function UserMenu() {
             className="w-8 h-8 rounded-full"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
+          <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white">
             {profile?.name?.[0] || user.email?.[0] || '?'}
           </div>
         )}

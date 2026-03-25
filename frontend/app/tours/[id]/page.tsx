@@ -28,7 +28,7 @@ import { Apartment } from '@/types/apartment'
 // ---------------------------------------------------------------------------
 
 const stageConfig: Record<TourStage, { label: string; color: string }> = {
-  interested: { label: 'Interested', color: 'bg-blue-100 text-blue-800' },
+  interested: { label: 'Interested', color: 'bg-emerald-100 text-[var(--color-primary-dark)]' },
   outreach_sent: { label: 'Outreach Sent', color: 'bg-yellow-100 text-yellow-800' },
   scheduled: { label: 'Scheduled', color: 'bg-purple-100 text-purple-800' },
   toured: { label: 'Toured', color: 'bg-green-100 text-green-800' },
@@ -265,7 +265,7 @@ export default function TourDetailPage() {
           <p className="text-sm text-gray-500 mb-4">Sign in to view your tour details.</p>
           <button
             onClick={signInWithGoogle}
-            className="w-full bg-blue-600 text-white font-medium py-2.5 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+            className="w-full bg-[var(--color-primary)] text-white font-medium py-2.5 px-4 rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
           >
             Sign in with Google
           </button>
@@ -292,7 +292,7 @@ export default function TourDetailPage() {
           </p>
           <Link
             href="/tours"
-            className="inline-block bg-blue-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+            className="inline-block bg-[var(--color-primary)] text-white font-medium py-2 px-4 rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
           >
             Back to Tours
           </Link>
@@ -344,7 +344,7 @@ export default function TourDetailPage() {
               onClick={() => setActiveTab(tab)}
               className={`flex-1 py-2.5 text-sm font-medium text-center capitalize transition-colors
                 ${activeTab === tab
-                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
                   : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'
                 }`}
             >
@@ -420,7 +420,7 @@ export default function TourDetailPage() {
               disabled={updatingDecision || tour.decision === null}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors
                 border border-gray-200 text-gray-600 hover:bg-gray-50
-                ${tour.decision === null ? 'ring-2 ring-blue-500 bg-blue-50 text-blue-700' : ''}
+                ${tour.decision === null ? 'ring-2 ring-[var(--color-primary)] bg-emerald-50 text-[var(--color-primary)]' : ''}
                 disabled:opacity-50`}
             >
               Undecided
@@ -613,7 +613,7 @@ function CaptureTab({
               placeholder="Add a note..."
               rows={2}
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent
                 resize-none"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -626,8 +626,8 @@ function CaptureTab({
               type="button"
               onClick={onAddNote}
               disabled={addingNote || !noteText.trim()}
-              className="self-end shrink-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm
-                font-medium hover:bg-blue-700 transition-colors
+              className="self-end shrink-0 bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm
+                font-medium hover:bg-[var(--color-primary-light)] transition-colors
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {addingNote ? '...' : 'Add'}
@@ -722,7 +722,7 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
         <div className="flex items-start gap-2 min-w-0 flex-1">
           {/* Source icon */}
           {note.source === 'voice' ? (
-            <svg className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4 text-[var(--color-primary)] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           ) : (
@@ -828,7 +828,7 @@ function EmailTab({ tour, isPro, onTourUpdate }: { tour: Tour; isPro: boolean; o
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-1.5 bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
           >
             {copied ? (
               <>
@@ -888,7 +888,7 @@ function EmailTab({ tour, isPro, onTourUpdate }: { tour: Tour; isPro: boolean; o
         type="button"
         onClick={handleGenerate}
         disabled={emailLoading}
-        className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        className="bg-[var(--color-primary)] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
         {emailLoading ? (
           <>

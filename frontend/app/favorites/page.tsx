@@ -88,7 +88,7 @@ export default function FavoritesPage() {
           <p className="text-gray-600 mb-4">You haven&apos;t saved any favorites yet.</p>
           <Link
             href="/"
-            className="text-blue-600 hover:underline"
+            className="text-[var(--color-primary)] hover:underline"
           >
             Start searching for apartments
           </Link>

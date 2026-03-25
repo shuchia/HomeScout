@@ -18,7 +18,7 @@ const formatSqft = (sqft: number): string =>
 
 const getScoreColor = (score: number): string => {
   if (score >= 85) return 'bg-green-500'
-  if (score >= 70) return 'bg-blue-500'
+  if (score >= 70) return 'bg-[var(--color-primary)]'
   if (score >= 50) return 'bg-yellow-500'
   return 'bg-gray-500'
 }
@@ -137,7 +137,7 @@ export default function ComparePage() {
             <p className="text-gray-600 mb-6">Create an account to use the comparison tool.</p>
             <button
               onClick={signInWithGoogle}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+              className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors"
             >
               Sign In with Google
             </button>
@@ -170,7 +170,7 @@ export default function ComparePage() {
             </svg>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Select at least 2 apartments to compare</h2>
             <p className="text-gray-600 mb-6">Go back to search results and add apartments using the Compare button.</p>
-            <Link href="/" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+            <Link href="/" className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -213,7 +213,7 @@ export default function ComparePage() {
         {/* AI Scoring Section */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
             Get AI Comparison
@@ -228,13 +228,13 @@ export default function ComparePage() {
                 value={preferences}
                 onChange={(e) => setPreferences(e.target.value)}
                 placeholder="Optional: e.g., parking, quiet for WFH, near transit"
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleScore() }}
               />
               <button
                 onClick={handleScore}
                 disabled={scoring}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {scoring ? (
                   <>
@@ -271,7 +271,7 @@ export default function ComparePage() {
         {/* Loading State */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--color-primary)] mb-4"></div>
             <p className="text-gray-600">Loading apartments...</p>
           </div>
         )}
@@ -521,7 +521,7 @@ export default function ComparePage() {
                           href={`/apartment/${apt.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
                         >
                           View Details
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
