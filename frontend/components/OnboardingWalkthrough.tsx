@@ -5,6 +5,13 @@ import type { EventData, Controls, Step } from 'react-joyride'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
+const STEP_OPTIONS: Partial<import('react-joyride').Options> = {
+  showProgress: true,
+  overlayClickAction: false,
+  primaryColor: '#2D6A4F',
+  buttons: ['back', 'close', 'primary', 'skip'],
+}
+
 const STEPS: Step[] = [
   {
     target: 'body',
@@ -12,6 +19,7 @@ const STEPS: Step[] = [
     skipBeacon: true,
     title: 'Welcome to snugd!',
     content: 'Find apartments across 19 East Coast cities. Set your budget and preferences, and we\'ll match you with the best options.',
+    ...STEP_OPTIONS,
   },
   {
     target: '[data-onboarding="favorites"]',
@@ -19,6 +27,7 @@ const STEPS: Step[] = [
     content: 'Tap the heart icon to save apartments you love. Compare them side by side to find your perfect match.',
     placement: 'bottom',
     skipBeacon: true,
+    ...STEP_OPTIONS,
   },
   {
     target: '[data-onboarding="tours"]',
@@ -26,6 +35,7 @@ const STEPS: Step[] = [
     content: 'Plan tours, capture notes and photos, and get AI-powered insights to help you decide.',
     placement: 'bottom',
     skipBeacon: true,
+    ...STEP_OPTIONS,
   },
   {
     target: 'body',
@@ -33,6 +43,7 @@ const STEPS: Step[] = [
     skipBeacon: true,
     title: 'Unlock Pro Features',
     content: 'Get AI scoring, smart comparisons, and inquiry emails with a Pro invite code. Enter it on the search page or the Pricing page.',
+    ...STEP_OPTIONS,
   },
 ]
 
@@ -90,12 +101,6 @@ export function OnboardingWalkthrough() {
       stepIndex={stepIndex}
       onEvent={handleEvent}
       continuous
-      options={{
-        showProgress: true,
-        overlayClickAction: false,
-        primaryColor: '#2D6A4F',
-        buttons: ['back', 'close', 'primary', 'skip'],
-      }}
       styles={{
         tooltip: {
           borderRadius: '12px',
