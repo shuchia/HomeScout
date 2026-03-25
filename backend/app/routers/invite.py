@@ -1,10 +1,11 @@
 """Invite code endpoints for beta access."""
 import logging
+import os
 import secrets
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel, Field
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.auth import get_current_user, UserContext
 from app.services.tier_service import supabase_admin
@@ -12,6 +13,15 @@ from app.services.tier_service import supabase_admin
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "homescout-dev-admin-key")
+
+
+async def verify_admin_key(x_admin_key: str = Header(...)):
+    """Dependency that verifies the X-Admin-Key header matches ADMIN_API_KEY."""
+    if x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin API key")
+    return x_admin_key
 
 
 class RedeemRequest(BaseModel):
@@ -50,6 +60,7 @@ async def redeem_invite_code(
     _ensure_supabase()
     code = body.code.strip().upper()
 
+    # Step 1: Check if code exists and is valid (not expired)
     result = supabase_admin.table("invite_codes").select("*").eq("code", code).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Invalid invite code")
@@ -61,9 +72,7 @@ async def redeem_invite_code(
         if expires < datetime.now(timezone.utc):
             raise HTTPException(status_code=400, detail="This invite code has expired")
 
-    if invite["times_used"] >= invite["max_uses"]:
-        raise HTTPException(status_code=400, detail="This invite code has been fully used")
-
+    # Check if user already redeemed this code (before attempting atomic increment)
     existing = (
         supabase_admin.table("invite_redemptions")
         .select("id")
@@ -74,6 +83,19 @@ async def redeem_invite_code(
     if existing.data:
         raise HTTPException(status_code=400, detail="You have already redeemed this code")
 
+    # Step 2: Atomic increment — only succeeds if times_used < max_uses
+    # This prevents the TOCTOU race condition by combining the check and update
+    atomic_result = (
+        supabase_admin.table("invite_codes")
+        .update({"times_used": invite["times_used"] + 1})
+        .eq("code", code)
+        .lt("times_used", invite["max_uses"])
+        .execute()
+    )
+
+    if not atomic_result.data:
+        raise HTTPException(status_code=400, detail="This invite code has been fully used")
+
     pro_expires = datetime.now(timezone.utc) + timedelta(days=90)
 
     try:
@@ -81,10 +103,6 @@ async def redeem_invite_code(
             "user_tier": "pro",
             "pro_expires_at": pro_expires.isoformat(),
         }).eq("id", user.user_id).execute()
-
-        supabase_admin.table("invite_codes").update({
-            "times_used": invite["times_used"] + 1,
-        }).eq("code", code).execute()
 
         supabase_admin.table("invite_redemptions").insert({
             "code": code,
@@ -131,9 +149,9 @@ async def get_invite_status(
     return InviteStatus(has_invite=False)
 
 
-@router.post("/api/admin/invite-codes")
+@router.post("/api/admin/invite-codes", dependencies=[Depends(verify_admin_key)])
 async def generate_invite_codes(body: GenerateCodesRequest):
-    """Generate invite codes. No auth for now (admin-only by obscurity during beta)."""
+    """Generate invite codes. Requires X-Admin-Key header."""
     _ensure_supabase()
 
     codes = []
