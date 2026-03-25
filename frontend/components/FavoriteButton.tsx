@@ -19,10 +19,7 @@ export function FavoriteButton({ apartmentId, className = '' }: FavoriteButtonPr
     e.stopPropagation()
     e.preventDefault()
 
-    console.log('FavoriteButton clicked!', { apartmentId, user: !!user, favorited })
-
     if (!user) {
-      console.log('No user, triggering sign in...')
       signInWithGoogle()
       return
     }
@@ -30,19 +27,15 @@ export function FavoriteButton({ apartmentId, className = '' }: FavoriteButtonPr
     setLoading(true)
     try {
       if (favorited) {
-        console.log('Removing favorite...')
-        const result = await removeFavorite(apartmentId)
-        console.log('Remove result:', result)
+        await removeFavorite(apartmentId)
       } else {
-        console.log('Adding favorite...')
         const success = await addFavorite(apartmentId)
-        console.log('Add result:', success)
         if (!success) {
           alert('Free limit reached (5/5). Upgrade to Pro for unlimited favorites.')
         }
       }
-    } catch (error) {
-      console.error('Error toggling favorite:', error)
+    } catch {
+      // Silently handle error
     }
     setLoading(false)
   }

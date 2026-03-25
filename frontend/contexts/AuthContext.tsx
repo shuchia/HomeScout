@@ -54,16 +54,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         : null
       if (testUser) {
         try {
-          setUser(JSON.parse(testUser) as User)
+          const parsedUser = JSON.parse(testUser) as User
           const testProfile = typeof window !== 'undefined'
             ? localStorage.getItem('__test_auth_profile')
             : null
+          let parsedProfile: Profile | null = null
           if (testProfile) {
             try {
-              setProfile(JSON.parse(testProfile) as Profile)
+              parsedProfile = JSON.parse(testProfile) as Profile
             } catch { /* ignore parse errors */ }
           }
-          setLoading(false)
+          // Defer setState to avoid synchronous setState in effect
+          queueMicrotask(() => {
+            if (!mounted) return
+            setUser(parsedUser)
+            if (parsedProfile) setProfile(parsedProfile)
+            setLoading(false)
+          })
           return
         } catch { /* fall through */ }
       }

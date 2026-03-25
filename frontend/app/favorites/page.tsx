@@ -34,21 +34,12 @@ export default function FavoritesPage() {
       })
   }, [user])
 
-  // Debug logging
-  console.log('FavoritesPage render:', {
-    user: user?.id,
-    authLoading,
-    loading,
-    favoritesCount: favorites.length,
-    favorites: favorites.map(f => ({ id: f.id, apartment_id: f.apartment_id, hasApartment: !!f.apartment }))
-  })
-
   if (authLoading) {
     return (
       <div className="max-w-6xl mx-auto p-6">
         <div className="animate-pulse">
           <div className="h-8 w-48 bg-gray-200 rounded mb-6"></div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2">
             {[1, 2, 3].map(i => (
               <div key={i} className="h-64 bg-gray-200 rounded-lg"></div>
             ))}
@@ -78,23 +69,34 @@ export default function FavoritesPage() {
       <h1 className="text-2xl font-bold mb-6">My Favorites</h1>
 
       {loading ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2">
           {[1, 2, 3].map(i => (
             <div key={i} className="h-64 bg-gray-200 rounded-lg animate-pulse"></div>
           ))}
         </div>
       ) : favorites.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600 mb-4">You haven&apos;t saved any favorites yet.</p>
+        <div className="text-center py-16">
+          <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+            <svg className="h-8 w-8 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-[var(--color-text)] mb-2">
+            No favorites yet
+          </h3>
+          <p className="text-[var(--color-text-secondary)] mb-4">
+            Search for apartments and tap the heart icon to save your favorites here.
+          </p>
           <Link
             href="/"
-            className="text-[var(--color-primary)] hover:underline"
+            className="inline-block px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
           >
-            Start searching for apartments
+            Start Searching
           </Link>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2">
           {favorites.map(fav => (
             <div key={fav.id} className="relative">
               {fav.is_available === false && (

@@ -171,7 +171,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
       </div>
 
       {/* Bedrooms & Bathrooms Row */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Bedrooms */}
         <div>
           <label htmlFor="bedrooms" className="block text-sm font-medium text-gray-700 mb-1">
@@ -216,7 +216,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Property Type
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {PROPERTY_TYPES.map((type) => (
             <label
               key={type}

@@ -56,9 +56,10 @@ export default function ImageCarousel({ images, alt }: ImageCarouselProps) {
 
   useEffect(() => {
     if (!emblaApi) return;
-    onSelect();
     emblaApi.on('select', onSelect);
     emblaApi.on('reInit', onSelect);
+    // Defer initial state sync to avoid synchronous setState in effect
+    queueMicrotask(onSelect);
     return () => {
       emblaApi.off('select', onSelect);
       emblaApi.off('reInit', onSelect);

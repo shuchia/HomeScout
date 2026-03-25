@@ -67,7 +67,8 @@ export function useFavorites() {
   }, [user])
 
   useEffect(() => {
-    loadFavorites()
+    // Defer to avoid synchronous setState in effect body
+    queueMicrotask(() => { loadFavorites() })
 
     if (!user) return
 

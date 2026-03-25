@@ -112,9 +112,26 @@ export default function Home() {
 
               {/* Loading State */}
               {isLoading && (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--color-primary)] mb-4"></div>
-                  <p className="text-gray-600">Finding your perfect apartments...</p>
+                <div className="grid gap-6 sm:grid-cols-2">
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden animate-pulse">
+                      <div className="aspect-[4/3] bg-gray-200" />
+                      <div className="p-4 space-y-3">
+                        <div className="h-6 bg-gray-200 rounded w-1/3" />
+                        <div className="h-4 bg-gray-200 rounded w-2/3" />
+                        <div className="flex gap-4">
+                          <div className="h-4 bg-gray-200 rounded w-16" />
+                          <div className="h-4 bg-gray-200 rounded w-16" />
+                          <div className="h-4 bg-gray-200 rounded w-16" />
+                        </div>
+                        <div className="flex gap-1.5">
+                          <div className="h-6 bg-gray-200 rounded-full w-16" />
+                          <div className="h-6 bg-gray-200 rounded-full w-20" />
+                          <div className="h-6 bg-gray-200 rounded-full w-14" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -136,25 +153,18 @@ export default function Home() {
 
               {/* No Results */}
               {!isLoading && !error && hasSearched && results.length === 0 && (
-                <div className="text-center py-12">
-                  <svg
-                    className="h-16 w-16 text-gray-300 mx-auto mb-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    No apartments found
+                <div className="text-center py-16">
+                  <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg className="h-8 w-8 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-[var(--color-text)] mb-2">
+                    No apartments match your criteria
                   </h3>
-                  <p className="text-gray-600">
-                    Try adjusting your search criteria or increasing your budget.
+                  <p className="text-[var(--color-text-secondary)] max-w-md mx-auto">
+                    Try increasing your budget, changing the city, or adjusting your bedroom and bathroom preferences.
                   </p>
                 </div>
               )}
