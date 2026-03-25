@@ -518,7 +518,7 @@ test.describe('Snugd E2E Tests', () => {
       await page.setViewportSize({ width: 375, height: 667 });
       await page.goto('/');
 
-      const form = page.locator('form');
+      const form = page.locator('form.space-y-6');
       await expect(form).toBeVisible();
 
       const submitButton = page.locator('button:has-text("Find Apartments")');
@@ -637,12 +637,13 @@ test.describe('Snugd E2E Tests', () => {
       await page.click('button:has-text("Find Apartments")');
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
-      // Add both apartments to comparison
-      const compareButtons = page.locator('button:has-text("Compare")');
-      await compareButtons.first().click();
+      // Add both apartments to comparison — use title attribute to scope to card buttons only
+      const cardCompareButtons = page.locator('button[title="Add to comparison"]');
+      await cardCompareButtons.first().click();
       await expect(page.locator('text=1 of 3 selected')).toBeVisible();
 
-      await compareButtons.nth(1).click();
+      // After first click, the first button's title changes; the second is still "Add to comparison"
+      await page.locator('button[title="Add to comparison"]').first().click();
       await expect(page.locator('text=2 of 3 selected')).toBeVisible();
 
       // Compare button in the bar should be enabled now
@@ -899,7 +900,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should list apartments from backend', async ({ page }) => {
-      const response = await page.request.get('http://localhost:8000/api/apartments/list?city=Pittsburgh&limit=5');
+      const response = await page.request.get('http://localhost:8000/api/apartments/list?limit=5');
       expect(response.ok()).toBeTruthy();
 
       const body = await response.json();
@@ -984,7 +985,7 @@ test.describe('Anonymous User Flow', () => {
   test('should show Sign In button in header', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.locator('button:has-text("Sign In")')).toBeVisible();
+    await expect(page.locator('button:has-text("Sign In")').first()).toBeVisible();
   });
 
   test('should not show Favorites or Compare links for anonymous users', async ({ page }) => {
