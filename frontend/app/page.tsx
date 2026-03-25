@@ -6,6 +6,7 @@ import ApartmentCard from '@/components/ApartmentCard';
 import { ApartmentWithScore } from '@/types/apartment';
 import { useAuth } from '@/contexts/AuthContext';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import { InviteCodeBanner } from '@/components/InviteCodeBanner';
 
 export default function Home() {
   // State for search results
@@ -42,6 +43,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <InviteCodeBanner />
         {/* Hero Section - only show before first search */}
         {!hasSearched && (
           <div className="text-center mb-8">

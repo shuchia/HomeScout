@@ -526,3 +526,50 @@ export async function generateDecisionBrief(): Promise<{
   if (!response.ok) throw new ApiError('Failed to generate decision brief', response.status)
   return response.json()
 }
+
+// Invite code endpoints
+export async function redeemInviteCode(code: string): Promise<{ success: boolean; message: string; expires_at?: string }> {
+  const res = await fetch(`${API_URL}/api/invite/redeem`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to redeem code' }));
+    throw new ApiError(err.detail || 'Failed to redeem code', res.status);
+  }
+  return res.json();
+}
+
+export async function getInviteStatus(): Promise<{ has_invite: boolean; expires_at?: string }> {
+  const res = await fetch(`${API_URL}/api/invite/status`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new ApiError('Failed to check invite status', res.status);
+  return res.json();
+}
+
+// Feedback endpoint
+export async function submitFeedback(data: {
+  type: 'bug' | 'suggestion' | 'general';
+  message: string;
+  screenshot_url?: string;
+  page_url?: string;
+}): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_URL}/api/feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to submit feedback' }));
+    throw new ApiError(err.detail || 'Failed to submit feedback', res.status);
+  }
+  return res.json();
+}

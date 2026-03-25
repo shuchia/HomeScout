@@ -5,6 +5,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ComparisonBar } from "@/components/ComparisonBar";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
+import { FeedbackWidget } from "@/components/FeedbackWidget";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -30,6 +31,7 @@ export default function RootLayout({
           <main className="pb-16 md:pb-0">{children}</main>
           <ComparisonBar />
           <BottomNav />
+          <FeedbackWidget />
         </AuthProvider>
       </body>
     </html>
