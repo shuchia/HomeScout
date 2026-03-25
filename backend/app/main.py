@@ -24,6 +24,8 @@ from app.routers.webhooks import router as webhooks_router
 from app.routers.billing import router as billing_router
 from app.routers.saved_searches import router as saved_searches_router
 from app.routers.tours import router as tours_router
+from app.routers.invite import router as invite_router
+from app.routers.feedback import router as feedback_router
 from app.database import is_database_enabled, init_db, close_db
 
 # Configure logging
@@ -93,6 +95,8 @@ app.include_router(webhooks_router)
 app.include_router(billing_router)
 app.include_router(saved_searches_router)
 app.include_router(tours_router)
+app.include_router(invite_router)
+app.include_router(feedback_router)
 
 # Initialize services
 apartment_service = ApartmentService()
