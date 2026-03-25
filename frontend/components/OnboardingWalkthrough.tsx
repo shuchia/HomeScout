@@ -12,48 +12,63 @@ const STEP_OPTIONS: Partial<import('react-joyride').Options> = {
   buttons: ['back', 'close', 'primary', 'skip'],
 }
 
-const STEPS: Step[] = [
-  {
-    target: 'body',
-    placement: 'center',
-    skipBeacon: true,
-    title: 'Welcome to snugd!',
-    content: 'Find apartments across 19 East Coast cities. Set your budget and preferences, and we\'ll match you with the best options.',
-    ...STEP_OPTIONS,
-  },
-  {
-    target: '[data-onboarding="favorites"]',
-    title: 'Save Your Favorites',
-    content: 'Tap the heart icon to save apartments you love. Compare them side by side to find your perfect match.',
-    placement: 'bottom',
-    skipBeacon: true,
-    ...STEP_OPTIONS,
-  },
-  {
-    target: '[data-onboarding="tours"]',
-    title: 'Plan Your Tours',
-    content: 'Plan tours, capture notes and photos, and get AI-powered insights to help you decide.',
-    placement: 'bottom',
-    skipBeacon: true,
-    ...STEP_OPTIONS,
-  },
-  {
-    target: 'body',
-    placement: 'center',
-    skipBeacon: true,
-    title: 'Unlock Pro Features',
-    content: 'Get AI scoring, smart comparisons, and inquiry emails with a Pro invite code. Enter it on the search page or the Pricing page.',
-    ...STEP_OPTIONS,
-  },
-]
+function buildSteps(isMobile: boolean): Step[] {
+  // On mobile, Header nav is hidden — target BottomNav instead
+  const favTarget = isMobile
+    ? 'nav.fixed [data-onboarding="favorites"]'
+    : 'header [data-onboarding="favorites"]'
+  const tourTarget = isMobile
+    ? 'nav.fixed [data-onboarding="tours"]'
+    : 'header [data-onboarding="tours"]'
+  const navPlacement = isMobile ? 'top' as const : 'bottom' as const
+
+  return [
+    {
+      target: 'body',
+      placement: 'center',
+      skipBeacon: true,
+      title: 'Welcome to snugd!',
+      content: 'Find apartments across 19 East Coast cities. Set your budget and preferences, and we\'ll match you with the best options.',
+      ...STEP_OPTIONS,
+    },
+    {
+      target: favTarget,
+      title: 'Save Your Favorites',
+      content: 'Tap the heart icon to save apartments you love. Compare them side by side to find your perfect match.',
+      placement: navPlacement,
+      skipBeacon: true,
+      ...STEP_OPTIONS,
+    },
+    {
+      target: tourTarget,
+      title: 'Plan Your Tours',
+      content: 'Plan tours, capture notes and photos, and get AI-powered insights to help you decide.',
+      placement: navPlacement,
+      skipBeacon: true,
+      ...STEP_OPTIONS,
+    },
+    {
+      target: 'body',
+      placement: 'center',
+      skipBeacon: true,
+      title: 'Unlock Pro Features',
+      content: 'Get AI scoring, smart comparisons, and inquiry emails with a Pro invite code. Enter it on the search page or the Pricing page.',
+      ...STEP_OPTIONS,
+    },
+  ]
+}
 
 export function OnboardingWalkthrough() {
   const { user, profile, refreshProfile } = useAuth()
   const [run, setRun] = useState(false)
   const [stepIndex, setStepIndex] = useState(0)
+  const [steps, setSteps] = useState<Step[]>(() => buildSteps(false))
 
   useEffect(() => {
     if (user && profile && !profile.has_completed_onboarding) {
+      // Detect mobile vs desktop and build steps with correct targets
+      const isMobile = window.matchMedia('(max-width: 767px)').matches
+      setSteps(buildSteps(isMobile))
       const timer = setTimeout(() => setRun(true), 1000)
       return () => clearTimeout(timer)
     }
@@ -96,7 +111,7 @@ export function OnboardingWalkthrough() {
 
   return (
     <Joyride
-      steps={STEPS}
+      steps={steps}
       run={run}
       stepIndex={stepIndex}
       onEvent={handleEvent}
