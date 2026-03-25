@@ -20,10 +20,10 @@ export function Header() {
           </Link>
           {user && (
             <>
-              <Link href="/favorites" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
+              <Link href="/favorites" data-onboarding="favorites" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
                 Favorites
               </Link>
-              <Link href="/tours" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
+              <Link href="/tours" data-onboarding="tours" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
                 Tours
               </Link>
               <Link href="/compare" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">

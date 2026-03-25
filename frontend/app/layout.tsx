@@ -6,6 +6,7 @@ import { ComparisonBar } from "@/components/ComparisonBar";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
+import { OnboardingWalkthrough } from "@/components/OnboardingWalkthrough";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -28,6 +29,7 @@ export default function RootLayout({
       <body className={`${dmSans.variable} antialiased`}>
         <AuthProvider>
           <Header />
+          <OnboardingWalkthrough />
           <main className="pb-16 md:pb-0">{children}</main>
           <ComparisonBar />
           <BottomNav />

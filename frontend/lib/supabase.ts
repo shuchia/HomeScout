@@ -24,6 +24,8 @@ export interface Profile {
   user_tier: 'free' | 'pro'
   subscription_status: string | null
   current_period_end: string | null
+  pro_expires_at: string | null
+  has_completed_onboarding: boolean
 }
 
 export interface Favorite {

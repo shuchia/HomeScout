@@ -45,6 +45,7 @@ export function BottomNav() {
             <Link
               key={tab.href}
               href={tab.href}
+              data-onboarding={tab.label === 'Favorites' ? 'favorites' : tab.label === 'Tours' ? 'tours' : undefined}
               className={`flex-1 flex flex-col items-center py-2 text-xs transition-colors ${
                 active ? 'text-[var(--color-primary)]' : 'text-gray-400'
               }`}
