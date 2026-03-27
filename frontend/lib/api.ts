@@ -59,11 +59,10 @@ export async function searchApartments(params: SearchParams): Promise<SearchResp
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new ApiError(
-        errorData.detail || `Search failed with status ${response.status}`,
-        response.status,
-        JSON.stringify(errorData)
-      );
+      const message = response.status === 429
+        ? 'Too many requests. Please wait a moment before searching again.'
+        : errorData.detail || `Search failed with status ${response.status}`;
+      throw new ApiError(message, response.status, JSON.stringify(errorData));
     }
 
     const data: SearchResponse = await response.json();
