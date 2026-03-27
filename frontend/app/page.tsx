@@ -24,6 +24,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(() => loadSessionResults().results.length > 0);
   const [searchesRemaining, setSearchesRemaining] = useState<number | null>(() => loadSessionResults().remaining);
+  const [rateLimited, setRateLimited] = useState(false);
 
   const { user, loading: authLoading, signInWithGoogle, tier, isPro } = useAuth();
 
@@ -38,6 +39,13 @@ export default function Home() {
   const handleResults = (apartments: ApartmentWithScore[]) => {
     setResults(apartments);
     setHasSearched(true);
+    setRateLimited(false);
+  };
+
+  // Handle errors — detect rate limiting
+  const handleError = (err: string | null) => {
+    setError(err);
+    setRateLimited(err?.toLowerCase().includes('too many') ?? false);
   };
 
   // Handle search metadata (tier, remaining searches)
@@ -94,7 +102,7 @@ export default function Home() {
               <SearchForm
                 onResults={handleResults}
                 onLoading={setIsLoading}
-                onError={setError}
+                onError={handleError}
                 onSearchMeta={handleSearchMeta}
               />
               )}
@@ -112,13 +120,18 @@ export default function Home() {
               )}
               {/* Error shown below search form when no results yet */}
               {!hasSearched && error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
-                  <div className="flex items-center gap-2">
-                    <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-red-700">{error}</p>
+                <div className="mt-4 space-y-3">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2">
+                      <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-red-700">{error}</p>
+                    </div>
                   </div>
+                  {rateLimited && !isPro && (
+                    <UpgradePrompt feature="higher rate limits and unlimited searches" inline />
+                  )}
                 </div>
               )}
             </div>
@@ -129,23 +142,28 @@ export default function Home() {
             <div className="lg:col-span-2">
               {/* Error Message */}
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                  <div className="flex items-center gap-2">
-                    <svg
-                      className="h-5 w-5 text-red-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <p className="text-red-700">{error}</p>
+                <div className="space-y-3 mb-6">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="h-5 w-5 text-red-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <p className="text-red-700">{error}</p>
+                    </div>
                   </div>
+                  {rateLimited && !isPro && (
+                    <UpgradePrompt feature="higher rate limits and unlimited searches" inline />
+                  )}
                 </div>
               )}
 
