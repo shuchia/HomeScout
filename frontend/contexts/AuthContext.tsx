@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { User, Session } from '@supabase/supabase-js'
 import { supabase, Profile } from '@/lib/supabase'
 import { setAccessToken } from '@/lib/auth-store'
+import { useComparison } from '@/hooks/useComparison'
 
 interface AuthContextType {
   user: User | null
@@ -148,9 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function signOut() {
     setProfile(null)
     applySession(null)
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('comparison-storage')
-    }
+    useComparison.getState().clearComparison()
     supabase.auth.signOut().catch(() => {})
   }
 

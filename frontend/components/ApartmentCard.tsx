@@ -4,6 +4,7 @@ import { ApartmentWithScore } from '@/types/apartment';
 import ImageCarousel from './ImageCarousel';
 import { FavoriteButton } from './FavoriteButton';
 import { CompareButton } from './CompareButton';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ApartmentCardProps {
   apartment: ApartmentWithScore;
@@ -50,6 +51,7 @@ const getLabelColor = (label: string): string => {
 };
 
 export default function ApartmentCard({ apartment }: ApartmentCardProps) {
+  const { tier } = useAuth();
   const {
     id,
     address,
@@ -87,15 +89,19 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
           >
             {match_score}% Match
           </div>
+        ) : apartment.heuristic_score != null ? (
+          <div
+            className={`absolute top-3 right-3 ${getScoreColor(
+              apartment.heuristic_score
+            )} text-white px-3 py-1 rounded-full font-bold text-sm shadow-md`}
+          >
+            {apartment.heuristic_score}% Match
+          </div>
         ) : apartment.match_label ? (
           <div className={`absolute top-3 right-3 ${getLabelColor(apartment.match_label)} px-3 py-1 rounded-full font-bold text-sm shadow-md`}>
             {apartment.match_label}
           </div>
-        ) : (
-          <div className="absolute top-3 right-3 bg-gray-300 text-gray-600 px-3 py-1 rounded-full font-bold text-sm shadow-md">
-            Pro
-          </div>
-        )}
+        ) : null}
       </div>
 
       {/* Card Content */}
@@ -140,13 +146,15 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
         </div>
 
         {/* Available Date */}
-        <p className="text-sm text-gray-500">
-          Available: {new Date(available_date).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          })}
-        </p>
+        {available_date && !isNaN(new Date(available_date).getTime()) && (
+          <p className="text-sm text-gray-500">
+            Available: {new Date(available_date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+          </p>
+        )}
 
         {/* Freshness Badge */}
         {getFreshnessBadge(apartment.freshness_confidence) && (
@@ -175,12 +183,10 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
         {/* Divider */}
         <hr className="border-gray-200" />
 
-        {/* AI Reasoning - only for scored results */}
-        {match_score != null && reasoning && (
+        {/* AI Reasoning - Pro users see full insights, free users see upsell */}
+        {match_score != null && reasoning ? (
           <div className="space-y-2">
             <p className="text-sm text-gray-700 italic">&quot;{reasoning}&quot;</p>
-
-            {/* Highlights */}
             <ul className="space-y-1">
               {highlights.map((highlight, index) => (
                 <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
@@ -202,7 +208,14 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
               ))}
             </ul>
           </div>
-        )}
+        ) : tier === 'free' && apartment.heuristic_score != null ? (
+          <a href="/pricing" className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 hover:bg-amber-100 transition">
+            <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            Upgrade to Pro for AI-powered insights
+          </a>
+        ) : null}
 
         {/* Card Actions */}
         <div className="flex justify-end pt-2">
