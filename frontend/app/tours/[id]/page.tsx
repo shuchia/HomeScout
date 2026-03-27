@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import StarRating from '@/components/StarRating'
 import TagPicker, { TagSuggestion } from '@/components/TagPicker'
+import { TourScheduler } from '@/components/TourScheduler'
 import {
   getTour,
   updateTour,
@@ -358,7 +359,7 @@ export default function TourDetailPage() {
       <main className={`flex-1 overflow-y-auto ${showDecisionBar ? 'pb-20' : 'pb-4'}`}>
         <div className="max-w-2xl mx-auto p-4">
           {activeTab === 'info' && (
-            <InfoTab apartment={apartment} tour={tour} />
+            <InfoTab apartment={apartment} tour={tour} onTourUpdate={setTour} />
           )}
           {activeTab === 'capture' && (
             <CaptureTab
@@ -436,7 +437,7 @@ export default function TourDetailPage() {
 // Info Tab
 // ---------------------------------------------------------------------------
 
-function InfoTab({ apartment, tour }: { apartment: Apartment | null; tour: Tour }) {
+function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | null; tour: Tour; onTourUpdate: (tour: Tour) => void }) {
   if (!apartment) {
     return <p className="text-sm text-gray-500">Apartment details not available.</p>
   }
@@ -453,24 +454,8 @@ function InfoTab({ apartment, tour }: { apartment: Apartment | null; tour: Tour 
         <Stat label="Available" value={apartment.available_date || 'N/A'} />
       </div>
 
-      {/* Scheduled date if present */}
-      {tour.scheduled_date && (
-        <div className="bg-purple-50 rounded-lg p-3">
-          <p className="text-xs font-medium text-purple-600 uppercase tracking-wide mb-1">Tour Scheduled</p>
-          <p className="text-sm text-purple-800 font-medium">
-            {new Date(tour.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-            })}
-            {tour.scheduled_time && (
-              <span className="ml-1">
-                at {formatTime(tour.scheduled_time)}
-              </span>
-            )}
-          </p>
-        </div>
-      )}
+      {/* Schedule Tour Section */}
+      <TourScheduler tour={tour} onUpdate={onTourUpdate} />
 
       {/* Amenities */}
       {apartment.amenities.length > 0 && (
