@@ -77,16 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // 5-second timeout to prevent infinite loading on stale sessions
+    // 15-second timeout to prevent infinite loading on stale sessions
+    // Don't sign out — just stop loading so the UI is usable
     const timeout = setTimeout(() => {
       if (mounted && loading) {
-        console.warn('Auth initialization timed out — clearing stale session')
-        supabase.auth.signOut().catch(() => {})
-        applySession(null)
-        setProfile(null)
+        console.warn('Auth initialization timed out — continuing without session')
         setLoading(false)
       }
-    }, 5000)
+    }, 15000)
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       clearTimeout(timeout)
@@ -108,18 +106,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, s) => {
         if (!mounted) return
 
-        // Handle token refresh failure
+        // Handle token refresh failure — don't sign out immediately,
+        // keep the existing session so the UI stays usable
         if (event === 'TOKEN_REFRESHED' && !s) {
-          console.warn('Token refresh failed — signing out')
-          applySession(null)
-          setProfile(null)
+          console.warn('Token refresh failed — keeping existing session')
           return
         }
 
-        applySession(s)
-        if (s?.user) {
+        // Only update session if we actually got a new one,
+        // don't clear on transient null during refresh
+        if (s) {
+          applySession(s)
           await fetchProfile(s.user.id)
-        } else {
+        } else if (event === 'SIGNED_OUT') {
+          applySession(null)
           setProfile(null)
         }
       }

@@ -16,7 +16,7 @@ export function useFavorites() {
 
   const loadFavorites = useCallback(async () => {
     if (!user) {
-      setFavorites([])
+      // Don't clear favorites if we already have data — could be a token refresh
       setLoading(false)
       return
     }
