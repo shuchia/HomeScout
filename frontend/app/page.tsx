@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import SearchForm from '@/components/SearchForm';
 import ApartmentCard from '@/components/ApartmentCard';
 import { ApartmentWithScore } from '@/types/apartment';
@@ -8,15 +8,31 @@ import { useAuth } from '@/contexts/AuthContext';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import { InviteCodeBanner } from '@/components/InviteCodeBanner';
 
+function loadSessionResults(): { results: ApartmentWithScore[]; remaining: number | null } {
+  if (typeof window === 'undefined') return { results: [], remaining: null };
+  try {
+    const raw = sessionStorage.getItem('snugd-search-results');
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { results: [], remaining: null };
+}
+
 export default function Home() {
-  // State for search results
-  const [results, setResults] = useState<ApartmentWithScore[]>([]);
+  // Restore search results from session so they persist across tab switches
+  const [results, setResults] = useState<ApartmentWithScore[]>(() => loadSessionResults().results);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [searchesRemaining, setSearchesRemaining] = useState<number | null>(null);
+  const [hasSearched, setHasSearched] = useState(() => loadSessionResults().results.length > 0);
+  const [searchesRemaining, setSearchesRemaining] = useState<number | null>(() => loadSessionResults().remaining);
 
   const { user, loading: authLoading, signInWithGoogle, tier, isPro } = useAuth();
+
+  // Persist search results to sessionStorage
+  useEffect(() => {
+    if (results.length > 0) {
+      sessionStorage.setItem('snugd-search-results', JSON.stringify({ results, remaining: searchesRemaining }));
+    }
+  }, [results, searchesRemaining]);
 
   // Handle search results
   const handleResults = (apartments: ApartmentWithScore[]) => {
@@ -64,12 +80,24 @@ export default function Home() {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Search Apartments
               </h3>
+              {!user ? (
+                <div className="text-center py-6">
+                  <p className="text-gray-600 mb-4">Sign in to search for apartments</p>
+                  <button
+                    onClick={signInWithGoogle}
+                    className="w-full py-3 px-4 rounded-lg font-semibold text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-light)] transition"
+                  >
+                    Sign In with Google
+                  </button>
+                </div>
+              ) : (
               <SearchForm
                 onResults={handleResults}
                 onLoading={setIsLoading}
                 onError={setError}
                 onSearchMeta={handleSearchMeta}
               />
+              )}
               {tier === 'free' && searchesRemaining !== null && (
                 <p className="text-sm text-gray-500 mt-3">
                   {searchesRemaining > 0

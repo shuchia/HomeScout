@@ -8,13 +8,13 @@ import Link from 'next/link'
 import { Apartment, ApartmentWithScore } from '@/types/apartment'
 import { listTours } from '@/lib/api'
 
-// Convert a basic Apartment to ApartmentWithScore with default values
+// Convert a basic Apartment to ApartmentWithScore for display
 function toApartmentWithScore(apartment: Apartment): ApartmentWithScore {
   return {
     ...apartment,
-    match_score: 100, // Favorited = 100% match
-    reasoning: "You saved this apartment to your favorites.",
-    highlights: ["Saved to favorites"]
+    match_score: null,
+    reasoning: null,
+    highlights: []
   }
 }
 
