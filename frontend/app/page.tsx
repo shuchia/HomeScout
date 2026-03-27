@@ -35,6 +35,18 @@ export default function Home() {
     }
   }, [results, searchesRemaining]);
 
+  // Clear state on sign-out
+  useEffect(() => {
+    if (!user) {
+      setResults([]);
+      setHasSearched(false);
+      setError(null);
+      setRateLimited(false);
+      setSearchesRemaining(null);
+      sessionStorage.removeItem('snugd-search-results');
+    }
+  }, [user]);
+
   // Handle search results
   const handleResults = (apartments: ApartmentWithScore[]) => {
     setResults(apartments);
