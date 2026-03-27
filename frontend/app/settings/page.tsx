@@ -2,11 +2,10 @@
 import { Suspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { createBillingPortalSession } from '@/lib/api'
 
 function SettingsContent() {
-  const { user, profile, loading, isPro, tier, signOut, refreshProfile, accessToken } = useAuth()
+  const { user, profile, loading, isPro, tier, signOut, refreshProfile } = useAuth()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -25,17 +24,8 @@ function SettingsContent() {
   }
 
   async function handleManageBilling() {
-    if (!accessToken) return
     try {
-      const res = await fetch(`${API_BASE}/api/billing/portal`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-      if (!res.ok) return
-      const { url } = await res.json()
+      const { url } = await createBillingPortalSession()
       if (url) window.location.href = url
     } catch (err) {
       console.error('Manage billing failed:', err)

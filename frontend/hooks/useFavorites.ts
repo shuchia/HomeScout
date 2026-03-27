@@ -42,22 +42,33 @@ export function useFavorites() {
         return
       }
 
-      // Fetch apartment details from FastAPI
+      // Fetch apartment details from FastAPI (retry once on failure)
       const apartmentIds = favs.map(f => f.apartment_id)
-      try {
-        const apartments = await getApartmentsBatch(apartmentIds)
-        const apartmentMap = new Map(apartments.map(a => [a.id, a]))
-
-        const merged = favs.map(fav => ({
-          ...fav,
-          apartment: apartmentMap.get(fav.apartment_id) || null
-        }))
-
-        setFavorites(merged)
-      } catch (error) {
-        console.error('Failed to fetch apartment details:', error)
-        setFavorites(favs.map(fav => ({ ...fav, apartment: null })))
+      let apartments: Apartment[] = []
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          apartments = await getApartmentsBatch(apartmentIds)
+          break
+        } catch (error) {
+          if (attempt === 0) {
+            // Wait briefly before retry
+            await new Promise(r => setTimeout(r, 1000))
+          } else {
+            console.error('Failed to fetch apartment details after retry:', error)
+          }
+        }
       }
+
+      const apartmentMap = new Map(apartments.map(a => [a.id, a]))
+
+      // Use functional update to preserve existing apartment data for IDs the batch call missed
+      setFavorites(prev => {
+        const existingMap = new Map(prev.filter(f => f.apartment).map(f => [f.apartment_id, f.apartment]))
+        return favs.map(fav => ({
+          ...fav,
+          apartment: apartmentMap.get(fav.apartment_id) || existingMap.get(fav.apartment_id) || null
+        }))
+      })
     } catch (error) {
       console.error('Failed to load favorites:', error)
       setFavorites([])

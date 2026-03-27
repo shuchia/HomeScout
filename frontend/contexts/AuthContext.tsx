@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applySession = useCallback((s: Session | null) => {
     setSession(s)
     setUser(s?.user ?? null)
-    setAccessToken(s?.access_token ?? null)
+    setAccessToken(s?.access_token ?? null, s?.expires_at)
   }, [])
 
   useEffect(() => {

@@ -5,22 +5,46 @@
 
 import { SearchParams, SearchResponse, HealthResponse, Apartment, ApartmentWithScore, SearchContext, ComparisonAnalysis } from '@/types/apartment';
 import { Tour, TourTag, TourNote } from '@/types/tour';
-import { getAccessToken } from './auth-store';
+import { getAccessToken, isTokenExpiringSoon, refreshAccessToken } from './auth-store';
 
 // Get API URL from environment variable, fallback to localhost
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 /**
- * Get authorization headers using the current access token.
- * Reads synchronously from the auth-store (updated by AuthContext on every
- * session change / token refresh). Never calls getSession() — no hanging.
+ * Fetch with automatic token management:
+ * 1. Proactively refreshes if token expires within 60 seconds
+ * 2. Retries once on 401 after refreshing the token
+ *
+ * Use this for all endpoints that require authentication.
  */
-function getAuthHeaders(): Record<string, string> {
-  const token = getAccessToken()
-  if (token) {
-    return { Authorization: `Bearer ${token}` }
+async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
+  // Proactively refresh if we have a token that's about to expire
+  if (getAccessToken() && isTokenExpiringSoon()) {
+    await refreshAccessToken()
   }
-  return {}
+
+  const addAuth = (headers?: HeadersInit): Record<string, string> => {
+    const h: Record<string, string> = {}
+    if (headers && typeof headers === 'object' && !Array.isArray(headers) && !(headers instanceof Headers)) {
+      Object.assign(h, headers)
+    }
+    const token = getAccessToken()
+    if (token) h['Authorization'] = `Bearer ${token}`
+    return h
+  }
+
+  const response = await fetch(url, { ...init, headers: addAuth(init?.headers) })
+
+  // Retry once on 401 — only if we can get a genuinely new token
+  if (response.status === 401 && getAccessToken()) {
+    const oldToken = getAccessToken()
+    const newToken = await refreshAccessToken()
+    if (newToken && newToken !== oldToken) {
+      return fetch(url, { ...init, headers: addAuth(init?.headers) })
+    }
+  }
+
+  return response
 }
 
 /**
@@ -47,13 +71,9 @@ export class ApiError extends Error {
  */
 export async function searchApartments(params: SearchParams): Promise<SearchResponse> {
   try {
-    const authHeaders = getAuthHeaders()
-    const response = await fetch(`${API_URL}/api/search`, {
+    const response = await fetchWithAuth(`${API_URL}/api/search`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
 
@@ -207,13 +227,9 @@ export async function compareApartments(
   searchContext?: SearchContext
 ): Promise<CompareResponse> {
   try {
-    const authHeaders = getAuthHeaders()
-    const response = await fetch(`${API_URL}/api/apartments/compare`, {
+    const response = await fetchWithAuth(`${API_URL}/api/apartments/compare`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         apartment_ids: apartmentIds,
         preferences: preferences || null,
@@ -251,10 +267,7 @@ export async function compareApartments(
  * @throws ApiError if request fails
  */
 export async function listTours(): Promise<{ tours: Tour[] }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours`, {
-    headers: authHeaders,
-  })
+  const response = await fetchWithAuth(`${API_URL}/api/tours`)
   if (!response.ok) throw new ApiError('Failed to load tours', response.status)
   return response.json()
 }
@@ -268,10 +281,9 @@ export async function listTours(): Promise<{ tours: Tour[] }> {
  * @throws ApiError if request fails
  */
 export async function createTour(apartmentId: string): Promise<{ tour: Tour }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ apartment_id: apartmentId }),
   })
   if (!response.ok) {
@@ -289,10 +301,8 @@ export async function createTour(apartmentId: string): Promise<{ tour: Tour }> {
  * @throws ApiError if request fails
  */
 export async function deleteTour(tourId: string): Promise<void> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}`, {
     method: 'DELETE',
-    headers: authHeaders,
   })
   if (!response.ok) throw new ApiError('Failed to delete tour', response.status)
 }
@@ -302,10 +312,7 @@ export async function deleteTour(tourId: string): Promise<void> {
  * Calls GET /api/tours/:id endpoint
  */
 export async function getTour(tourId: string): Promise<{ tour: Tour }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}`, {
-    headers: authHeaders,
-  })
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}`)
   if (!response.ok) {
     if (response.status === 404) throw new ApiError('Tour not found', 404)
     throw new ApiError('Failed to load tour', response.status)
@@ -325,10 +332,9 @@ export async function updateTour(tourId: string, updates: Partial<{
   decision: string
   decision_reason: string
 }>): Promise<{ tour: Tour }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   })
   if (!response.ok) throw new ApiError('Failed to update tour', response.status)
@@ -340,10 +346,9 @@ export async function updateTour(tourId: string, updates: Partial<{
  * Calls POST /api/tours/:id/notes endpoint
  */
 export async function addTourNote(tourId: string, content: string): Promise<{ note: TourNote }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}/notes`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/notes`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
   })
   if (!response.ok) throw new ApiError('Failed to add note', response.status)
@@ -355,10 +360,8 @@ export async function addTourNote(tourId: string, content: string): Promise<{ no
  * Calls DELETE /api/tours/:id/notes/:noteId endpoint
  */
 export async function deleteTourNote(tourId: string, noteId: string): Promise<void> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}/notes/${noteId}`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/notes/${noteId}`, {
     method: 'DELETE',
-    headers: authHeaders,
   })
   if (!response.ok) throw new ApiError('Failed to delete note', response.status)
 }
@@ -377,10 +380,7 @@ export interface TagSuggestion {
  * Calls GET /api/tours/tags/suggestions endpoint
  */
 export async function getTagSuggestions(): Promise<{ suggestions: TagSuggestion[] }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/tags/suggestions`, {
-    headers: authHeaders,
-  })
+  const response = await fetchWithAuth(`${API_URL}/api/tours/tags/suggestions`)
   if (!response.ok) throw new ApiError('Failed to load tag suggestions', response.status)
   return response.json()
 }
@@ -390,10 +390,9 @@ export async function getTagSuggestions(): Promise<{ suggestions: TagSuggestion[
  * Calls POST /api/tours/:id/tags endpoint
  */
 export async function addTourTag(tourId: string, tag: string, sentiment: 'pro' | 'con'): Promise<{ tag: TourTag }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}/tags`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/tags`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tag, sentiment }),
   })
   if (!response.ok) throw new ApiError('Failed to add tag', response.status)
@@ -405,10 +404,8 @@ export async function addTourTag(tourId: string, tag: string, sentiment: 'pro' |
  * Calls DELETE /api/tours/:id/tags/:tagId endpoint
  */
 export async function removeTourTag(tourId: string, tagId: string): Promise<void> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}/tags/${tagId}`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/tags/${tagId}`, {
     method: 'DELETE',
-    headers: authHeaders,
   })
   if (!response.ok) throw new ApiError('Failed to remove tag', response.status)
 }
@@ -426,10 +423,9 @@ export async function generateInquiryEmail(
   tourId: string,
   context?: { name?: string; move_in_date?: string; budget?: number; preferences?: string }
 ): Promise<{ subject: string; body: string; inquiry_email_draft: string }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}/inquiry-email`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/inquiry-email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: { 'Content-Type': 'application/json' },
     body: context ? JSON.stringify(context) : undefined,
   })
   if (!response.ok) {
@@ -449,12 +445,11 @@ export async function generateInquiryEmail(
  * @throws ApiError if request fails
  */
 export async function uploadVoiceNote(tourId: string, audioBlob: Blob): Promise<{ note: TourNote }> {
-  const authHeaders = getAuthHeaders()
   const formData = new FormData()
   formData.append('file', audioBlob, 'voice-note.webm')
-  const response = await fetch(`${API_URL}/api/tours/${tourId}/notes/voice`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/notes/voice`, {
     method: 'POST',
-    headers: authHeaders,  // No Content-Type — browser sets multipart boundary
+    // No Content-Type header — browser sets multipart boundary automatically
     body: formData,
   })
   if (!response.ok) throw new ApiError('Failed to upload voice note', response.status)
@@ -474,10 +469,9 @@ export async function generateDayPlan(
   date: string,
   tourIds: string[]
 ): Promise<{ tours_ordered: Array<Record<string, unknown>>; travel_notes: string[]; tips: string[] }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/day-plan`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/day-plan`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, tour_ids: tourIds }),
   })
   if (!response.ok) throw new ApiError('Failed to generate day plan', response.status)
@@ -497,10 +491,9 @@ export async function enhanceNote(
   tourId: string,
   noteId: string
 ): Promise<{ enhanced_text: string; suggested_tags: Array<{ tag: string; sentiment: string }> }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/${tourId}/enhance-note`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/enhance-note`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ note_id: noteId }),
   })
   if (!response.ok) throw new ApiError('Failed to enhance note', response.status)
@@ -518,10 +511,8 @@ export async function generateDecisionBrief(): Promise<{
   apartments: Array<{ apartment_id: string; ai_take: string; strengths: string[]; concerns: string[] }>
   recommendation: { apartment_id: string; reasoning: string }
 }> {
-  const authHeaders = getAuthHeaders()
-  const response = await fetch(`${API_URL}/api/tours/decision-brief`, {
+  const response = await fetchWithAuth(`${API_URL}/api/tours/decision-brief`, {
     method: 'POST',
-    headers: authHeaders,
   })
   if (!response.ok) throw new ApiError('Failed to generate decision brief', response.status)
   return response.json()
@@ -529,12 +520,9 @@ export async function generateDecisionBrief(): Promise<{
 
 // Invite code endpoints
 export async function redeemInviteCode(code: string): Promise<{ success: boolean; message: string; expires_at?: string }> {
-  const res = await fetch(`${API_URL}/api/invite/redeem`, {
+  const res = await fetchWithAuth(`${API_URL}/api/invite/redeem`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   });
   if (!res.ok) {
@@ -545,10 +533,33 @@ export async function redeemInviteCode(code: string): Promise<{ success: boolean
 }
 
 export async function getInviteStatus(): Promise<{ has_invite: boolean; expires_at?: string }> {
-  const res = await fetch(`${API_URL}/api/invite/status`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetchWithAuth(`${API_URL}/api/invite/status`);
   if (!res.ok) throw new ApiError('Failed to check invite status', res.status);
+  return res.json();
+}
+
+// Billing endpoints
+export async function createCheckoutSession(): Promise<{ url: string }> {
+  const res = await fetchWithAuth(`${API_URL}/api/billing/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to start checkout' }));
+    throw new ApiError(err.detail || 'Failed to start checkout. Please try again.', res.status);
+  }
+  return res.json();
+}
+
+export async function createBillingPortalSession(): Promise<{ url: string }> {
+  const res = await fetchWithAuth(`${API_URL}/api/billing/portal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to open billing portal' }));
+    throw new ApiError(err.detail || 'Failed to open billing portal.', res.status);
+  }
   return res.json();
 }
 
@@ -559,12 +570,9 @@ export async function submitFeedback(data: {
   screenshot_url?: string;
   page_url?: string;
 }): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_URL}/api/feedback`, {
+  const res = await fetchWithAuth(`${API_URL}/api/feedback`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {

@@ -1,11 +1,10 @@
 'use client'
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { createCheckoutSession } from '@/lib/api'
 
 export default function PricingPage() {
-  const { user, isPro, loading, accessToken } = useAuth()
+  const { user, isPro, loading } = useAuth()
   const [upgrading, setUpgrading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -13,29 +12,11 @@ export default function PricingPage() {
     setUpgrading(true)
     setError(null)
     try {
-      if (!accessToken) {
-        setError('Session expired. Please sign out and sign back in.')
-        setUpgrading(false)
-        return
-      }
-      const res = await fetch(`${API_BASE}/api/billing/checkout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data.detail || 'Failed to start checkout. Please try again.')
-        setUpgrading(false)
-        return
-      }
-      const { url } = await res.json()
+      const { url } = await createCheckoutSession()
       if (url) window.location.href = url
     } catch (err) {
       console.error('Upgrade failed:', err)
-      setError('Unable to connect to the server. Please try again.')
+      setError(err instanceof Error ? err.message : 'Unable to connect to the server. Please try again.')
     }
     setUpgrading(false)
   }
