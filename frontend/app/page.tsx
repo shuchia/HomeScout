@@ -54,10 +54,11 @@ export default function Home() {
     setRateLimited(false);
   };
 
-  // Handle errors — detect rate limiting
+  // Handle errors — detect rate limiting or daily limit
   const handleError = (err: string | null) => {
     setError(err);
-    setRateLimited(err?.toLowerCase().includes('too many') ?? false);
+    const lower = err?.toLowerCase() ?? '';
+    setRateLimited(lower.includes('too many') || lower.includes('limit') || lower.includes('rate'));
   };
 
   // Handle search metadata (tier, remaining searches)
