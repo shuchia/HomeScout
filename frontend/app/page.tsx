@@ -121,7 +121,7 @@ export default function Home() {
               {tier === 'free' && searchesRemaining !== null && (
                 <p className="text-sm text-gray-500 mt-3">
                   {searchesRemaining > 0
-                    ? `${searchesRemaining} of 3 free searches remaining today`
+                    ? `${searchesRemaining} free searches remaining today`
                     : 'Daily search limit reached'}
                 </p>
               )}

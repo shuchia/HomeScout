@@ -12,7 +12,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
-FREE_DAILY_SEARCH_LIMIT = 3
+FREE_DAILY_SEARCH_LIMIT = 20
 
 # Supabase admin client (service role - bypasses RLS)
 supabase_admin = None
