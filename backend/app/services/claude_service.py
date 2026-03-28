@@ -20,7 +20,7 @@ class ClaudeService:
     @staticmethod
     def prepare_apartment_for_scoring(apt: dict) -> dict:
         """Prepare apartment data for Claude scoring. No truncation."""
-        return {
+        data = {
             "id": apt["id"],
             "address": apt.get("address", ""),
             "rent": apt.get("rent", 0),
@@ -35,6 +35,24 @@ class ClaudeService:
             "data_quality_score": apt.get("data_quality_score"),
             "heuristic_score": apt.get("heuristic_score"),
         }
+        # Include true cost data if available
+        if apt.get("true_cost_monthly"):
+            data["true_cost_monthly"] = apt["true_cost_monthly"]
+            data["true_cost_move_in"] = apt.get("true_cost_move_in")
+            data["cost_details"] = {
+                "pet_rent": apt.get("pet_rent") or 0,
+                "parking_fee": apt.get("parking_fee") or 0,
+                "amenity_fee": apt.get("amenity_fee") or 0,
+                "est_utilities": (
+                    (apt.get("est_electric") or 0)
+                    + (apt.get("est_gas") or 0)
+                    + (apt.get("est_water") or 0)
+                ),
+                "est_internet": apt.get("est_internet") or 0,
+                "est_renters_insurance": apt.get("est_renters_insurance") or 0,
+                "est_laundry": apt.get("est_laundry") or 0,
+            }
+        return data
 
     def score_apartments(
         self,
@@ -125,6 +143,7 @@ Analyze each apartment based on:
    - Location & accessibility: landmark nearby, walk to market, public transport, 10 min walk to transportation, take out eateries nearby, walk score, bike score
    - Safety & security: safety, controlled access
    - Services: English/Spanish speaking staff, on-site maintenance, on-site management, online rent payment, dry cleaning service, pay for garbage pick up
+7. True monthly cost (if available): Consider the estimated true cost including utilities, fees, and insurance — not just the advertised rent. When true_cost_monthly is provided, use it for budget fit analysis instead of just rent. Highlight cases where advertised rent is significantly lower than true cost.
 
 For each apartment, provide:
 - A match score (0-100%)
@@ -257,7 +276,7 @@ Return a JSON object with this exact structure:
 
 Return valid JSON only, no additional text."""
 
-        system_prompt = """You are an expert apartment comparison analyst for Snugd. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
+        system_prompt = """You are an expert apartment comparison analyst for Snugd. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
 
         try:
             message = self.client.messages.create(
