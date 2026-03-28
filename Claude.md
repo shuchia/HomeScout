@@ -153,6 +153,7 @@ HomeScout is a full-stack apartment finder using Claude AI for intelligent match
 │  useComparison (Zustand+persist) → Compare Page + Claude Analysis       │
 │  Auth gates on Search + Compare pages (require sign-in)                 │
 │  Tier gating: free (3 searches/day, 5 favorites) vs pro (unlimited)    │
+│  True Cost Calculator: Est. True Cost on cards, Pro gets full breakdown     │
 │  /pricing, /settings pages for billing + account management             │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -193,6 +194,7 @@ HomeScout is a full-stack apartment finder using Claude AI for intelligent match
 8. Response includes `tier` and `searches_remaining` for UI state
 9. Users can favorite apartments (saved to Supabase) or add to comparison
 10. Search context (city, budget, etc.) is saved to Zustand store for the compare page
+11. Each apartment includes precomputed `true_cost_monthly` (rent + utilities + fees). Free users see the headline number; Pro users get full `cost_breakdown` with source tracking.
 
 ### Key Flow: Comparison
 1. User selects 2-3 apartments via CompareButton on apartment cards
@@ -284,6 +286,7 @@ curl -X PUT http://localhost:8000/api/admin/data-collection/markets/bryn-mawr \
 - `components/CompareButton.tsx` - Add to comparison button
 - `components/ComparisonBar.tsx` - Floating bar showing comparison selection
 - `components/UpgradePrompt.tsx` - Reusable upgrade CTA (inline or block mode), links to /pricing
+- `components/CostBreakdownPanel.tsx` - Pro-only detailed cost breakdown with source indicators (scraped vs estimated)
 
 ### Frontend - State & Hooks
 - `contexts/AuthContext.tsx` - Google OAuth via Supabase, tier/isPro/refreshProfile (E2E test bypass in non-production)
@@ -309,7 +312,10 @@ curl -X PUT http://localhost:8000/api/admin/data-collection/markets/bryn-mawr \
 - `app/services/apartment_service.py` - Filter logic, ranking
 - `app/services/tier_service.py` - Tier checking (Supabase profiles), Redis daily search metering, tier updates
 - `app/services/analytics_service.py` - Fire-and-forget event logging to Supabase analytics_events table
+- `app/services/cost_estimator.py` - True cost estimation from scraped fees + regional averages
 - `app/data/apartments.json` - Fallback dataset (12 Bryn Mawr apartments, used in JSON mode)
+- `app/data/cost_estimates.json` - Regional utility cost lookup tables by zip prefix + bedroom count
+- `app/tasks/true_cost_tasks.py` - Celery task for recomputing true cost estimates
 
 ### Backend - Data Collection (Infrastructure)
 - `app/celery_app.py` - Celery configuration and beat schedule (4 tasks including daily alerts)
@@ -473,6 +479,7 @@ The Claude integration has two modes, both in `claude_service.py`:
 | Compare | Basic table only | Claude head-to-head analysis |
 | Favorites | 5 max | Unlimited |
 | Saved Searches | None | Unlimited + daily email alerts |
+| True Cost | Headline number only | Full breakdown with sources |
 | Rate Limit | 10 req/min | 60 req/min |
 
 ### Backend Auth & Tier Flow
@@ -574,6 +581,10 @@ The Claude integration has two modes, both in `claude_service.py`:
 - AnalyticsService is fire-and-forget; never blocks or raises on failure
 - Frontend `AuthContext` exposes `tier`, `isPro`, `refreshProfile()` for tier-aware rendering
 - `UpgradePrompt` component has `inline` (horizontal bar) and block (centered card) display modes
+- True cost is precomputed at ingestion time; `_add_cost_breakdown()` in apartments router fills gaps for JSON mode
+- Cost estimates use 3-digit zip prefix lookup with default fallback chain
+- `cost_breakdown` field is null for free/anonymous users, populated for Pro
+- Claude AI prompts include `true_cost_monthly` and `cost_details` for budget-aware scoring
 
 ## Backend Testing
 
