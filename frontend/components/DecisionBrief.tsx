@@ -8,6 +8,7 @@ import { Apartment } from '@/types/apartment'
 
 interface DecisionBriefProps {
   isPro: boolean
+  profileLoading?: boolean
   touredTours?: Tour[]
   apartments?: Record<string, Apartment>
 }
@@ -24,7 +25,7 @@ interface BriefResult {
   recommendation: { apartment_id: string; reasoning: string }
 }
 
-export default function DecisionBrief({ isPro, touredTours = [], apartments = {} }: DecisionBriefProps) {
+export default function DecisionBrief({ isPro, profileLoading, touredTours = [], apartments = {} }: DecisionBriefProps) {
   const [brief, setBrief] = useState<BriefResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,6 +52,15 @@ export default function DecisionBrief({ isPro, touredTours = [], apartments = {}
   const getTourRating = (apartmentId: string): number | null => {
     const tour = touredTours.find((t) => t.apartment_id === apartmentId)
     return tour?.tour_rating ?? null
+  }
+
+  if (profileLoading) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">Decision Brief</h3>
+        <div className="h-8 bg-gray-100 rounded-lg animate-pulse" />
+      </div>
+    )
   }
 
   if (!isPro) {

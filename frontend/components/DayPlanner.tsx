@@ -8,6 +8,7 @@ interface DayPlannerProps {
   date: string              // ISO date (YYYY-MM-DD)
   tourIds: string[]         // tour IDs on this date
   isPro: boolean
+  profileLoading?: boolean
 }
 
 interface DayPlanResult {
@@ -25,7 +26,7 @@ function formatDate(dateStr: string): string {
   })
 }
 
-export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
+export default function DayPlanner({ date, tourIds, isPro, profileLoading }: DayPlannerProps) {
   const [plan, setPlan] = useState<DayPlanResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,7 +44,7 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
     }
   }
 
-  if (!isPro) {
+  if (!isPro && !profileLoading) {
     return (
       <div className="mb-4">
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -54,6 +55,19 @@ export default function DayPlanner({ date, tourIds, isPro }: DayPlannerProps) {
             {tourIds.length} tours on this day. Get an AI-optimized route and schedule.
           </p>
           <UpgradePrompt feature="AI day planning" inline />
+        </div>
+      </div>
+    )
+  }
+
+  if (profileLoading) {
+    return (
+      <div className="mb-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">
+            Day Plan &mdash; {formatDate(date)}
+          </h3>
+          <div className="h-8 bg-gray-100 rounded-lg animate-pulse" />
         </div>
       </div>
     )

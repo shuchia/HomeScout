@@ -10,7 +10,7 @@ interface FavoriteWithApartment extends Favorite {
 }
 
 export function useFavorites() {
-  const { user, isPro } = useAuth()
+  const { user, isPro, profileLoading } = useAuth()
   const [favorites, setFavorites] = useState<FavoriteWithApartment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -105,8 +105,8 @@ export function useFavorites() {
   async function addFavorite(apartmentId: string): Promise<boolean> {
     if (!user) return false
 
-    // Check free tier limit
-    if (!isPro && favorites.length >= 5) {
+    // Check free tier limit (skip check while profile is still loading)
+    if (!isPro && !profileLoading && favorites.length >= 5) {
       return false  // Caller handles the UI feedback
     }
 
@@ -174,6 +174,6 @@ export function useFavorites() {
     removeFavorite,
     isFavorite,
     refresh: loadFavorites,
-    atLimit: !isPro && favorites.length >= 5,
+    atLimit: !isPro && !profileLoading && favorites.length >= 5,
   }
 }

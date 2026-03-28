@@ -25,7 +25,7 @@ const getScoreColor = (score: number): string => {
 
 export default function ComparePage() {
   const router = useRouter()
-  const { user, loading: authLoading, signInWithGoogle, isPro } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, isPro, profileLoading } = useAuth()
   const { apartmentIds, removeFromCompare, clearComparison, searchContext } = useComparison()
 
   const [apartments, setApartments] = useState<Apartment[]>([])
@@ -221,7 +221,9 @@ export default function ComparePage() {
           <p className="text-gray-600 mb-4">
             Click Score for a deep head-to-head AI analysis. Optionally add your preferences for a personalized comparison.
           </p>
-          {isPro ? (
+          {profileLoading ? (
+            <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+          ) : isPro ? (
             <div className="flex gap-4">
               <input
                 type="text"

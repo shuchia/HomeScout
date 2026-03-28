@@ -70,7 +70,7 @@ export default function TourDetailPage() {
   const router = useRouter()
   const tourId = params.id as string
 
-  const { user, loading: authLoading, signInWithGoogle, isPro } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, isPro, profileLoading } = useAuth()
 
   const [tour, setTour] = useState<Tour | null>(null)
   const [apartment, setApartment] = useState<Apartment | null>(null)
@@ -380,7 +380,7 @@ export default function TourDetailPage() {
             />
           )}
           {activeTab === 'email' && (
-            <EmailTab tour={tour} isPro={isPro} onTourUpdate={setTour} />
+            <EmailTab tour={tour} isPro={isPro} profileLoading={profileLoading} onTourUpdate={setTour} />
           )}
         </div>
       </main>
@@ -737,7 +737,7 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
 // Email Tab
 // ---------------------------------------------------------------------------
 
-function EmailTab({ tour, isPro, onTourUpdate }: { tour: Tour; isPro: boolean; onTourUpdate: (tour: Tour) => void }) {
+function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; isPro: boolean; profileLoading?: boolean; onTourUpdate: (tour: Tour) => void }) {
   const [copied, setCopied] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
@@ -798,6 +798,14 @@ function EmailTab({ tour, isPro, onTourUpdate }: { tour: Tour; isPro: boolean; o
     } finally {
       setMarkingSent(false)
     }
+  }
+
+  if (profileLoading) {
+    return (
+      <div className="py-8">
+        <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+      </div>
+    )
   }
 
   if (!isPro) {

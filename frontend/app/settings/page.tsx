@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { createBillingPortalSession } from '@/lib/api'
 
 function SettingsContent() {
-  const { user, profile, loading, isPro, tier, signOut, refreshProfile } = useAuth()
+  const { user, profile, loading, profileLoading, isPro, tier, signOut, refreshProfile } = useAuth()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -84,20 +84,32 @@ function SettingsContent() {
       <section className="bg-white rounded-lg border p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">Subscription</h2>
         <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium capitalize">{tier} Plan</p>
-            <p className="text-sm text-gray-500">
-              {isPro ? 'Full access to all features' : 'Limited features'}
-            </p>
-          </div>
-          {isPro ? (
-            <button onClick={handleManageBilling} className="text-sm text-[var(--color-primary)] hover:underline">
-              Manage Billing
-            </button>
+          {profileLoading ? (
+            <>
+              <div>
+                <div className="h-5 w-24 bg-gray-200 rounded animate-pulse mb-1" />
+                <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+              </div>
+              <div className="h-9 w-28 bg-gray-100 rounded-lg animate-pulse" />
+            </>
           ) : (
-            <a href="/pricing" className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm hover:bg-[var(--color-primary-light)]">
-              Upgrade to Pro
-            </a>
+            <>
+              <div>
+                <p className="font-medium capitalize">{tier} Plan</p>
+                <p className="text-sm text-gray-500">
+                  {isPro ? 'Full access to all features' : 'Limited features'}
+                </p>
+              </div>
+              {isPro ? (
+                <button onClick={handleManageBilling} className="text-sm text-[var(--color-primary)] hover:underline">
+                  Manage Billing
+                </button>
+              ) : (
+                <a href="/pricing" className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm hover:bg-[var(--color-primary-light)]">
+                  Upgrade to Pro
+                </a>
+              )}
+            </>
           )}
         </div>
       </section>

@@ -4,13 +4,13 @@ import { useAuth } from '@/contexts/AuthContext'
 import { redeemInviteCode } from '@/lib/api'
 
 export function InviteCodeBanner() {
-  const { user, isPro, refreshProfile } = useAuth()
+  const { user, isPro, profileLoading, refreshProfile } = useAuth()
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [dismissed, setDismissed] = useState(false)
 
-  if (!user || isPro || dismissed) return null
+  if (!user || isPro || profileLoading || dismissed) return null
 
   async function handleRedeem(e: React.FormEvent) {
     e.preventDefault()

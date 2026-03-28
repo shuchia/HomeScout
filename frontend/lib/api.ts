@@ -14,13 +14,18 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
  * Fetch with automatic token management:
  * 1. Proactively refreshes if token expires within 60 seconds
  * 2. Retries once on 401 after refreshing the token
+ * 3. Detects permanent auth failure (expired refresh token) and stops retrying
  *
- * Use this for all endpoints that require authentication.
+ * Use this for all endpoints that require or benefit from authentication.
  */
 async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
   // Proactively refresh if we have a token that's about to expire
   if (getAccessToken() && isTokenExpiringSoon()) {
-    await refreshAccessToken()
+    const refreshed = await refreshAccessToken()
+    if (!refreshed) {
+      // Refresh failed permanently — session is dead.
+      // Continue without auth; endpoint will return 401 if auth required.
+    }
   }
 
   const addAuth = (headers?: HeadersInit): Record<string, string> => {
@@ -39,9 +44,12 @@ async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response>
   if (response.status === 401 && getAccessToken()) {
     const oldToken = getAccessToken()
     const newToken = await refreshAccessToken()
+    // Only retry if we got a different, valid token
     if (newToken && newToken !== oldToken) {
       return fetch(url, { ...init, headers: addAuth(init?.headers) })
     }
+    // Refresh returned null or same token — auth is permanently dead.
+    // Return the 401 response so the caller can handle it.
   }
 
   return response

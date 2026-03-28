@@ -39,7 +39,7 @@ function isFuture(dateStr: string): boolean {
 }
 
 export default function ToursPage() {
-  const { user, loading: authLoading, signInWithGoogle, isPro } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, isPro, profileLoading } = useAuth()
   const [tours, setTours] = useState<Tour[]>([])
   const [apartments, setApartments] = useState<Record<string, Apartment>>({})
   const [loading, setLoading] = useState(true)
@@ -230,6 +230,7 @@ export default function ToursPage() {
             <div className="mb-4">
               <DecisionBrief
                 isPro={isPro}
+                profileLoading={profileLoading}
                 touredTours={touredTours}
                 apartments={apartments}
               />
@@ -278,6 +279,7 @@ export default function ToursPage() {
                     date={date}
                     tourIds={toursByDate[date]}
                     isPro={isPro}
+                profileLoading={profileLoading}
                   />
                 ))}
                 {todayTours.map((tour) => (
@@ -298,6 +300,7 @@ export default function ToursPage() {
                     date={date}
                     tourIds={toursByDate[date]}
                     isPro={isPro}
+                profileLoading={profileLoading}
                   />
                 ))}
                 {upcomingTours.map((tour) => (

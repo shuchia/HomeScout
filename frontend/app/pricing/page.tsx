@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { createCheckoutSession } from '@/lib/api'
 
 export default function PricingPage() {
-  const { user, isPro, loading } = useAuth()
+  const { user, isPro, loading, profileLoading } = useAuth()
   const [upgrading, setUpgrading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,7 +63,9 @@ export default function PricingPage() {
             {error && (
               <p className="text-red-600 text-sm mb-3 text-center">{error}</p>
             )}
-            {isPro ? (
+            {profileLoading ? (
+              <div className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+            ) : isPro ? (
               <p className="text-center text-green-600 font-medium">Your current plan</p>
             ) : (
               <button

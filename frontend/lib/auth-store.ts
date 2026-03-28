@@ -36,24 +36,32 @@ let _refreshPromise: Promise<string | null> | null = null
  * Refresh the token from Supabase and update the store.
  * Uses refreshSession() (network call) not getSession() (memory-only).
  * De-duplicated: concurrent calls share the same promise.
+ *
+ * Returns the new token on success, or NULL on failure.
+ * On failure, clears the stale token so callers know auth is dead.
  */
 export async function refreshAccessToken(): Promise<string | null> {
   if (_refreshPromise) return _refreshPromise
 
   _refreshPromise = (async () => {
     try {
-      // refreshSession() makes a network call to get a new access token
-      // using the refresh token. getSession() only reads from memory.
       const { data: { session }, error } = await supabase.auth.refreshSession()
       if (session && !error) {
         _accessToken = session.access_token
         _expiresAt = session.expires_at ?? 0
         return session.access_token
       }
+      // Refresh returned no session — refresh token is invalid/expired.
+      // Clear the stale token so fetchWithAuth knows auth is dead.
+      _accessToken = null
+      _expiresAt = 0
+      return null
     } catch {
-      // Refresh failed — keep existing token
+      // Network error during refresh — clear stale token
+      _accessToken = null
+      _expiresAt = 0
+      return null
     }
-    return _accessToken
   })()
 
   try {
