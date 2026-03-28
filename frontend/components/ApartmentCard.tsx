@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { ApartmentWithScore } from '@/types/apartment';
 import ImageCarousel from './ImageCarousel';
 import { FavoriteButton } from './FavoriteButton';
 import { CompareButton } from './CompareButton';
+import CostBreakdownPanel from './CostBreakdownPanel';
+import UpgradePrompt from './UpgradePrompt';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ApartmentCardProps {
@@ -52,6 +55,7 @@ const getLabelColor = (label: string): string => {
 
 export default function ApartmentCard({ apartment }: ApartmentCardProps) {
   const { tier } = useAuth();
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const {
     id,
     address,
@@ -116,6 +120,38 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
             <p className="text-sm text-gray-600">{property_type}</p>
           </div>
         </div>
+
+        {/* True Cost Estimate */}
+        {apartment.true_cost_monthly != null && apartment.true_cost_monthly > rent && (
+          <div className="space-y-1">
+            <button
+              onClick={() => setShowBreakdown(!showBreakdown)}
+              className="text-left w-full group"
+            >
+              <p className="text-sm text-gray-500">
+                Est. True Cost:{' '}
+                <span className="font-semibold text-gray-700">
+                  {formatRent(apartment.true_cost_monthly)}/mo
+                </span>
+              </p>
+              <p className="text-xs text-amber-600 group-hover:text-amber-700 transition">
+                +{formatRent(apartment.true_cost_monthly - rent)}/mo in fees &amp; utilities
+                <span className="ml-1">{showBreakdown ? '\u25B2' : '\u25BC'}</span>
+              </p>
+            </button>
+
+            {showBreakdown && (
+              apartment.cost_breakdown ? (
+                <CostBreakdownPanel breakdown={apartment.cost_breakdown} />
+              ) : (
+                <UpgradePrompt
+                  feature="full cost breakdown"
+                  inline
+                />
+              )
+            )}
+          </div>
+        )}
 
         {/* Address and Neighborhood */}
         <div>
