@@ -124,10 +124,13 @@ jobs:
 
       - name: Deploy ECS services
         run: |
+          declare -A SERVICE_TASK_MAP=(["api"]="snugd-dev-api" ["worker"]="snugd-dev-worker" ["beat"]="snugd-dev-beat")
           for SERVICE in api worker beat; do
+            TASK_DEF="${SERVICE_TASK_MAP[$SERVICE]}"
             aws ecs update-service \
               --cluster snugd-dev \
               --service $SERVICE \
+              --task-definition $TASK_DEF \
               --force-new-deployment \
               --no-cli-pager
           done
@@ -211,10 +214,13 @@ jobs:
 
       - name: Deploy ECS services
         run: |
+          declare -A SERVICE_TASK_MAP=(["api"]="snugd-qa-api" ["worker"]="snugd-qa-worker" ["beat"]="snugd-qa-beat")
           for SERVICE in api worker beat; do
+            TASK_DEF="${SERVICE_TASK_MAP[$SERVICE]}"
             aws ecs update-service \
               --cluster snugd-qa \
               --service $SERVICE \
+              --task-definition $TASK_DEF \
               --force-new-deployment \
               --no-cli-pager
           done
@@ -295,10 +301,13 @@ jobs:
 
       - name: Deploy ECS services
         run: |
+          declare -A SERVICE_TASK_MAP=(["api"]="snugd-prod-api" ["worker"]="snugd-prod-worker" ["beat"]="snugd-prod-beat")
           for SERVICE in api worker beat; do
+            TASK_DEF="${SERVICE_TASK_MAP[$SERVICE]}"
             aws ecs update-service \
               --cluster snugd-prod \
               --service $SERVICE \
+              --task-definition $TASK_DEF \
               --force-new-deployment \
               --no-cli-pager
           done
