@@ -10,7 +10,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // we don't have, causing stale tokens and hanging getSession() calls.
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // DISABLED: detectSessionInUrl causes a race condition with the explicit
+    // exchangeCodeForSession() call in /auth/callback. Both compete for the
+    // same single-use PKCE code, causing intermittent sign-in failures.
+    // The callback page handles code exchange explicitly.
+    detectSessionInUrl: false,
   },
 })
 

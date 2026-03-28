@@ -119,13 +119,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (refreshed && !error) {
               activeSession = refreshed
             } else {
-              // Refresh token also expired — session is permanently dead
+              // Refresh token also expired — session is permanently dead.
+              // Clear local state only. Do NOT call signOut() here — that
+              // nukes localStorage and can destroy a new session being
+              // established concurrently (e.g., during OAuth callback).
               activeSession = null
-              await supabase.auth.signOut().catch(() => {})
             }
           } catch {
+            // Network error during refresh — clear local state only
             activeSession = null
-            await supabase.auth.signOut().catch(() => {})
           }
         }
 
@@ -167,10 +169,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (event === 'TOKEN_REFRESHED' && !s) {
-          // Refresh failed — session is dead, sign out
+          // Refresh failed — session is dead. Clear local state only.
+          // Do NOT call signOut() — it clears localStorage and can
+          // interfere with concurrent session establishment.
           applySession(null)
           setProfile(null)
-          await supabase.auth.signOut().catch(() => {})
           return
         }
 
