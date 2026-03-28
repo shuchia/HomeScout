@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from app.services.normalization.address_standardizer import AddressStandardizer
 from app.services.scrapers.base_scraper import ScrapedListing
+from app.services.cost_estimator import CostEstimator
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class NormalizationService:
     def __init__(self):
         """Initialize the normalization service."""
         self.address_standardizer = AddressStandardizer()
+        self.cost_estimator = CostEstimator()
 
     def normalize(self, listing: ScrapedListing) -> NormalizationResult:
         """
@@ -149,7 +151,39 @@ class NormalizationService:
         if data.get("description"):
             data["description"] = self._clean_description(data["description"])
 
-        # Step 10: Calculate quality score
+        # Step 10: Compute true cost breakdown
+        scraped_fees = {
+            "pet_rent": data.get("pet_rent"),
+            "parking_fee": data.get("parking_fee"),
+            "amenity_fee": data.get("amenity_fee"),
+            "application_fee": data.get("application_fee"),
+            "security_deposit": data.get("security_deposit"),
+        }
+        try:
+            cost_breakdown = self.cost_estimator.compute_true_cost(
+                rent=data["rent"],
+                zip_code=data.get("zip_code"),
+                bedrooms=data["bedrooms"],
+                amenities=data.get("amenities", []),
+                scraped_fees=scraped_fees,
+            )
+            data["true_cost_monthly"] = cost_breakdown["true_cost_monthly"]
+            data["true_cost_move_in"] = cost_breakdown["true_cost_move_in"]
+            data["est_electric"] = cost_breakdown["est_electric"]
+            data["est_gas"] = cost_breakdown["est_gas"]
+            data["est_water"] = cost_breakdown["est_water"]
+            data["est_internet"] = cost_breakdown["est_internet"]
+            data["est_renters_insurance"] = cost_breakdown["est_renters_insurance"]
+            data["est_laundry"] = cost_breakdown["est_laundry"]
+            data["utilities_included"] = {
+                "heat": cost_breakdown["est_gas"] == 0,
+                "water": cost_breakdown["est_water"] == 0,
+                "electric": cost_breakdown["est_electric"] == 0,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to compute true cost: {e}")
+
+        # Step 11: Calculate quality score
         quality_score = self._calculate_quality_score(data)
 
         return NormalizationResult(

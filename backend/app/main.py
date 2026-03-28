@@ -233,6 +233,16 @@ async def search_apartments(
             # remaining decreases by 1 after this search
             searches_remaining = max(0, searches_remaining - 1)
 
+        # Add true cost data to apartments
+        from app.routers.apartments import _add_cost_breakdown
+        is_pro = tier == "pro"
+        final_apartments = []
+        for apt in apartments_out:
+            apt_dict = apt if isinstance(apt, dict) else apt.model_dump() if hasattr(apt, 'model_dump') else apt.__dict__
+            apt_dict = _add_cost_breakdown(apt_dict, include_breakdown=is_pro)
+            final_apartments.append(apt_dict)
+        apartments_out = final_apartments
+
         await AnalyticsService.log_event(
             "search",
             user_id=user.user_id if user else None,

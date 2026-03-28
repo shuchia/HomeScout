@@ -52,6 +52,26 @@ class ApartmentModel(Base):
     images = Column(JSONB, default=list)  # List of image URLs
     images_cached = Column(JSONB, default=list)  # List of S3 cached image URLs
 
+    # True cost fields (scraped fees)
+    pet_rent = Column(Integer, nullable=True)
+    parking_fee = Column(Integer, nullable=True)
+    amenity_fee = Column(Integer, nullable=True)
+    application_fee = Column(Integer, nullable=True)
+    security_deposit = Column(Integer, nullable=True)
+
+    # True cost fields (estimated)
+    est_electric = Column(Integer, nullable=True)
+    est_gas = Column(Integer, nullable=True)
+    est_water = Column(Integer, nullable=True)
+    est_internet = Column(Integer, nullable=True)
+    est_renters_insurance = Column(Integer, nullable=True)
+    est_laundry = Column(Integer, nullable=True)
+
+    # True cost flags and totals
+    utilities_included = Column(JSONB, nullable=True)
+    true_cost_monthly = Column(Integer, nullable=True)
+    true_cost_move_in = Column(Integer, nullable=True)
+
     # Deduplication and quality
     content_hash = Column(String(64), nullable=True, unique=True)  # SHA256 hash for dedup
     data_quality_score = Column(Integer, default=50)  # 0-100 quality score
@@ -113,6 +133,21 @@ class ApartmentModel(Base):
             "freshness_confidence": self.freshness_confidence,
             "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
             "times_seen": self.times_seen,
+            # True cost fields
+            "true_cost_monthly": self.true_cost_monthly,
+            "true_cost_move_in": self.true_cost_move_in,
+            "pet_rent": self.pet_rent,
+            "parking_fee": self.parking_fee,
+            "amenity_fee": self.amenity_fee,
+            "application_fee": self.application_fee,
+            "security_deposit": self.security_deposit,
+            "est_electric": self.est_electric,
+            "est_gas": self.est_gas,
+            "est_water": self.est_water,
+            "est_internet": self.est_internet,
+            "est_renters_insurance": self.est_renters_insurance,
+            "est_laundry": self.est_laundry,
+            "utilities_included": self.utilities_included,
         }
 
     def __repr__(self):

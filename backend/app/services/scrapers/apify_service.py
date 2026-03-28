@@ -501,6 +501,48 @@ class ApifyService(BaseScraper):
                 elif isinstance(cat, str):
                     amenities.append(cat)
 
+        # Extract fee data from raw listing
+        pet_rent = None
+        parking_fee = None
+        amenity_fee = None
+        application_fee = None
+        security_deposit = None
+
+        # Try structured fee fields
+        monthly_fees = raw.get("monthlyFees") or raw.get("fees", {}).get("monthly", [])
+        one_time_fees = raw.get("oneTimeFees") or raw.get("fees", {}).get("oneTime", [])
+
+        if isinstance(monthly_fees, list):
+            for fee in monthly_fees:
+                if isinstance(fee, dict):
+                    name = (fee.get("name") or fee.get("label") or "").lower()
+                    amount = self._parse_fee_amount(fee.get("amount") or fee.get("value"))
+                    if amount and ("pet" in name or "dog" in name or "cat" in name):
+                        pet_rent = amount
+                    elif amount and "parking" in name:
+                        parking_fee = amount
+                    elif amount and ("amenity" in name or "community" in name or "trash" in name):
+                        amenity_fee = (amenity_fee or 0) + amount
+
+        if isinstance(one_time_fees, list):
+            for fee in one_time_fees:
+                if isinstance(fee, dict):
+                    name = (fee.get("name") or fee.get("label") or "").lower()
+                    amount = self._parse_fee_amount(fee.get("amount") or fee.get("value"))
+                    if amount and ("application" in name or "admin" in name):
+                        application_fee = amount
+                    elif amount and ("deposit" in name or "security" in name):
+                        security_deposit = amount
+
+        # Also check petPolicy for pet rent
+        pet_policy = raw.get("petPolicy") or raw.get("pets") or {}
+        if isinstance(pet_policy, dict) and not pet_rent:
+            pet_fee = self._parse_fee_amount(
+                pet_policy.get("monthlyPetRent") or pet_policy.get("rent")
+            )
+            if pet_fee:
+                pet_rent = pet_fee
+
         return ScrapedListing(
             external_id=str(raw.get("id", "")),
             source="apartments_com",
@@ -521,8 +563,28 @@ class ApifyService(BaseScraper):
             amenities=self._normalize_amenities(amenities),
             images=photos,
             source_url=raw.get("url"),
+            pet_rent=pet_rent,
+            parking_fee=parking_fee,
+            amenity_fee=amenity_fee,
+            application_fee=application_fee,
+            security_deposit=security_deposit,
             raw_data=raw,
         )
+
+    @staticmethod
+    def _parse_fee_amount(value) -> Optional[int]:
+        """Parse a fee amount from various formats (int, float, string like '$50')."""
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return int(value) if value > 0 else None
+        if isinstance(value, str):
+            import re
+            match = re.search(r"[\d,]+(?:\.\d+)?", value.replace(",", ""))
+            if match:
+                parsed = int(float(match.group()))
+                return parsed if parsed > 0 else None
+        return None
 
     def _normalize_realtor_listing(self, raw: Dict[str, Any]) -> Optional[ScrapedListing]:
         """Normalize Realtor.com listing data."""

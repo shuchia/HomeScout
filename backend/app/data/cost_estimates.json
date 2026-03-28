@@ -1,0 +1,78 @@
+{
+  "_meta": {
+    "source": "EIA RECS 2022 + BLS CPI averages",
+    "last_updated": "2026-03-27",
+    "notes": "Estimates are monthly averages by zip prefix and bedroom count"
+  },
+  "default": {
+    "0": {"electric": 70, "gas": 35, "water": 30, "internet": 60, "renters_insurance": 15, "laundry": 50},
+    "1": {"electric": 85, "gas": 40, "water": 35, "internet": 60, "renters_insurance": 18, "laundry": 50},
+    "2": {"electric": 100, "gas": 50, "water": 40, "internet": 60, "renters_insurance": 22, "laundry": 50},
+    "3": {"electric": 120, "gas": 55, "water": 45, "internet": 60, "renters_insurance": 25, "laundry": 50},
+    "4": {"electric": 140, "gas": 60, "water": 50, "internet": 60, "renters_insurance": 28, "laundry": 50}
+  },
+  "191": {
+    "_region": "Philadelphia, PA",
+    "0": {"electric": 75, "gas": 40, "water": 35, "internet": 60, "renters_insurance": 16, "laundry": 55},
+    "1": {"electric": 90, "gas": 50, "water": 40, "internet": 60, "renters_insurance": 19, "laundry": 55},
+    "2": {"electric": 110, "gas": 60, "water": 45, "internet": 60, "renters_insurance": 23, "laundry": 55},
+    "3": {"electric": 130, "gas": 70, "water": 50, "internet": 60, "renters_insurance": 27, "laundry": 55},
+    "4": {"electric": 150, "gas": 80, "water": 55, "internet": 60, "renters_insurance": 30, "laundry": 55}
+  },
+  "190": {
+    "_region": "Bryn Mawr / Main Line, PA",
+    "0": {"electric": 80, "gas": 45, "water": 35, "internet": 65, "renters_insurance": 17, "laundry": 55},
+    "1": {"electric": 95, "gas": 55, "water": 40, "internet": 65, "renters_insurance": 20, "laundry": 55},
+    "2": {"electric": 115, "gas": 65, "water": 45, "internet": 65, "renters_insurance": 24, "laundry": 55},
+    "3": {"electric": 135, "gas": 75, "water": 50, "internet": 65, "renters_insurance": 28, "laundry": 55},
+    "4": {"electric": 155, "gas": 85, "water": 55, "internet": 65, "renters_insurance": 32, "laundry": 55}
+  },
+  "152": {
+    "_region": "Pittsburgh, PA",
+    "0": {"electric": 65, "gas": 35, "water": 30, "internet": 55, "renters_insurance": 14, "laundry": 45},
+    "1": {"electric": 80, "gas": 45, "water": 35, "internet": 55, "renters_insurance": 17, "laundry": 45},
+    "2": {"electric": 95, "gas": 55, "water": 40, "internet": 55, "renters_insurance": 20, "laundry": 45},
+    "3": {"electric": 115, "gas": 65, "water": 45, "internet": 55, "renters_insurance": 24, "laundry": 45},
+    "4": {"electric": 135, "gas": 75, "water": 50, "internet": 55, "renters_insurance": 27, "laundry": 45}
+  },
+  "021": {
+    "_region": "Boston, MA",
+    "0": {"electric": 85, "gas": 50, "water": 35, "internet": 65, "renters_insurance": 18, "laundry": 60},
+    "1": {"electric": 100, "gas": 60, "water": 40, "internet": 65, "renters_insurance": 22, "laundry": 60},
+    "2": {"electric": 120, "gas": 70, "water": 50, "internet": 65, "renters_insurance": 26, "laundry": 60},
+    "3": {"electric": 145, "gas": 85, "water": 55, "internet": 65, "renters_insurance": 30, "laundry": 60},
+    "4": {"electric": 165, "gas": 95, "water": 60, "internet": 65, "renters_insurance": 34, "laundry": 60}
+  },
+  "100": {
+    "_region": "New York City, NY",
+    "0": {"electric": 90, "gas": 50, "water": 40, "internet": 70, "renters_insurance": 20, "laundry": 70},
+    "1": {"electric": 110, "gas": 60, "water": 45, "internet": 70, "renters_insurance": 25, "laundry": 70},
+    "2": {"electric": 130, "gas": 75, "water": 55, "internet": 70, "renters_insurance": 30, "laundry": 70},
+    "3": {"electric": 155, "gas": 90, "water": 60, "internet": 70, "renters_insurance": 35, "laundry": 70},
+    "4": {"electric": 180, "gas": 100, "water": 70, "internet": 70, "renters_insurance": 40, "laundry": 70}
+  },
+  "200": {
+    "_region": "Washington, DC",
+    "0": {"electric": 80, "gas": 45, "water": 35, "internet": 65, "renters_insurance": 17, "laundry": 55},
+    "1": {"electric": 95, "gas": 55, "water": 40, "internet": 65, "renters_insurance": 21, "laundry": 55},
+    "2": {"electric": 115, "gas": 65, "water": 50, "internet": 65, "renters_insurance": 25, "laundry": 55},
+    "3": {"electric": 140, "gas": 80, "water": 55, "internet": 65, "renters_insurance": 29, "laundry": 55},
+    "4": {"electric": 160, "gas": 90, "water": 60, "internet": 65, "renters_insurance": 33, "laundry": 55}
+  },
+  "212": {
+    "_region": "Baltimore, MD",
+    "0": {"electric": 75, "gas": 40, "water": 35, "internet": 55, "renters_insurance": 16, "laundry": 50},
+    "1": {"electric": 90, "gas": 50, "water": 40, "internet": 55, "renters_insurance": 19, "laundry": 50},
+    "2": {"electric": 110, "gas": 60, "water": 45, "internet": 55, "renters_insurance": 23, "laundry": 50},
+    "3": {"electric": 130, "gas": 70, "water": 50, "internet": 55, "renters_insurance": 27, "laundry": 50},
+    "4": {"electric": 150, "gas": 80, "water": 55, "internet": 55, "renters_insurance": 30, "laundry": 50}
+  },
+  "070": {
+    "_region": "Newark / Jersey City, NJ",
+    "0": {"electric": 80, "gas": 45, "water": 35, "internet": 65, "renters_insurance": 17, "laundry": 60},
+    "1": {"electric": 95, "gas": 55, "water": 40, "internet": 65, "renters_insurance": 21, "laundry": 60},
+    "2": {"electric": 115, "gas": 65, "water": 50, "internet": 65, "renters_insurance": 25, "laundry": 60},
+    "3": {"electric": 140, "gas": 80, "water": 55, "internet": 65, "renters_insurance": 29, "laundry": 60},
+    "4": {"electric": 160, "gas": 90, "water": 60, "internet": 65, "renters_insurance": 33, "laundry": 60}
+  }
+}

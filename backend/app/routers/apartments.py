@@ -13,6 +13,7 @@ from app.services.tier_service import TierService
 from app.services.analytics_service import AnalyticsService
 from app.schemas import CompareRequest, CompareResponse
 from app.database import is_database_enabled, get_session_context
+from app.services.cost_estimator import CostEstimator
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,58 @@ router = APIRouter(prefix="/api/apartments", tags=["Apartments"])
 
 # Initialize the apartment service
 _apartment_service = ApartmentService()
+
+_cost_estimator = CostEstimator()
+
+
+def _add_cost_breakdown(apartment: dict, include_breakdown: bool) -> dict:
+    """Add true cost fields to apartment dict. Full breakdown only if include_breakdown=True."""
+    if apartment.get("true_cost_monthly") is None and apartment.get("rent"):
+        breakdown = _cost_estimator.compute_true_cost(
+            rent=apartment["rent"],
+            zip_code=apartment.get("zip_code"),
+            bedrooms=apartment.get("bedrooms", 1),
+            amenities=apartment.get("amenities", []),
+            scraped_fees={
+                "pet_rent": apartment.get("pet_rent"),
+                "parking_fee": apartment.get("parking_fee"),
+                "amenity_fee": apartment.get("amenity_fee"),
+                "application_fee": apartment.get("application_fee"),
+                "security_deposit": apartment.get("security_deposit"),
+            },
+        )
+        apartment["true_cost_monthly"] = breakdown["true_cost_monthly"]
+        apartment["true_cost_move_in"] = breakdown["true_cost_move_in"]
+        if include_breakdown:
+            apartment["cost_breakdown"] = breakdown
+    elif include_breakdown and apartment.get("true_cost_monthly"):
+        apartment["cost_breakdown"] = {
+            "base_rent": apartment["rent"],
+            "pet_rent": apartment.get("pet_rent") or 0,
+            "parking_fee": apartment.get("parking_fee") or 0,
+            "amenity_fee": apartment.get("amenity_fee") or 0,
+            "est_electric": apartment.get("est_electric") or 0,
+            "est_gas": apartment.get("est_gas") or 0,
+            "est_water": apartment.get("est_water") or 0,
+            "est_internet": apartment.get("est_internet") or 0,
+            "est_renters_insurance": apartment.get("est_renters_insurance") or 0,
+            "est_laundry": apartment.get("est_laundry") or 0,
+            "application_fee": apartment.get("application_fee") or 0,
+            "security_deposit": apartment.get("security_deposit") or 0,
+            "sources": _build_sources(apartment),
+        }
+    return apartment
+
+
+def _build_sources(apartment: dict) -> dict:
+    scraped = [k for k in ("pet_rent", "parking_fee", "amenity_fee") if apartment.get(k)]
+    estimated = [
+        f"est_{k}" for k in ("electric", "gas", "water", "internet", "renters_insurance", "laundry")
+        if apartment.get(f"est_{k}")
+    ]
+    included_map = apartment.get("utilities_included") or {}
+    included = [k for k, v in included_map.items() if v]
+    return {"scraped": scraped, "estimated": estimated, "included": included}
 
 
 def _get_apartments_data() -> List[Dict]:
@@ -298,6 +351,11 @@ async def compare_apartments(
         except Exception as e:
             logger.error(f"Claude comparison analysis failed: {e}")
             # Return apartments without analysis on failure
+
+    # Add true cost data to apartments
+    is_pro = tier == "pro"
+    for i, apt in enumerate(apartments):
+        apartments[i] = _add_cost_breakdown(apt, include_breakdown=is_pro)
 
     await AnalyticsService.log_event(
         "compare",

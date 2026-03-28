@@ -49,6 +49,13 @@ class ScrapedListing:
     images: List[str] = field(default_factory=list)
     source_url: Optional[str] = None
 
+    # Fee fields (extracted from listing)
+    pet_rent: Optional[int] = None
+    parking_fee: Optional[int] = None
+    amenity_fee: Optional[int] = None
+    application_fee: Optional[int] = None
+    security_deposit: Optional[int] = None
+
     # Raw data for debugging
     raw_data: Optional[Dict[str, Any]] = None
 
@@ -77,6 +84,11 @@ class ScrapedListing:
             "description": self.description,
             "amenities": self.amenities,
             "images": self.images,
+            "pet_rent": self.pet_rent,
+            "parking_fee": self.parking_fee,
+            "amenity_fee": self.amenity_fee,
+            "application_fee": self.application_fee,
+            "security_deposit": self.security_deposit,
             "raw_data": self.raw_data,
         }
 

@@ -27,6 +27,30 @@ class SearchRequest(BaseModel):
         }
 
 
+class CostSources(BaseModel):
+    """Tracks which costs are scraped vs estimated vs included."""
+    scraped: List[str] = Field(default_factory=list)
+    estimated: List[str] = Field(default_factory=list)
+    included: List[str] = Field(default_factory=list)
+
+
+class CostBreakdown(BaseModel):
+    """Full cost breakdown for Pro users."""
+    base_rent: int
+    pet_rent: int = 0
+    parking_fee: int = 0
+    amenity_fee: int = 0
+    est_electric: int = 0
+    est_gas: int = 0
+    est_water: int = 0
+    est_internet: int = 0
+    est_renters_insurance: int = 0
+    est_laundry: int = 0
+    application_fee: int = 0
+    security_deposit: int = 0
+    sources: CostSources = Field(default_factory=CostSources)
+
+
 class Apartment(BaseModel):
     """Model for apartment listing"""
     id: str
@@ -41,6 +65,11 @@ class Apartment(BaseModel):
     neighborhood: str
     description: str
     images: List[str]
+    # True cost fields (available to all tiers)
+    true_cost_monthly: Optional[int] = None
+    true_cost_move_in: Optional[int] = None
+    # Full breakdown (Pro only — populated by API layer)
+    cost_breakdown: Optional[CostBreakdown] = None
 
     class Config:
         json_schema_extra = {
