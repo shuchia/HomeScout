@@ -9,44 +9,64 @@ export default function AuthCallback() {
 
   useEffect(() => {
     let redirected = false
-    let authSubscription: { unsubscribe: () => void } | null = null
 
     const safeRedirect = () => {
       if (redirected) return
       redirected = true
-      authSubscription?.unsubscribe()
       router.replace('/')
     }
 
-    // Safety: ALWAYS redirect within 5 seconds, no matter what
-    const safetyTimeout = setTimeout(() => {
-      if (!redirected) {
-        console.warn('Auth callback timed out — redirecting')
-        setError('Sign-in is taking too long. Redirecting...')
-        setTimeout(safeRedirect, 1000)
+    async function handleCallback() {
+      try {
+        // Exchange PKCE code for session
+        const params = new URLSearchParams(window.location.search)
+        const code = params.get('code')
+
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) {
+            console.error('Auth code exchange failed:', error.message)
+            // Exchange failed, but check if session exists anyway
+            // (detectSessionInUrl may have handled it)
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session) {
+              safeRedirect()
+              return
+            }
+            setError('Sign-in failed. Please try again.')
+            setTimeout(safeRedirect, 2000)
+            return
+          }
+        }
+
+        // Code exchanged (or no code). Check for session.
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          safeRedirect()
+          return
+        }
+
+        // No session yet — wait for auth state change
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          if (session) {
+            subscription.unsubscribe()
+            safeRedirect()
+          }
+        })
+
+        // Safety timeout
+        setTimeout(() => {
+          subscription.unsubscribe()
+          safeRedirect()
+        }, 5000)
+      } catch (err) {
+        console.error('Auth callback error:', err)
+        setError('Sign-in failed. Redirecting...')
+        setTimeout(safeRedirect, 2000)
       }
-    }, 5000)
-
-    // With detectSessionInUrl: true, Supabase auto-exchanges the PKCE code
-    // during client init. Do NOT manually call exchangeCodeForSession —
-    // that races with the auto-exchange and fails when the code is consumed.
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        safeRedirect()
-      }
-    })
-    authSubscription = data.subscription
-
-    // Also check if session is already available (exchange may have
-    // completed before our listener was set up)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) safeRedirect()
-    }).catch(() => {})
-
-    return () => {
-      clearTimeout(safetyTimeout)
-      authSubscription?.unsubscribe()
     }
+
+    handleCallback()
   }, [router])
 
   return (
