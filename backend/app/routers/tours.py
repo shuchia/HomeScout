@@ -771,7 +771,9 @@ async def create_voice_note(
 
         if len(audio_data) > MAX_AUDIO_SIZE:
             raise HTTPException(status_code=400, detail="Audio file too large (max 5 MB)")
-        if content_type not in ALLOWED_AUDIO_TYPES:
+        # Strip codec parameters (e.g. "audio/webm;codecs=opus" → "audio/webm")
+        base_content_type = content_type.split(";")[0].strip()
+        if base_content_type not in ALLOWED_AUDIO_TYPES:
             raise HTTPException(status_code=400, detail=f"Unsupported audio type: {content_type}")
 
         # Upload to S3
