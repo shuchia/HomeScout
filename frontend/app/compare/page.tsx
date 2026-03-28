@@ -423,6 +423,29 @@ export default function ComparePage() {
                     ))}
                   </tr>
 
+                  {/* True Cost Row */}
+                  <tr>
+                    <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Est. True Cost</td>
+                    {apartments.map((apt) => (
+                      <td key={`truecost-${apt.id}`} className="px-6 py-4 text-center border-l border-gray-200">
+                        {apt.true_cost_monthly ? (
+                          <div>
+                            <span className="font-semibold">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(apt.true_cost_monthly)}/mo
+                            </span>
+                            {apt.true_cost_monthly > apt.rent && (
+                              <span className="block text-xs text-amber-600">
+                                +{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(apt.true_cost_monthly - apt.rent)} over rent
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">&mdash;</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
                   {/* Bedrooms Row */}
                   <tr>
                     <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Bedrooms</td>
