@@ -18,6 +18,34 @@ export interface SearchParams {
 }
 
 /**
+ * Source tracking for cost estimates
+ */
+export interface CostSources {
+  scraped: string[];
+  estimated: string[];
+  included: string[];
+}
+
+/**
+ * Full cost breakdown (Pro users only)
+ */
+export interface CostBreakdown {
+  base_rent: number;
+  pet_rent: number;
+  parking_fee: number;
+  amenity_fee: number;
+  est_electric: number;
+  est_gas: number;
+  est_water: number;
+  est_internet: number;
+  est_renters_insurance: number;
+  est_laundry: number;
+  application_fee: number;
+  security_deposit: number;
+  sources: CostSources;
+}
+
+/**
  * Base apartment listing data
  * Matches backend Apartment model
  */
@@ -34,6 +62,9 @@ export interface Apartment {
   neighborhood: string;
   description: string;
   images: string[];
+  true_cost_monthly?: number | null;
+  true_cost_move_in?: number | null;
+  cost_breakdown?: CostBreakdown | null;
   freshness_confidence?: number;
   first_seen_at?: string;
   times_seen?: number;
