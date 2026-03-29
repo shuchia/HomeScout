@@ -65,6 +65,8 @@ class Apartment(BaseModel):
     neighborhood: str
     description: str
     images: List[str]
+    # Source listing URL
+    source_url: Optional[str] = None
     # Contact info (scraped from listing)
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None

@@ -359,9 +359,126 @@ export default function ComparePage() {
           </div>
         )}
 
-        {/* Comparison Table */}
+        {/* Mobile: Horizontal Swipe Cards */}
         {!loading && apartments.length > 0 && (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="md:hidden">
+            <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4">
+              {apartments.map((apt) => {
+                const aptScore = analysis?.apartment_scores.find(s => s.apartment_id === apt.id)
+                const isWinner = apt.id === winnerAptId
+                return (
+                  <div
+                    key={apt.id}
+                    className={`flex-shrink-0 w-[85vw] snap-center bg-white rounded-xl shadow-md overflow-hidden ${isWinner ? 'ring-2 ring-green-400' : ''}`}
+                  >
+                    {/* Card Header */}
+                    <div className="relative">
+                      {apt.images && apt.images.length > 0 && (
+                        <div className="relative w-full h-40">
+                          <Image src={apt.images[0]} alt={apt.address} fill className="object-cover" sizes="85vw" />
+                        </div>
+                      )}
+                      <button
+                        onClick={() => removeFromCompare(apt.id)}
+                        className="absolute top-2 right-2 bg-white/80 backdrop-blur rounded-full p-1.5 text-gray-500 hover:text-red-500"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                      {isWinner && (
+                        <div className="absolute top-2 left-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                          <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                          Winner
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-4 space-y-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-sm leading-tight">{apt.address}</h3>
+                        {apt.neighborhood && <p className="text-xs text-gray-500 mt-0.5">{apt.neighborhood}</p>}
+                      </div>
+
+                      {/* Score */}
+                      {aptScore && (
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block px-3 py-1 rounded-full text-white text-sm font-bold ${getScoreColor(aptScore.overall_score)}`}>
+                            {aptScore.overall_score}%
+                          </span>
+                          <span className="text-xs text-gray-500">Overall Score</span>
+                        </div>
+                      )}
+
+                      {/* Key Stats */}
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-gray-50 rounded-lg p-2">
+                          <p className={`text-sm font-bold ${apt.rent === lowestRent ? 'text-green-600' : 'text-gray-900'}`}>{formatRent(apt.rent)}</p>
+                          <p className="text-xs text-gray-500">/mo{apt.rent === lowestRent ? ' ★' : ''}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-2">
+                          <p className="text-sm font-bold text-gray-900">{apt.bedrooms === 0 ? 'Studio' : `${apt.bedrooms} bed`}</p>
+                          <p className="text-xs text-gray-500">{apt.bathrooms} bath</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-2">
+                          <p className="text-sm font-bold text-gray-900">{apt.sqft ? formatSqft(apt.sqft) : 'N/A'}</p>
+                          <p className="text-xs text-gray-500">sqft</p>
+                        </div>
+                      </div>
+
+                      {/* True Cost */}
+                      {apt.true_cost_monthly && (
+                        <div className="flex items-center justify-between bg-amber-50 rounded-lg px-3 py-2">
+                          <span className="text-xs text-amber-700">Est. True Cost</span>
+                          <span className="text-sm font-semibold text-amber-800">{formatRent(apt.true_cost_monthly)}/mo</span>
+                        </div>
+                      )}
+
+                      {/* Amenities (top 5 + expand) */}
+                      <AmenitiesList amenities={apt.amenities} />
+
+                      {/* AI Analysis */}
+                      {aptScore && (
+                        <div className="border-t pt-3">
+                          <p className="text-xs text-gray-600 italic">&quot;{aptScore.reasoning}&quot;</p>
+                          {aptScore.highlights.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {aptScore.highlights.map((h, i) => (
+                                <span key={i} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">&#10003; {h}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* View Listing */}
+                      {apt.source_url ? (
+                        <a
+                          href={apt.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-full text-center px-4 py-2.5 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
+                        >
+                          View Original Listing &#8599;
+                        </a>
+                      ) : (
+                        <span className="block w-full text-center px-4 py-2.5 bg-gray-100 text-gray-400 rounded-lg text-sm">No listing link</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Scroll hint */}
+            <p className="text-center text-xs text-gray-400 mt-1">Swipe to compare &rarr;</p>
+          </div>
+        )}
+
+        {/* Desktop: Comparison Table */}
+        {!loading && apartments.length > 0 && (
+          <div className="hidden md:block bg-white rounded-lg shadow-md overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -381,7 +498,7 @@ export default function ComparePage() {
                           </button>
                           {apt.images && apt.images.length > 0 && (
                             <div className="relative w-full h-32 mb-3">
-                              <Image src={apt.images[0]} alt={apt.address} fill className="object-cover rounded-lg" sizes="(max-width: 768px) 100vw, 33vw" />
+                              <Image src={apt.images[0]} alt={apt.address} fill className="object-cover rounded-lg" sizes="33vw" />
                             </div>
                           )}
                           <h3 className="font-semibold text-gray-900 text-sm">
@@ -433,11 +550,11 @@ export default function ComparePage() {
                         {apt.true_cost_monthly ? (
                           <div>
                             <span className="font-semibold">
-                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(apt.true_cost_monthly)}/mo
+                              {formatRent(apt.true_cost_monthly)}/mo
                             </span>
                             {apt.true_cost_monthly > apt.rent && (
                               <span className="block text-xs text-amber-600">
-                                +{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(apt.true_cost_monthly - apt.rent)} over rent
+                                +{formatRent(apt.true_cost_monthly - apt.rent)} over rent
                               </span>
                             )}
                           </div>
@@ -470,7 +587,7 @@ export default function ComparePage() {
                   <tr>
                     <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Size</td>
                     {apartments.map((apt) => (
-                      <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">{formatSqft(apt.sqft)} sqft</td>
+                      <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">{apt.sqft ? `${formatSqft(apt.sqft)} sqft` : 'N/A'}</td>
                     ))}
                   </tr>
 
@@ -487,21 +604,17 @@ export default function ComparePage() {
                     <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Available</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">
-                        {new Date(apt.available_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {apt.available_date ? new Date(apt.available_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
                       </td>
                     ))}
                   </tr>
 
-                  {/* Amenities Row */}
+                  {/* Amenities Row - capped to 5 with expand */}
                   <tr>
                     <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900 align-top">Amenities</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 border-l border-gray-200">
-                        <div className="flex flex-wrap gap-1 justify-center">
-                          {apt.amenities.map((amenity) => (
-                            <span key={amenity} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">{amenity}</span>
-                          ))}
-                        </div>
+                        <AmenitiesList amenities={apt.amenities} />
                       </td>
                     ))}
                   </tr>
@@ -542,17 +655,21 @@ export default function ComparePage() {
                     <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Actions</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200">
-                        <a
-                          href={`/apartment/${apt.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
-                        >
-                          View Details
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </a>
+                        {apt.source_url ? (
+                          <a
+                            href={apt.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
+                          >
+                            View Original Listing
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+                        ) : (
+                          <span className="text-sm text-gray-400">No listing link</span>
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -569,6 +686,39 @@ export default function ComparePage() {
           <p className="text-center text-sm text-gray-500">Powered by Claude AI &middot; Built with Next.js and FastAPI</p>
         </div>
       </footer>
+    </div>
+  )
+}
+
+function AmenitiesList({ amenities }: { amenities: string[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const LIMIT = 5
+  const visible = expanded ? amenities : amenities.slice(0, LIMIT)
+  const remaining = amenities.length - LIMIT
+
+  return (
+    <div className="flex flex-wrap gap-1 justify-center">
+      {visible.map((amenity) => (
+        <span key={amenity} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">{amenity}</span>
+      ))}
+      {remaining > 0 && !expanded && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-full font-medium hover:bg-gray-300 transition-colors"
+        >
+          +{remaining} more
+        </button>
+      )}
+      {expanded && remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-full font-medium hover:bg-gray-300 transition-colors"
+        >
+          Show less
+        </button>
+      )}
     </div>
   )
 }
