@@ -10,11 +10,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // we don't have, causing stale tokens and hanging getSession() calls.
     persistSession: true,
     autoRefreshToken: true,
-    // DISABLED: detectSessionInUrl causes a race condition with the explicit
-    // exchangeCodeForSession() call in /auth/callback. Both compete for the
-    // same single-use PKCE code, causing intermittent sign-in failures.
-    // The callback page handles code exchange explicitly.
-    detectSessionInUrl: false,
+    // Supabase auto-processes auth tokens from the URL (hash fragments for
+    // implicit flow, query params for PKCE). The callback page does NOT
+    // call exchangeCodeForSession manually — it waits for onAuthStateChange
+    // to confirm the session, avoiding the double-exchange race condition.
+    detectSessionInUrl: true,
   },
 })
 
