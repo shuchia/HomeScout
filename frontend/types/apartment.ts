@@ -62,6 +62,8 @@ export interface Apartment {
   neighborhood: string;
   description: string;
   images: string[];
+  contact_phone?: string | null;
+  contact_email?: string | null;
   true_cost_monthly?: number | null;
   true_cost_move_in?: number | null;
   cost_breakdown?: CostBreakdown | null;

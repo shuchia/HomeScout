@@ -65,6 +65,9 @@ class Apartment(BaseModel):
     neighborhood: str
     description: str
     images: List[str]
+    # Contact info (scraped from listing)
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
     # True cost fields (available to all tiers)
     true_cost_monthly: Optional[int] = None
     true_cost_move_in: Optional[int] = None
@@ -256,6 +259,8 @@ class UpdateTourRequest(BaseModel):
     tour_rating: Optional[int] = None
     decision: Optional[str] = None
     decision_reason: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
 
     @field_validator("stage")
     @classmethod
@@ -414,5 +419,7 @@ class TourResponse(BaseModel):
     tags: List[TagResponse] = Field(default_factory=list)
     decision: Optional[str] = None
     decision_reason: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
     created_at: str
     updated_at: str

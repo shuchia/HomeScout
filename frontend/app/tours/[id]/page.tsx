@@ -438,6 +438,35 @@ export default function TourDetailPage() {
 // ---------------------------------------------------------------------------
 
 function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | null; tour: Tour; onTourUpdate: (tour: Tour) => void }) {
+  const [editingPhone, setEditingPhone] = useState(false)
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [phoneValue, setPhoneValue] = useState(tour.contact_phone || '')
+  const [emailValue, setEmailValue] = useState(tour.contact_email || '')
+
+  async function savePhone(value: string) {
+    const trimmed = value.trim()
+    try {
+      const res = await updateTour(tour.id, { contact_phone: trimmed })
+      onTourUpdate(res.tour)
+    } catch { /* silent */ }
+    setEditingPhone(false)
+  }
+
+  async function saveEmail(value: string) {
+    const trimmed = value.trim()
+    try {
+      const res = await updateTour(tour.id, { contact_email: trimmed })
+      onTourUpdate(res.tour)
+    } catch { /* silent */ }
+    setEditingEmail(false)
+  }
+
+  // Sync local state when tour updates externally
+  useEffect(() => {
+    setPhoneValue(tour.contact_phone || '')
+    setEmailValue(tour.contact_email || '')
+  }, [tour.contact_phone, tour.contact_email])
+
   if (!apartment) {
     return <p className="text-sm text-gray-500">Apartment details not available.</p>
   }
@@ -453,6 +482,88 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
         <Stat label="Type" value={apartment.property_type || 'N/A'} />
         <Stat label="Available" value={apartment.available_date || 'N/A'} />
       </div>
+
+      {/* Contact Info */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-900 mb-2">Property Contact</h3>
+        <div className="space-y-2">
+          {/* Phone */}
+          <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-3">
+            <svg className="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            {editingPhone ? (
+              <input
+                type="tel"
+                value={phoneValue}
+                onChange={(e) => setPhoneValue(e.target.value)}
+                onBlur={() => savePhone(phoneValue)}
+                onKeyDown={(e) => { if (e.key === 'Enter') savePhone(phoneValue) }}
+                placeholder="Add phone number"
+                className="flex-1 text-sm bg-transparent outline-none"
+                autoFocus
+              />
+            ) : tour.contact_phone ? (
+              <div className="flex-1 flex items-center justify-between">
+                <a href={`tel:${tour.contact_phone}`} className="text-sm text-[var(--color-primary)] font-medium hover:underline">
+                  {tour.contact_phone}
+                </a>
+                <button type="button" onClick={() => setEditingPhone(true)} className="text-gray-400 hover:text-gray-600">
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingPhone(true)}
+                className="flex-1 text-sm text-gray-400 text-left hover:text-gray-600"
+              >
+                Add phone number
+              </button>
+            )}
+          </div>
+
+          {/* Email */}
+          <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-3">
+            <svg className="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            {editingEmail ? (
+              <input
+                type="email"
+                value={emailValue}
+                onChange={(e) => setEmailValue(e.target.value)}
+                onBlur={() => saveEmail(emailValue)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveEmail(emailValue) }}
+                placeholder="Add email address"
+                className="flex-1 text-sm bg-transparent outline-none"
+                autoFocus
+              />
+            ) : tour.contact_email ? (
+              <div className="flex-1 flex items-center justify-between">
+                <a href={`mailto:${tour.contact_email}`} className="text-sm text-[var(--color-primary)] font-medium hover:underline">
+                  {tour.contact_email}
+                </a>
+                <button type="button" onClick={() => setEditingEmail(true)} className="text-gray-400 hover:text-gray-600">
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingEmail(true)}
+                className="flex-1 text-sm text-gray-400 text-left hover:text-gray-600"
+              >
+                Add email address
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Schedule Tour Section */}
       <TourScheduler tour={tour} onUpdate={onTourUpdate} />
@@ -737,7 +848,7 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
 // Email Tab
 // ---------------------------------------------------------------------------
 
-function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; isPro: boolean; profileLoading?: boolean; onTourUpdate: (tour: Tour) => void }) {
+function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; isPro: boolean; profileLoading?: boolean; onTourUpdate: (tour: Tour) => void; }) {
   const [copied, setCopied] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
@@ -830,11 +941,26 @@ function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; i
             {emailBody}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {tour.contact_email && (
+            <a
+              href={`mailto:${tour.contact_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`}
+              className="flex items-center gap-1.5 bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              Send Email
+            </a>
+          )}
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center gap-1.5 bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tour.contact_email
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-light)]'
+            }`}
           >
             {copied ? (
               <>
@@ -871,6 +997,9 @@ function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; i
             )}
           </button>
         </div>
+        {!tour.contact_email && (
+          <p className="text-xs text-gray-400">Add a contact email on the Info tab to send this email directly.</p>
+        )}
         {tour.stage === 'interested' && (
           <button
             type="button"

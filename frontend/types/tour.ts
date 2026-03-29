@@ -36,6 +36,8 @@ export interface Tour {
   tags: TourTag[]
   decision: 'applied' | 'passed' | null
   decision_reason: string | null
+  contact_phone: string | null
+  contact_email: string | null
   created_at: string
   updated_at: string
 }

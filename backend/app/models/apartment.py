@@ -27,6 +27,8 @@ class ApartmentModel(Base):
     external_id = Column(String(255), nullable=True)  # ID from source (e.g., Zillow listing ID)
     source = Column(String(50), nullable=False, default="manual")  # zillow, apartments_com, craigslist, manual
     source_url = Column(Text, nullable=True)  # Original listing URL
+    contact_phone = Column(String(50), nullable=True)  # Property contact phone (scraped)
+    contact_email = Column(String(255), nullable=True)  # Property contact email (scraped)
 
     # Address fields (normalized)
     address = Column(String(500), nullable=False)
@@ -129,6 +131,8 @@ class ApartmentModel(Base):
             "zip_code": self.zip_code,
             "source": self.source,
             "source_url": self.source_url,
+            "contact_phone": self.contact_phone,
+            "contact_email": self.contact_email,
             "data_quality_score": self.data_quality_score,
             "freshness_confidence": self.freshness_confidence,
             "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,

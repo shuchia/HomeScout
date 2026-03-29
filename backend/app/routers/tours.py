@@ -53,6 +53,8 @@ def _build_tour_response(row: dict, notes=None, photos=None, tags=None) -> dict:
         "tags": tags or [],
         "decision": row.get("decision"),
         "decision_reason": row.get("decision_reason"),
+        "contact_phone": row.get("contact_phone"),
+        "contact_email": row.get("contact_email"),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -368,6 +370,29 @@ async def create_tour(
             "apartment_id": body.apartment_id,
             "stage": "interested",
         }
+
+        # Auto-populate contact info from apartment if available
+        try:
+            from app.database import is_database_enabled, get_session_context
+
+            if is_database_enabled():
+                from sqlalchemy import select
+                from app.models.apartment import ApartmentModel
+
+                async with get_session_context() as session:
+                    stmt = select(ApartmentModel.contact_phone, ApartmentModel.contact_email).where(
+                        ApartmentModel.id == body.apartment_id
+                    )
+                    apt_result = await session.execute(stmt)
+                    apt_row = apt_result.first()
+                    if apt_row:
+                        if apt_row.contact_phone:
+                            row["contact_phone"] = apt_row.contact_phone
+                        if apt_row.contact_email:
+                            row["contact_email"] = apt_row.contact_email
+        except Exception:
+            pass  # Non-critical — user can enter manually
+
         result = (
             supabase_admin.table("tour_pipeline")
             .insert(row)
@@ -496,6 +521,10 @@ async def update_tour(
             updates["decision"] = body.decision
         if body.decision_reason is not None:
             updates["decision_reason"] = body.decision_reason
+        if body.contact_phone is not None:
+            updates["contact_phone"] = body.contact_phone
+        if body.contact_email is not None:
+            updates["contact_email"] = body.contact_email
 
         if not updates:
             raise HTTPException(status_code=400, detail="No fields to update")
