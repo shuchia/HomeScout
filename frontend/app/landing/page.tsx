@@ -70,7 +70,7 @@ const FEATURES = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: 1, title: 'Search & Favorite', desc: 'Browse listings across 19 East Coast cities. Heart the ones that catch your eye.' },
+  { step: 1, title: 'Search & Favorite', desc: 'Browse listings across 23 cities. Heart the ones that catch your eye.' },
   { step: 2, title: 'Start Touring', desc: 'Move favorites into your tour pipeline. Each apartment gets its own stage tracker.' },
   { step: 3, title: 'Send Outreach', desc: 'AI drafts personalized inquiry emails. One click to send to each landlord.' },
   { step: 4, title: 'Tour & Capture', desc: 'Visit in person. Record voice notes that AI transcribes into structured pros/cons.' },

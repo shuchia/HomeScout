@@ -17,6 +17,7 @@ const AVAILABLE_CITIES = [
   { value: 'Hoboken, NJ', label: 'Hoboken, NJ' },
   { value: 'Jersey City, NJ', label: 'Jersey City, NJ' },
   { value: 'New Haven, CT', label: 'New Haven, CT' },
+  { value: 'New Orleans, LA', label: 'New Orleans, LA' },
   { value: 'New York, NY', label: 'New York, NY' },
   { value: 'Newark, NJ', label: 'Newark, NJ' },
   { value: 'Philadelphia, PA', label: 'Philadelphia, PA' },
@@ -25,6 +26,9 @@ const AVAILABLE_CITIES = [
   { value: 'Raleigh, NC', label: 'Raleigh, NC' },
   { value: 'Richmond, VA', label: 'Richmond, VA' },
   { value: 'Stamford, CT', label: 'Stamford, CT' },
+  { value: 'State College, PA', label: 'State College, PA' },
+  { value: 'Towson, MD', label: 'Towson, MD' },
+  { value: 'Charleston, SC', label: 'Charleston, SC' },
   { value: 'Washington, DC', label: 'Washington, DC' },
 ];
 
