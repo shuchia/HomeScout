@@ -74,5 +74,69 @@
     "2": {"electric": 115, "gas": 65, "water": 50, "internet": 65, "renters_insurance": 25, "laundry": 60},
     "3": {"electric": 140, "gas": 80, "water": 55, "internet": 65, "renters_insurance": 29, "laundry": 60},
     "4": {"electric": 160, "gas": 90, "water": 60, "internet": 65, "renters_insurance": 33, "laundry": 60}
+  },
+  "222": {
+    "_region": "Arlington, VA",
+    "0": {"electric": 78, "gas": 42, "water": 34, "internet": 65, "renters_insurance": 17, "laundry": 55},
+    "1": {"electric": 93, "gas": 52, "water": 39, "internet": 65, "renters_insurance": 21, "laundry": 55},
+    "2": {"electric": 112, "gas": 63, "water": 48, "internet": 65, "renters_insurance": 25, "laundry": 55},
+    "3": {"electric": 135, "gas": 76, "water": 53, "internet": 65, "renters_insurance": 29, "laundry": 55},
+    "4": {"electric": 155, "gas": 88, "water": 58, "internet": 65, "renters_insurance": 33, "laundry": 55}
+  },
+  "069": {
+    "_region": "Stamford, CT",
+    "0": {"electric": 88, "gas": 48, "water": 38, "internet": 68, "renters_insurance": 19, "laundry": 60},
+    "1": {"electric": 105, "gas": 58, "water": 43, "internet": 68, "renters_insurance": 23, "laundry": 60},
+    "2": {"electric": 125, "gas": 70, "water": 52, "internet": 68, "renters_insurance": 27, "laundry": 60},
+    "3": {"electric": 148, "gas": 84, "water": 57, "internet": 68, "renters_insurance": 31, "laundry": 60},
+    "4": {"electric": 170, "gas": 96, "water": 63, "internet": 68, "renters_insurance": 36, "laundry": 60}
+  },
+  "065": {
+    "_region": "New Haven, CT",
+    "0": {"electric": 82, "gas": 45, "water": 35, "internet": 62, "renters_insurance": 17, "laundry": 55},
+    "1": {"electric": 98, "gas": 55, "water": 40, "internet": 62, "renters_insurance": 20, "laundry": 55},
+    "2": {"electric": 118, "gas": 66, "water": 48, "internet": 62, "renters_insurance": 24, "laundry": 55},
+    "3": {"electric": 140, "gas": 78, "water": 53, "internet": 62, "renters_insurance": 28, "laundry": 55},
+    "4": {"electric": 162, "gas": 90, "water": 58, "internet": 62, "renters_insurance": 32, "laundry": 55}
+  },
+  "029": {
+    "_region": "Providence, RI",
+    "0": {"electric": 78, "gas": 44, "water": 33, "internet": 60, "renters_insurance": 16, "laundry": 52},
+    "1": {"electric": 94, "gas": 54, "water": 38, "internet": 60, "renters_insurance": 19, "laundry": 52},
+    "2": {"electric": 113, "gas": 65, "water": 46, "internet": 60, "renters_insurance": 23, "laundry": 52},
+    "3": {"electric": 135, "gas": 78, "water": 51, "internet": 60, "renters_insurance": 27, "laundry": 52},
+    "4": {"electric": 155, "gas": 88, "water": 56, "internet": 60, "renters_insurance": 31, "laundry": 52}
+  },
+  "232": {
+    "_region": "Richmond, VA",
+    "0": {"electric": 72, "gas": 38, "water": 30, "internet": 58, "renters_insurance": 15, "laundry": 48},
+    "1": {"electric": 88, "gas": 48, "water": 35, "internet": 58, "renters_insurance": 18, "laundry": 48},
+    "2": {"electric": 105, "gas": 58, "water": 42, "internet": 58, "renters_insurance": 21, "laundry": 48},
+    "3": {"electric": 125, "gas": 70, "water": 47, "internet": 58, "renters_insurance": 25, "laundry": 48},
+    "4": {"electric": 145, "gas": 80, "water": 52, "internet": 58, "renters_insurance": 28, "laundry": 48}
+  },
+  "282": {
+    "_region": "Charlotte, NC",
+    "0": {"electric": 75, "gas": 35, "water": 28, "internet": 58, "renters_insurance": 15, "laundry": 48},
+    "1": {"electric": 92, "gas": 45, "water": 33, "internet": 58, "renters_insurance": 18, "laundry": 48},
+    "2": {"electric": 110, "gas": 55, "water": 40, "internet": 58, "renters_insurance": 22, "laundry": 48},
+    "3": {"electric": 132, "gas": 66, "water": 45, "internet": 58, "renters_insurance": 26, "laundry": 48},
+    "4": {"electric": 152, "gas": 76, "water": 50, "internet": 58, "renters_insurance": 29, "laundry": 48}
+  },
+  "276": {
+    "_region": "Raleigh, NC",
+    "0": {"electric": 73, "gas": 34, "water": 27, "internet": 58, "renters_insurance": 14, "laundry": 47},
+    "1": {"electric": 90, "gas": 44, "water": 32, "internet": 58, "renters_insurance": 17, "laundry": 47},
+    "2": {"electric": 108, "gas": 54, "water": 39, "internet": 58, "renters_insurance": 21, "laundry": 47},
+    "3": {"electric": 130, "gas": 65, "water": 44, "internet": 58, "renters_insurance": 25, "laundry": 47},
+    "4": {"electric": 150, "gas": 75, "water": 49, "internet": 58, "renters_insurance": 28, "laundry": 47}
+  },
+  "061": {
+    "_region": "Hartford, CT",
+    "0": {"electric": 82, "gas": 46, "water": 34, "internet": 62, "renters_insurance": 17, "laundry": 55},
+    "1": {"electric": 98, "gas": 56, "water": 39, "internet": 62, "renters_insurance": 20, "laundry": 55},
+    "2": {"electric": 118, "gas": 67, "water": 47, "internet": 62, "renters_insurance": 24, "laundry": 55},
+    "3": {"electric": 140, "gas": 80, "water": 52, "internet": 62, "renters_insurance": 28, "laundry": 55},
+    "4": {"electric": 162, "gas": 92, "water": 57, "internet": 62, "renters_insurance": 32, "laundry": 55}
   }
 }
