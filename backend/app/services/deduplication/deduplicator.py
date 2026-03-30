@@ -328,6 +328,9 @@ class DeduplicationService:
                     "content_hash": content_hash,
                     "images": listing.get("images", []),
                     "description": listing.get("description", ""),
+                    "available_date": listing.get("available_date"),
+                    "contact_phone": listing.get("contact_phone"),
+                    "contact_email": listing.get("contact_email"),
                 })
                 continue
 
@@ -340,6 +343,9 @@ class DeduplicationService:
                         "content_hash": content_hash,
                         "images": listing.get("images", []),
                         "description": listing.get("description", ""),
+                        "available_date": listing.get("available_date"),
+                        "contact_phone": listing.get("contact_phone"),
+                        "contact_email": listing.get("contact_email"),
                     })
                     continue
 

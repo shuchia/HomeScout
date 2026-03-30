@@ -534,6 +534,12 @@ async def _update_reseen_listings(updates: List[Dict[str, Any]]):
                 values["images"] = upd["images"]
             if upd.get("description") and len(upd.get("description", "")) > 100:
                 values["description"] = upd["description"]
+            if upd.get("available_date"):
+                values["available_date"] = upd["available_date"]
+            if upd.get("contact_phone"):
+                values["contact_phone"] = upd["contact_phone"]
+            if upd.get("contact_email"):
+                values["contact_email"] = upd["contact_email"]
 
             await session.execute(
                 update(ApartmentModel)
