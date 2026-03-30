@@ -54,7 +54,7 @@ interface SearchFormProps {
   onResults: (results: ApartmentWithScore[]) => void;
   onLoading: (loading: boolean) => void;
   onError: (error: string | null) => void;
-  onSearchMeta?: (meta: { tier?: string; searches_remaining?: number | null }) => void;
+  onSearchMeta?: (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string }) => void;
 }
 
 export default function SearchForm({ onResults, onLoading, onError, onSearchMeta }: SearchFormProps) {
@@ -110,7 +110,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
 
       const response = await searchApartments(params);
       onResults(response.apartments);
-      onSearchMeta?.({ tier: response.tier, searches_remaining: response.searches_remaining });
+      onSearchMeta?.({ tier: response.tier, searches_remaining: response.searches_remaining, move_in_date: moveInDate });
 
       // Save search context for comparison page
       setSearchContext({

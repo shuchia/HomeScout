@@ -25,6 +25,7 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(() => loadSessionResults().results.length > 0);
   const [searchesRemaining, setSearchesRemaining] = useState<number | null>(() => loadSessionResults().remaining);
   const [rateLimited, setRateLimited] = useState(false);
+  const [moveInDate, setMoveInDate] = useState<string | null>(null);
 
   const { user, loading: authLoading, signInWithGoogle, tier, isPro } = useAuth();
 
@@ -62,8 +63,9 @@ export default function Home() {
   };
 
   // Handle search metadata (tier, remaining searches)
-  const handleSearchMeta = (meta: { tier?: string; searches_remaining?: number | null }) => {
+  const handleSearchMeta = (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string }) => {
     setSearchesRemaining(meta.searches_remaining ?? null);
+    if (meta.move_in_date) setMoveInDate(meta.move_in_date);
   };
 
   if (authLoading) {
@@ -215,7 +217,7 @@ export default function Home() {
                   </div>
                   <div className="grid gap-6 sm:grid-cols-2">
                     {results.map((apartment) => (
-                      <ApartmentCard key={apartment.id} apartment={apartment} />
+                      <ApartmentCard key={apartment.id} apartment={apartment} moveInDate={moveInDate ?? undefined} />
                     ))}
                   </div>
                 </div>

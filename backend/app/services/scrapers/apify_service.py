@@ -543,6 +543,42 @@ class ApifyService(BaseScraper):
             if pet_fee:
                 pet_rent = pet_fee
 
+        # Extract availability date from models + rentals
+        available_date = None
+        available_model_ids = set()
+        models_list = raw.get("models") or []
+        if isinstance(models_list, list):
+            for model in models_list:
+                if not isinstance(model, dict):
+                    continue
+                avail_str = model.get("availability", "")
+                # "0 Available units" means none — skip
+                if avail_str and not avail_str.startswith("0 "):
+                    model_id = model.get("modelId")
+                    if model_id:
+                        available_model_ids.add(model_id)
+
+        if available_model_ids:
+            rentals_list = raw.get("rentals") or []
+            dates = []
+            if isinstance(rentals_list, list):
+                for rental in rentals_list:
+                    if not isinstance(rental, dict):
+                        continue
+                    if rental.get("modelId") not in available_model_ids:
+                        continue
+                    avail_date = rental.get("availableDate")
+                    if avail_date and isinstance(avail_date, str) and len(avail_date) >= 10:
+                        try:
+                            dates.append(avail_date[:10])
+                        except (TypeError, IndexError):
+                            pass
+            if dates:
+                available_date = min(dates)  # earliest date
+            else:
+                # Models have available units but no specific dates
+                available_date = "Now"
+
         # Extract contact info from listing data
         contact_phone = None
         contact_email = None
@@ -579,7 +615,7 @@ class ApifyService(BaseScraper):
             latitude=latitude,
             longitude=longitude,
             sqft=sqft,
-            available_date=None,
+            available_date=available_date,
             description=raw.get("description", "") or raw.get("propertyName", ""),
             amenities=self._normalize_amenities(amenities),
             images=photos,

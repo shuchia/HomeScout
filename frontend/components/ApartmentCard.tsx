@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 interface ApartmentCardProps {
   apartment: ApartmentWithScore;
+  moveInDate?: string;
 }
 
 // Format rent as currency
@@ -53,7 +54,7 @@ const getLabelColor = (label: string): string => {
   }
 };
 
-export default function ApartmentCard({ apartment }: ApartmentCardProps) {
+export default function ApartmentCard({ apartment, moveInDate }: ApartmentCardProps) {
   const { tier, profileLoading } = useAuth();
   const [showBreakdown, setShowBreakdown] = useState(false);
   const {
@@ -181,16 +182,59 @@ export default function ApartmentCard({ apartment }: ApartmentCardProps) {
           </span>
         </div>
 
-        {/* Available Date */}
-        {available_date && !isNaN(new Date(available_date).getTime()) && (
-          <p className="text-sm text-gray-500">
-            Available: {new Date(available_date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </p>
-        )}
+        {/* Availability */}
+        <div className="space-y-0.5">
+          {(() => {
+            const isNow = available_date === 'Now'
+            const parsedDate = available_date && !isNow ? new Date(available_date) : null
+            const isValidDate = parsedDate && !isNaN(parsedDate.getTime())
+            const isPast = isValidDate && parsedDate <= new Date()
+            const isAvailableNow = isNow || isPast
+
+            if (isAvailableNow) {
+              return (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-green-600 font-medium">Available now</span>
+                  {apartment.source_url && (
+                    <a href={apartment.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--color-primary)] hover:underline">
+                      View units &rarr;
+                    </a>
+                  )}
+                </div>
+              )
+            }
+
+            if (isValidDate) {
+              const formatted = parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              return (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Available {formatted}</span>
+                  {apartment.source_url && (
+                    <a href={apartment.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--color-primary)] hover:underline">
+                      View units &rarr;
+                    </a>
+                  )}
+                </div>
+              )
+            }
+
+            return <span className="text-sm text-gray-400">Availability not confirmed</span>
+          })()}
+
+          {/* Move-in date mismatch indicator */}
+          {moveInDate && (() => {
+            if (!available_date) {
+              return <p className="text-xs text-gray-400">Availability not confirmed</p>
+            }
+            if (available_date === 'Now') return null
+            const parsedAvail = new Date(available_date)
+            const parsedMoveIn = new Date(moveInDate)
+            if (!isNaN(parsedAvail.getTime()) && !isNaN(parsedMoveIn.getTime()) && parsedAvail > parsedMoveIn) {
+              return <p className="text-xs text-amber-600">&#9888; Available after your move-in date</p>
+            }
+            return null
+          })()}
+        </div>
 
         {/* Freshness Badge */}
         {getFreshnessBadge(apartment.freshness_confidence) && (
