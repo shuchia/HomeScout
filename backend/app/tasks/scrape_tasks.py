@@ -279,6 +279,8 @@ async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
                     external_id=listing_data.get("external_id"),
                     source=listing_data.get("source", "manual"),
                     source_url=listing_data.get("source_url"),
+                    contact_phone=listing_data.get("contact_phone"),
+                    contact_email=listing_data.get("contact_email"),
                     address=listing_data["address"],
                     address_normalized=listing_data.get("address_normalized"),
                     city=listing_data.get("city"),

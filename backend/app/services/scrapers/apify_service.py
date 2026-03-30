@@ -543,6 +543,27 @@ class ApifyService(BaseScraper):
             if pet_fee:
                 pet_rent = pet_fee
 
+        # Extract contact info from listing data
+        contact_phone = None
+        contact_email = None
+        # Check common field names used by Apify apartments.com actors
+        contact = raw.get("contact", {}) or {}
+        if isinstance(contact, dict):
+            contact_phone = contact.get("phone") or contact.get("phoneNumber")
+            contact_email = contact.get("email")
+        # Fallback to top-level fields
+        if not contact_phone:
+            contact_phone = raw.get("phone") or raw.get("phoneNumber") or raw.get("contactPhone")
+        if not contact_email:
+            contact_email = raw.get("email") or raw.get("contactEmail")
+        # Check property management info
+        mgmt = raw.get("propertyManagement", {}) or raw.get("management", {}) or {}
+        if isinstance(mgmt, dict):
+            if not contact_phone:
+                contact_phone = mgmt.get("phone") or mgmt.get("phoneNumber")
+            if not contact_email:
+                contact_email = mgmt.get("email")
+
         return ScrapedListing(
             external_id=str(raw.get("id", "")),
             source="apartments_com",
@@ -568,6 +589,8 @@ class ApifyService(BaseScraper):
             amenity_fee=amenity_fee,
             application_fee=application_fee,
             security_deposit=security_deposit,
+            contact_phone=contact_phone,
+            contact_email=contact_email,
             raw_data=raw,
         )
 

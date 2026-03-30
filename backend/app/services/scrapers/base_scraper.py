@@ -56,6 +56,10 @@ class ScrapedListing:
     application_fee: Optional[int] = None
     security_deposit: Optional[int] = None
 
+    # Contact info (extracted from listing)
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+
     # Raw data for debugging
     raw_data: Optional[Dict[str, Any]] = None
 
@@ -89,6 +93,8 @@ class ScrapedListing:
             "amenity_fee": self.amenity_fee,
             "application_fee": self.application_fee,
             "security_deposit": self.security_deposit,
+            "contact_phone": self.contact_phone,
+            "contact_email": self.contact_email,
             "raw_data": self.raw_data,
         }
 
