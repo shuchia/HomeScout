@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { SearchParams, ApartmentWithScore } from '@/types/apartment';
 import { searchApartments, ApiError } from '@/lib/api';
 import { useComparison } from '@/hooks/useComparison';
+import NearLocationInput from './NearLocationInput';
+import RadiusSlider from './RadiusSlider';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Available cities — matches market_configs in the database
 const AVAILABLE_CITIES = [
@@ -68,6 +71,9 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
   const [otherPreferences, setOtherPreferences] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { setSearchContext } = useComparison();
+  const [nearLocation, setNearLocation] = useState<{ lat: number; lng: number; label: string } | null>(null);
+  const [maxDistance, setMaxDistance] = useState(5);
+  const { isPro } = useAuth();
 
   // Handle property type checkbox toggle
   const handlePropertyTypeChange = (type: string) => {
@@ -106,6 +112,10 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         property_type: selectedPropertyTypes.join(', '),
         move_in_date: moveInDate,
         other_preferences: otherPreferences.trim() || undefined,
+        near_lat: nearLocation?.lat,
+        near_lng: nearLocation?.lng,
+        near_label: nearLocation?.label,
+        max_distance_miles: nearLocation && isPro ? maxDistance : undefined,
       };
 
       const response = await searchApartments(params);
@@ -121,6 +131,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         property_type: selectedPropertyTypes.join(', '),
         move_in_date: moveInDate,
         other_preferences: otherPreferences.trim(),
+        near_label: nearLocation?.label,
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -155,6 +166,14 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
           ))}
         </select>
       </div>
+
+      {/* Near Location */}
+      <NearLocationInput value={nearLocation} onChange={setNearLocation} />
+
+      {/* Radius Slider (shown when location is set) */}
+      {nearLocation && (
+        <RadiusSlider value={maxDistance} onChange={setMaxDistance} isPro={isPro} />
+      )}
 
       {/* Budget Input */}
       <div>
