@@ -12,6 +12,7 @@ const AVAILABLE_CITIES = [
   { value: 'Boston, MA', label: 'Boston, MA' },
   { value: 'Bryn Mawr, PA', label: 'Bryn Mawr, PA' },
   { value: 'Cambridge, MA', label: 'Cambridge, MA' },
+  { value: 'Charleston, SC', label: 'Charleston, SC' },
   { value: 'Charlotte, NC', label: 'Charlotte, NC' },
   { value: 'Hartford, CT', label: 'Hartford, CT' },
   { value: 'Hoboken, NJ', label: 'Hoboken, NJ' },
@@ -28,7 +29,6 @@ const AVAILABLE_CITIES = [
   { value: 'Stamford, CT', label: 'Stamford, CT' },
   { value: 'State College, PA', label: 'State College, PA' },
   { value: 'Towson, MD', label: 'Towson, MD' },
-  { value: 'Charleston, SC', label: 'Charleston, SC' },
   { value: 'Washington, DC', label: 'Washington, DC' },
 ];
 
