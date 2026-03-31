@@ -565,7 +565,10 @@ The Claude integration has two modes, both in `claude_service.py`:
 - City matching is case-insensitive partial match on address
 - Image domains configured in `next.config.ts` (images.unsplash.com)
 - CORS configured in `main.py` for localhost:3000
-- Backend uses model `claude-sonnet-4-5-20250929`
+- Search scoring uses `claude-haiku-4-5-20251001` (fast, structured output)
+- Comparison analysis and decision briefs use `claude-sonnet-4-5-20250929` (deep reasoning)
+- Inquiry emails, day plans, and note enhancement use Haiku
+- All calls use prompt caching (`cache_control: ephemeral`) for reduced latency and cost
 - Favorites use optimistic updates with rollback on error, 5 limit enforced on frontend for free tier
 - Auth has 5-second timeout to prevent infinite loading
 - Don't use `--reload` flag with uvicorn (causes venv file watching issues)
@@ -585,6 +588,10 @@ The Claude integration has two modes, both in `claude_service.py`:
 - Cost estimates use 3-digit zip prefix lookup with default fallback chain
 - `cost_breakdown` field is null for free/anonymous users, populated for Pro
 - Claude AI prompts include `true_cost_monthly` and `cost_details` for budget-aware scoring
+- Large scoring batches (>12 apartments) are split into parallel Claude calls via `asyncio.gather()`
+- 15-second timeout on all Claude calls with heuristic fallback for scoring
+- Concurrent Claude calls limited to 5 via `_claude_semaphore` in `apartment_service.py`
+- Token usage logged after every Claude call (`claude_usage` log prefix) for cost tracking
 
 ## Backend Testing
 
