@@ -619,6 +619,20 @@ export default function ComparePage() {
                     ))}
                   </tr>
 
+                  {/* Distance Row (proximity search) */}
+                  {searchContext?.near_label && (
+                    <tr>
+                      <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Distance</td>
+                      {apartments.map((apt) => (
+                        <td key={`dist-${apt.id}`} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">
+                          {(apt as any).distance_miles != null
+                            ? `${(apt as any).distance_miles} mi`
+                            : '—'}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
+
                   {/* AI Reasoning Row */}
                   {analysis && (
                     <tr>
