@@ -16,6 +16,9 @@ from app.database import is_database_enabled, get_session_context
 
 logger = logging.getLogger(__name__)
 
+# Limit concurrent Claude API calls to prevent runaway costs
+_claude_semaphore = asyncio.Semaphore(5)
+
 
 class ApartmentService:
     """Service for managing apartment search and matching"""
@@ -294,26 +297,58 @@ class ApartmentService:
             scores = json.loads(cached)
             logger.info(f"Claude score cache HIT for {cache_key}")
         else:
-            # Call Claude
-            scores = await asyncio.to_thread(
-                self.claude_service.score_apartments,
-                city=city,
-                budget=budget,
-                bedrooms=bedrooms,
-                bathrooms=bathrooms,
-                property_type=property_type,
-                move_in_date=move_in_date,
-                other_preferences=other_preferences or "None specified",
-                apartments=apartments_to_score,
-                near_label=near_label,
-            )
-            # Cache the result (1 hour TTL)
-            if self._redis:
-                try:
-                    await self._redis.setex(cache_key, 3600, json.dumps(scores))
-                    logger.info(f"Claude score cache MISS, stored {cache_key}")
-                except Exception:
-                    pass
+            BATCH_THRESHOLD = 12
+
+            async def _score_batch(batch):
+                async with _claude_semaphore:
+                    return await asyncio.to_thread(
+                        self.claude_service.score_apartments,
+                        city=city,
+                        budget=budget,
+                        bedrooms=bedrooms,
+                        bathrooms=bathrooms,
+                        property_type=property_type,
+                        move_in_date=move_in_date,
+                        other_preferences=other_preferences or "None specified",
+                        apartments=batch,
+                        near_label=near_label,
+                    )
+
+            try:
+                if len(apartments_to_score) > BATCH_THRESHOLD:
+                    mid = len(apartments_to_score) // 2
+                    batch_a = apartments_to_score[:mid]
+                    batch_b = apartments_to_score[mid:]
+                    scores_a, scores_b = await asyncio.wait_for(
+                        asyncio.gather(_score_batch(batch_a), _score_batch(batch_b)),
+                        timeout=15.0,
+                    )
+                    scores = scores_a + scores_b
+                else:
+                    scores = await asyncio.wait_for(
+                        _score_batch(apartments_to_score),
+                        timeout=15.0,
+                    )
+
+                # Cache the result (1 hour TTL)
+                if self._redis:
+                    try:
+                        await self._redis.setex(cache_key, 3600, json.dumps(scores))
+                        logger.info(f"Claude score cache MISS, stored {cache_key}")
+                    except Exception:
+                        pass
+
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.warning(f"Claude scoring failed, falling back to heuristic: {e}")
+                scores = [
+                    {
+                        "apartment_id": apt["id"],
+                        "match_score": apt.get("heuristic_score") or 50,
+                        "reasoning": "AI scoring temporarily unavailable. Score based on heuristic matching.",
+                        "highlights": [],
+                    }
+                    for apt in apartments_to_score
+                ]
 
         # Step 4: Merge Claude scores
         scored_apartments = []

@@ -350,17 +350,23 @@ async def compare_apartments(
         prefs = request.preferences.strip() if request.preferences else "general comparison"
 
         try:
-            raw_analysis = await asyncio.to_thread(
-                claude.compare_apartments_with_analysis,
-                apartments=apartments,
-                preferences=prefs,
-                search_context=search_ctx,
-            )
+            from app.services.apartment_service import _claude_semaphore
+            async with _claude_semaphore:
+                raw_analysis = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        claude.compare_apartments_with_analysis,
+                        apartments=apartments,
+                        preferences=prefs,
+                        search_context=search_ctx,
+                    ),
+                    timeout=15.0,
+                )
             from app.schemas import ComparisonAnalysis
             comparison_analysis = ComparisonAnalysis(**raw_analysis)
+        except asyncio.TimeoutError:
+            logger.warning("Claude comparison timed out after 15s")
         except Exception as e:
             logger.error(f"Claude comparison analysis failed: {e}")
-            # Return apartments without analysis on failure
 
     # Add true cost data to apartments
     is_pro = tier == "pro"
