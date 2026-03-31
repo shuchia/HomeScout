@@ -192,16 +192,19 @@ export default function ApartmentCard({ apartment, moveInDate }: ApartmentCardPr
         </div>
 
         {/* Availability */}
-        <div className="space-y-0.5">
-          {(() => {
-            const isNow = available_date === 'Now'
-            const parsedDate = available_date && !isNow ? new Date(available_date) : null
-            const isValidDate = parsedDate && !isNaN(parsedDate.getTime())
-            const isPast = isValidDate && parsedDate <= new Date()
-            const isAvailableNow = isNow || isPast
+        {(() => {
+          const hasDate = available_date && available_date.trim() !== ''
+          if (!hasDate) return null  // No data — don't show anything
 
-            if (isAvailableNow) {
-              return (
+          const isNow = available_date === 'Now'
+          const parsedDate = !isNow ? new Date(available_date) : null
+          const isValidDate = parsedDate && !isNaN(parsedDate.getTime())
+          const isPast = isValidDate && parsedDate <= new Date()
+          const isAvailableNow = isNow || isPast
+
+          return (
+            <div className="space-y-0.5">
+              {isAvailableNow ? (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-green-600 font-medium">Available now</span>
                   {apartment.source_url && (
@@ -210,40 +213,30 @@ export default function ApartmentCard({ apartment, moveInDate }: ApartmentCardPr
                     </a>
                   )}
                 </div>
-              )
-            }
-
-            if (isValidDate) {
-              const formatted = parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              return (
+              ) : isValidDate ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Available {formatted}</span>
+                  <span className="text-sm text-gray-600">
+                    Available {parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
                   {apartment.source_url && (
                     <a href={apartment.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--color-primary)] hover:underline">
                       View units &rarr;
                     </a>
                   )}
                 </div>
-              )
-            }
+              ) : null}
 
-            return <span className="text-sm text-gray-400">Availability not confirmed</span>
-          })()}
-
-          {/* Move-in date mismatch indicator */}
-          {moveInDate && (() => {
-            if (!available_date) {
-              return <p className="text-xs text-gray-400">Availability not confirmed</p>
-            }
-            if (available_date === 'Now') return null
-            const parsedAvail = new Date(available_date)
-            const parsedMoveIn = new Date(moveInDate)
-            if (!isNaN(parsedAvail.getTime()) && !isNaN(parsedMoveIn.getTime()) && parsedAvail > parsedMoveIn) {
-              return <p className="text-xs text-amber-600">&#9888; Available after your move-in date</p>
-            }
-            return null
-          })()}
-        </div>
+              {/* Move-in date mismatch indicator */}
+              {moveInDate && isValidDate && !isPast && (() => {
+                const parsedMoveIn = new Date(moveInDate)
+                if (!isNaN(parsedMoveIn.getTime()) && parsedDate > parsedMoveIn) {
+                  return <p className="text-xs text-amber-600">&#9888; Available after your move-in date</p>
+                }
+                return null
+              })()}
+            </div>
+          )
+        })()}
 
         {/* Freshness Badge */}
         {getFreshnessBadge(apartment.freshness_confidence) && (
