@@ -192,6 +192,7 @@ async def search_apartments(
                 property_type=request.property_type,
                 move_in_date=request.move_in_date,
                 other_preferences=request.other_preferences,
+                near_label=request.near_label,
                 top_n=10,
             )
             apartments_out = [
@@ -232,6 +233,25 @@ async def search_apartments(
             await TierService.increment_search_count(user.user_id)
             # remaining decreases by 1 after this search
             searches_remaining = max(0, searches_remaining - 1)
+
+        # ── Apply proximity distances ────────────────────────────────
+        from app.services.distance import add_distances
+
+        if request.near_lat is not None and request.near_lng is not None:
+            # Convert ApartmentWithScore objects to dicts for distance calc
+            result_dicts = []
+            for apt in apartments_out:
+                if isinstance(apt, dict):
+                    result_dicts.append(apt)
+                elif hasattr(apt, 'model_dump'):
+                    result_dicts.append(apt.model_dump())
+                else:
+                    result_dicts.append(apt.__dict__)
+
+            max_dist = request.max_distance_miles if tier == "pro" else None
+            result_dicts = add_distances(result_dicts, request.near_lat, request.near_lng, max_dist)
+            apartments_out = result_dicts
+            total_count = len(result_dicts)
 
         # Add true cost data to apartments
         from app.routers.apartments import _add_cost_breakdown

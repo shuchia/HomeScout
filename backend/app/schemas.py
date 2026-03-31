@@ -12,6 +12,11 @@ class SearchRequest(BaseModel):
     property_type: str = Field(..., description="Comma-separated property types (e.g., 'Apartment, Condo')")
     move_in_date: str = Field(..., description="Desired move-in date (YYYY-MM-DD format)")
     other_preferences: Optional[str] = Field(None, description="Additional preferences and requirements")
+    # Proximity search (optional)
+    near_lat: Optional[float] = Field(None, description="Latitude of reference location")
+    near_lng: Optional[float] = Field(None, description="Longitude of reference location")
+    near_label: Optional[str] = Field(None, description="Display name of reference location")
+    max_distance_miles: Optional[float] = Field(None, ge=0.5, le=10, description="Max distance filter (Pro only)")
 
     class Config:
         json_schema_extra = {
@@ -65,6 +70,9 @@ class Apartment(BaseModel):
     neighborhood: str
     description: str
     images: List[str]
+    # Coordinates (for proximity search)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     # Source listing URL
     source_url: Optional[str] = None
     # Contact info (scraped from listing)
@@ -75,6 +83,8 @@ class Apartment(BaseModel):
     true_cost_move_in: Optional[int] = None
     # Full breakdown (Pro only — populated by API layer)
     cost_breakdown: Optional[CostBreakdown] = None
+    # Proximity (populated when near_lat/near_lng provided in search)
+    distance_miles: Optional[float] = None
 
     class Config:
         json_schema_extra = {
@@ -151,6 +161,7 @@ class SearchContext(BaseModel):
     bathrooms: int
     property_type: str
     move_in_date: str
+    near_label: Optional[str] = None
 
 
 class CategoryScore(BaseModel):

@@ -52,6 +52,10 @@ class ClaudeService:
                 "est_renters_insurance": apt.get("est_renters_insurance") or 0,
                 "est_laundry": apt.get("est_laundry") or 0,
             }
+        # Include distance if available
+        if apt.get("distance_miles") is not None:
+            data["distance_miles"] = apt["distance_miles"]
+
         return data
 
     def score_apartments(
@@ -63,7 +67,8 @@ class ClaudeService:
         property_type: str,
         move_in_date: str,
         other_preferences: str,
-        apartments: List[Dict]
+        apartments: List[Dict],
+        near_label: str = None,
     ) -> List[Dict]:
         """
         Call Claude API to score apartments based on user preferences.
@@ -88,6 +93,17 @@ class ClaudeService:
 
         apartments_json = json.dumps(slim_apartments, indent=2)
 
+        proximity_section = ""
+        if near_label:
+            proximity_section = f"\n**Near:** {near_label}\n"
+            distances = []
+            for apt in slim_apartments:
+                dist = apt.get("distance_miles")
+                if dist is not None:
+                    distances.append(f"- {apt.get('address', 'Unknown')}: {dist} miles away")
+            if distances:
+                proximity_section += "Distances from reference location:\n" + "\n".join(distances) + "\n"
+
         # Build the user prompt from our template
         user_prompt = f"""Please analyze and score the following apartments based on my preferences:
 
@@ -107,7 +123,7 @@ class ClaudeService:
 
 **Additional Preferences:**
 {other_preferences if other_preferences else "None specified"}
-
+{proximity_section}
 ---
 
 ## Apartments to Evaluate:

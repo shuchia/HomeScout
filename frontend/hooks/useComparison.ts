@@ -9,6 +9,7 @@ interface SearchContext {
   property_type: string
   move_in_date: string
   other_preferences: string
+  near_label?: string
 }
 
 interface ComparisonStore {

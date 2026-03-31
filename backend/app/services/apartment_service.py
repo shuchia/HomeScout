@@ -42,9 +42,10 @@ class ApartmentService:
         city: str, budget: int, bedrooms: int, bathrooms: float,
         property_type: str, move_in_date: str,
         other_preferences: str, apartment_ids: list[str],
+        near_label: str = None,
     ) -> str:
         """Build deterministic Redis key for Claude score cache."""
-        raw = f"{city}|{budget}|{bedrooms}|{bathrooms}|{property_type}|{move_in_date}|{other_preferences}|{','.join(sorted(apartment_ids))}"
+        raw = f"{city}|{budget}|{bedrooms}|{bathrooms}|{property_type}|{move_in_date}|{other_preferences}|{','.join(sorted(apartment_ids))}|{near_label or ''}"
         digest = hashlib.sha256(raw.encode()).hexdigest()[:16]
         return f"claude_score:{digest}"
 
@@ -225,6 +226,7 @@ class ApartmentService:
         property_type: str,
         move_in_date: str,
         other_preferences: str = None,
+        near_label: str = None,
         top_n: int = 10
     ) -> Tuple[List[Dict], int]:
         """
@@ -278,6 +280,7 @@ class ApartmentService:
         cache_key = self.build_score_cache_key(
             city, budget, bedrooms, bathrooms, property_type,
             move_in_date, other_preferences or "", apt_ids,
+            near_label=near_label,
         )
 
         cached = None
@@ -302,6 +305,7 @@ class ApartmentService:
                 move_in_date=move_in_date,
                 other_preferences=other_preferences or "None specified",
                 apartments=apartments_to_score,
+                near_label=near_label,
             )
             # Cache the result (1 hour TTL)
             if self._redis:

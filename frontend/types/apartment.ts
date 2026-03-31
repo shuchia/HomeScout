@@ -15,6 +15,11 @@ export interface SearchParams {
   property_type: string;
   move_in_date: string;
   other_preferences?: string;
+  // Proximity search
+  near_lat?: number;
+  near_lng?: number;
+  near_label?: string;
+  max_distance_miles?: number;
 }
 
 /**
@@ -71,6 +76,7 @@ export interface Apartment {
   freshness_confidence?: number;
   first_seen_at?: string;
   times_seen?: number;
+  distance_miles?: number | null;
 }
 
 /**
@@ -114,6 +120,7 @@ export interface SearchContext {
   bathrooms: number;
   property_type: string;
   move_in_date: string;
+  near_label?: string;
 }
 
 /**
