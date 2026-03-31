@@ -169,11 +169,17 @@ For each apartment, provide:
 Be honest and practical in your scoring. A perfect 100% match is rare. Most good matches will be in the 70-90% range."""
 
         try:
-            # Call Claude API
+            # Call Claude API with prompt caching — the system prompt is
+            # identical across all scoring calls, so cache it server-side
+            # to reduce latency (~30-40%) and input token costs.
             message = self.client.messages.create(
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=4096,
-                system=system_prompt,
+                system=[{
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }],
                 messages=[
                     {"role": "user", "content": user_prompt}
                 ]
@@ -298,7 +304,11 @@ Return valid JSON only, no additional text."""
             message = self.client.messages.create(
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=4096,
-                system=system_prompt,
+                system=[{
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }],
                 messages=[{"role": "user", "content": user_prompt}],
             )
 
@@ -361,7 +371,7 @@ Return ONLY a JSON object with "subject" and "body" fields. No additional text."
             message = self.client.messages.create(
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=1024,
-                system=system_prompt,
+                system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
 
@@ -443,7 +453,7 @@ Return valid JSON only, no additional text."""
             message = self.client.messages.create(
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=2048,
-                system=system_prompt,
+                system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
 
@@ -506,7 +516,7 @@ Return valid JSON only, no additional text."""
             message = self.client.messages.create(
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=1024,
-                system=system_prompt,
+                system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
 
@@ -581,7 +591,7 @@ Return valid JSON only, no additional text."""
             message = self.client.messages.create(
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=2048,
-                system=system_prompt,
+                system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
 

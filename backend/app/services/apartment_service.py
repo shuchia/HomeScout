@@ -25,11 +25,11 @@ class ApartmentService:
         self._apartments_data: Optional[List[Dict]] = None
         self._use_database = is_database_enabled()
 
-        # Redis client for Claude score caching
+        # Async Redis client for Claude score caching
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         try:
-            import redis as redis_lib
-            self._redis = redis_lib.from_url(redis_url)
+            import redis.asyncio as aioredis
+            self._redis = aioredis.from_url(redis_url)
         except Exception:
             self._redis = None
 
@@ -122,7 +122,7 @@ class ApartmentService:
                     except ValueError:
                         pass
 
-                apartments.append(apt.to_dict())
+                apartments.append(apt.to_summary_dict())
 
             logger.info(f"Database search returned {len(apartments)} apartments")
             return apartments
@@ -286,7 +286,7 @@ class ApartmentService:
         cached = None
         if self._redis:
             try:
-                cached = self._redis.get(cache_key)
+                cached = await self._redis.get(cache_key)
             except Exception:
                 pass
 
@@ -310,7 +310,7 @@ class ApartmentService:
             # Cache the result (1 hour TTL)
             if self._redis:
                 try:
-                    self._redis.setex(cache_key, 3600, json.dumps(scores))
+                    await self._redis.setex(cache_key, 3600, json.dumps(scores))
                     logger.info(f"Claude score cache MISS, stored {cache_key}")
                 except Exception:
                     pass

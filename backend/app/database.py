@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker, AsyncEngine
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 # Get database URL from environment
 DATABASE_URL = os.getenv(
@@ -34,7 +34,11 @@ def _get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             DATABASE_URL,
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-            poolclass=NullPool,  # Recommended for async
+            poolclass=AsyncAdaptedQueuePool,
+            pool_size=5,          # Keep 5 connections ready
+            max_overflow=10,      # Allow up to 15 total under burst
+            pool_recycle=1800,    # Recycle connections every 30 min
+            pool_pre_ping=True,   # Verify connections before use
             future=True
         )
     return _engine

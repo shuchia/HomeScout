@@ -71,6 +71,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# GZip compression for responses > 1KB
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # Rate limiting (added first so CORS wraps it — Starlette runs middleware
 # in reverse order of addition, so the last-added middleware runs first)
 from app.middleware.rate_limit import RateLimitMiddleware

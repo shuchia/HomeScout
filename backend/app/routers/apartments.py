@@ -24,6 +24,16 @@ _apartment_service = ApartmentService()
 
 _cost_estimator = CostEstimator()
 
+# Lazy singleton for ClaudeService — avoids re-creating Anthropic client per request
+_claude_service = None
+
+def _get_claude_service():
+    global _claude_service
+    if _claude_service is None:
+        from app.services.claude_service import ClaudeService
+        _claude_service = ClaudeService()
+    return _claude_service
+
 
 def _add_cost_breakdown(apartment: dict, include_breakdown: bool) -> dict:
     """Add true cost fields to apartment dict. Full breakdown only if include_breakdown=True."""
@@ -154,7 +164,7 @@ async def _list_from_database(
             )
 
             result = await session.execute(stmt)
-            apartments = [apt.to_dict() for apt in result.scalars()]
+            apartments = [apt.to_summary_dict() for apt in result.scalars()]
 
             return {
                 "apartments": apartments,
@@ -335,7 +345,7 @@ async def compare_apartments(
     if tier == "pro" and len(apartments) >= 2:
         from app.services.claude_service import ClaudeService
 
-        claude = ClaudeService()
+        claude = _get_claude_service()
         search_ctx = request.search_context.model_dump() if request.search_context else None
         prefs = request.preferences.strip() if request.preferences else "general comparison"
 

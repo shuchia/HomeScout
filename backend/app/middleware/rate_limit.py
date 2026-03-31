@@ -1,11 +1,11 @@
-"""Redis-based rate limiting middleware."""
+"""Redis-based rate limiting middleware using async Redis."""
 import os
 import time
 import logging
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-import redis
+import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +20,23 @@ EXPENSIVE_PATHS = {"/api/search", "/api/apartments/compare"}
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
-        try:
-            self.redis = redis.from_url(REDIS_URL)
-        except Exception:
-            self.redis = None
+        self._redis: aioredis.Redis | None = None
+
+    async def _get_redis(self) -> aioredis.Redis | None:
+        if self._redis is None:
+            try:
+                self._redis = aioredis.from_url(REDIS_URL)
+            except Exception:
+                return None
+        return self._redis
 
     async def dispatch(self, request: Request, call_next):
         # Skip rate limiting for preflight requests and when disabled
-        if request.method == "OPTIONS" or not self.redis or os.getenv("TESTING"):
+        if request.method == "OPTIONS" or os.getenv("TESTING"):
+            return await call_next(request)
+
+        r = await self._get_redis()
+        if not r:
             return await call_next(request)
 
         # Extract user identity
@@ -48,9 +57,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Sliding window counter
         key = f"ratelimit:{identity}:{int(time.time()) // 60}"
         try:
-            current = self.redis.incr(key)
+            current = await r.incr(key)
             if current == 1:
-                self.redis.expire(key, 120)
+                await r.expire(key, 120)
             if current > limit:
                 return JSONResponse(
                     status_code=429,
