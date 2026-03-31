@@ -440,6 +440,8 @@ class ApifyService(BaseScraper):
         """Normalize Apartments.com listing data from apartments-scraper-api."""
         # Handle nested location object
         location = raw.get("location", {})
+        if not isinstance(location, dict):
+            location = {}
         address = location.get("fullAddress") or location.get("streetAddress") or raw.get("address", "")
         if not address:
             return None
@@ -463,6 +465,8 @@ class ApifyService(BaseScraper):
 
         # Handle coordinates
         coords = raw.get("coordinates", {})
+        if not isinstance(coords, dict):
+            coords = {}
         latitude = coords.get("latitude") or raw.get("latitude")
         longitude = coords.get("longitude") or raw.get("longitude")
 
@@ -474,12 +478,14 @@ class ApifyService(BaseScraper):
         baths_str = raw.get("baths", "")
         bathrooms = self._parse_bathrooms(baths_str)
 
-        # Parse sqft from string like "433 - 533 sq ft"
-        sqft_str = raw.get("sqft", "")
+        # Parse sqft from string like "433 - 533 sq ft" or int
+        sqft_raw = raw.get("sqft", "")
         sqft = None
-        if sqft_str:
+        if isinstance(sqft_raw, (int, float)):
+            sqft = int(sqft_raw)
+        elif isinstance(sqft_raw, str) and sqft_raw:
             import re
-            sqft_match = re.search(r"(\d+(?:,\d+)?)", sqft_str.replace(",", ""))
+            sqft_match = re.search(r"(\d+(?:,\d+)?)", sqft_raw.replace(",", ""))
             if sqft_match:
                 sqft = int(sqft_match.group(1))
 
