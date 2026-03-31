@@ -17,6 +17,23 @@ class ClaudeService:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
         self.client = Anthropic(api_key=api_key)
 
+        # Model tiering: Haiku for structured/templated output, Sonnet for deep analysis
+        self.MODEL_FAST = "claude-haiku-4-5-20251001"
+        self.MODEL_DEEP = "claude-sonnet-4-5-20250929"
+
+    @staticmethod
+    def _log_usage(method: str, message) -> None:
+        """Log Claude API token usage for cost tracking."""
+        usage = message.usage
+        cache_read = getattr(usage, 'cache_read_input_tokens', 0) or 0
+        cache_create = getattr(usage, 'cache_creation_input_tokens', 0) or 0
+        import logging
+        logging.getLogger(__name__).info(
+            f"claude_usage method={method} model={message.model} "
+            f"input_tokens={usage.input_tokens} output_tokens={usage.output_tokens} "
+            f"cache_read={cache_read} cache_create={cache_create}"
+        )
+
     @staticmethod
     def prepare_apartment_for_scoring(apt: dict) -> dict:
         """Prepare apartment data for Claude scoring. No truncation."""
@@ -173,7 +190,7 @@ Be honest and practical in your scoring. A perfect 100% match is rare. Most good
             # identical across all scoring calls, so cache it server-side
             # to reduce latency (~30-40%) and input token costs.
             message = self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",
+                model=self.MODEL_FAST,
                 max_tokens=4096,
                 system=[{
                     "type": "text",
@@ -184,6 +201,7 @@ Be honest and practical in your scoring. A perfect 100% match is rare. Most good
                     {"role": "user", "content": user_prompt}
                 ]
             )
+            self._log_usage("score_apartments", message)
 
             # Extract response text
             response_text = message.content[0].text
@@ -302,7 +320,7 @@ Return valid JSON only, no additional text."""
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",
+                model=self.MODEL_DEEP,
                 max_tokens=4096,
                 system=[{
                     "type": "text",
@@ -311,6 +329,7 @@ Return valid JSON only, no additional text."""
                 }],
                 messages=[{"role": "user", "content": user_prompt}],
             )
+            self._log_usage("compare_analysis", message)
 
             response_text = message.content[0].text
             result = self._parse_comparison_response(response_text)
@@ -369,11 +388,12 @@ Return ONLY a JSON object with "subject" and "body" fields. No additional text."
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",
+                model=self.MODEL_FAST,
                 max_tokens=1024,
                 system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
+            self._log_usage("inquiry_email", message)
 
             response_text = message.content[0].text
             result = self._parse_dict_response(response_text)
@@ -451,11 +471,12 @@ Return valid JSON only, no additional text."""
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",
+                model=self.MODEL_FAST,
                 max_tokens=2048,
                 system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
+            self._log_usage("day_plan", message)
 
             response_text = message.content[0].text
             return self._parse_dict_response(response_text)
@@ -514,11 +535,12 @@ Return valid JSON only, no additional text."""
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",
+                model=self.MODEL_FAST,
                 max_tokens=1024,
                 system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
+            self._log_usage("enhance_note", message)
 
             response_text = message.content[0].text
             return self._parse_dict_response(response_text)
@@ -589,11 +611,12 @@ Return valid JSON only, no additional text."""
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",
+                model=self.MODEL_DEEP,
                 max_tokens=2048,
                 system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_prompt}],
             )
+            self._log_usage("decision_brief", message)
 
             response_text = message.content[0].text
             return self._parse_dict_response(response_text)
