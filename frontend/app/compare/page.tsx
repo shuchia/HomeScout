@@ -603,8 +603,8 @@ export default function ComparePage() {
                   <tr>
                     <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Available</td>
                     {apartments.map((apt) => (
-                      <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">
-                        {apt.available_date ? new Date(apt.available_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                      <td key={apt.id} className="px-6 py-4 text-center border-l border-gray-200">
+                        <AvailabilityCell availableDate={apt.available_date} sourceUrl={apt.source_url} />
                       </td>
                     ))}
                   </tr>
@@ -734,5 +734,44 @@ function AmenitiesList({ amenities }: { amenities: string[] }) {
         </button>
       )}
     </div>
+  )
+}
+
+function AvailabilityCell({ availableDate, sourceUrl }: { availableDate?: string; sourceUrl?: string | null }) {
+  if (!availableDate || availableDate.trim() === '') {
+    return <span className="text-gray-400">&mdash;</span>
+  }
+
+  if (availableDate === 'Unavailable') {
+    return (
+      <div>
+        <span className="text-sm text-orange-600 font-medium">No units available</span>
+        {sourceUrl && (
+          <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="block text-xs text-[var(--color-primary)] hover:underline mt-0.5">
+            Check listing &rarr;
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  if (availableDate === 'Now') {
+    return <span className="text-sm text-green-600 font-medium">Available now</span>
+  }
+
+  const parsed = new Date(availableDate)
+  if (isNaN(parsed.getTime())) {
+    return <span className="text-gray-400">&mdash;</span>
+  }
+
+  const isPast = parsed <= new Date()
+  if (isPast) {
+    return <span className="text-sm text-green-600 font-medium">Available now</span>
+  }
+
+  return (
+    <span className="text-sm text-gray-700">
+      {parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+    </span>
   )
 }
