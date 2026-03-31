@@ -133,7 +133,55 @@ class ApartmentModel(Base):
             "source_url": self.source_url,
             "contact_phone": self.contact_phone,
             "contact_email": self.contact_email,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
             "data_quality_score": self.data_quality_score,
+            "freshness_confidence": self.freshness_confidence,
+            "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
+            "times_seen": self.times_seen,
+            # True cost fields
+            "true_cost_monthly": self.true_cost_monthly,
+            "true_cost_move_in": self.true_cost_move_in,
+            "pet_rent": self.pet_rent,
+            "parking_fee": self.parking_fee,
+            "amenity_fee": self.amenity_fee,
+            "application_fee": self.application_fee,
+            "security_deposit": self.security_deposit,
+            "est_electric": self.est_electric,
+            "est_gas": self.est_gas,
+            "est_water": self.est_water,
+            "est_internet": self.est_internet,
+            "est_renters_insurance": self.est_renters_insurance,
+            "est_laundry": self.est_laundry,
+            "utilities_included": self.utilities_included,
+        }
+
+    def to_summary_dict(self, max_images: int = 6) -> dict:
+        """Convert model to a lighter dict for list/search responses.
+
+        Limits images to ``max_images`` and omits heavy fields not needed
+        in card views (description truncated, no source_url, etc.).
+        """
+        all_images = self.images_cached if self.images_cached else (self.images or [])
+        desc = self.description or ""
+        return {
+            "id": self.id,
+            "address": self.address,
+            "rent": self.rent,
+            "bedrooms": self.bedrooms,
+            "bathrooms": int(self.bathrooms) if self.bathrooms == int(self.bathrooms) else self.bathrooms,
+            "sqft": self.sqft or 0,
+            "property_type": self.property_type,
+            "available_date": self.available_date or "",
+            "amenities": (self.amenities or [])[:15],
+            "neighborhood": self.neighborhood or "",
+            "description": desc[:300] + ("..." if len(desc) > 300 else ""),
+            "images": all_images[:max_images],
+            "city": self.city,
+            "state": self.state,
+            "zip_code": self.zip_code,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
             "freshness_confidence": self.freshness_confidence,
             "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
             "times_seen": self.times_seen,
