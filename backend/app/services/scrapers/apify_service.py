@@ -509,8 +509,11 @@ class ApifyService(BaseScraper):
         security_deposit = None
 
         # Try structured fee fields
-        monthly_fees = raw.get("monthlyFees") or raw.get("fees", {}).get("monthly", [])
-        one_time_fees = raw.get("oneTimeFees") or raw.get("fees", {}).get("oneTime", [])
+        fees_data = raw.get("fees", {})
+        if not isinstance(fees_data, dict):
+            fees_data = {}
+        monthly_fees = raw.get("monthlyFees") or fees_data.get("monthly", [])
+        one_time_fees = raw.get("oneTimeFees") or fees_data.get("oneTime", [])
 
         if isinstance(monthly_fees, list):
             for fee in monthly_fees:
