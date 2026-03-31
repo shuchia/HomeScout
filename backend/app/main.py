@@ -192,6 +192,7 @@ async def search_apartments(
                 property_type=request.property_type,
                 move_in_date=request.move_in_date,
                 other_preferences=request.other_preferences,
+                near_label=request.near_label,
                 top_n=10,
             )
             apartments_out = [
