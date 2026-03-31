@@ -196,6 +196,20 @@ export default function ApartmentCard({ apartment, moveInDate }: ApartmentCardPr
           const hasDate = available_date && available_date.trim() !== ''
           if (!hasDate) return null  // No data — don't show anything
 
+          const isUnavailable = available_date === 'Unavailable'
+          if (isUnavailable) {
+            return (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-orange-600 font-medium">No units available</span>
+                {apartment.source_url && (
+                  <a href={apartment.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--color-primary)] hover:underline">
+                    Check listing &rarr;
+                  </a>
+                )}
+              </div>
+            )
+          }
+
           const isNow = available_date === 'Now'
           const parsedDate = !isNow ? new Date(available_date) : null
           const isValidDate = parsedDate && !isNaN(parsedDate.getTime())

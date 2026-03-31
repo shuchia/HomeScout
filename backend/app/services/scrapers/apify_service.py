@@ -587,6 +587,9 @@ class ApifyService(BaseScraper):
             else:
                 # Models have available units but no specific dates
                 available_date = "Now"
+        elif models_list and isinstance(models_list, list) and len(models_list) > 0:
+            # Models exist but ALL have 0 available units
+            available_date = "Unavailable"
 
         # Extract contact info from listing data
         contact_phone = None

@@ -59,7 +59,7 @@ def test_now_when_no_dates(scraper):
     assert listing.available_date == "Now"
 
 
-# --- Test 3: All models "0 Available units" → returns None ---
+# --- Test 3: All models "0 Available units" → returns "Unavailable" ---
 def test_no_available_units(scraper):
     raw = _make_raw(
         models=[
@@ -70,7 +70,7 @@ def test_no_available_units(scraper):
     )
     listing = scraper._normalize_apartments_com_listing(raw)
     assert listing is not None
-    assert listing.available_date is None
+    assert listing.available_date == "Unavailable"
 
 
 # --- Test 4: Mixed availability → only considers available models ---
