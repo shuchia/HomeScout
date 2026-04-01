@@ -116,15 +116,6 @@ class ApartmentService:
             apartments = []
 
             for apt in result.scalars():
-                # Additional filter for move-in date
-                if desired_move_in and apt.available_date:
-                    try:
-                        apt_available = datetime.strptime(apt.available_date, "%Y-%m-%d")
-                        if apt_available > desired_move_in:
-                            continue
-                    except ValueError:
-                        pass
-
                 apartments.append(apt.to_summary_dict())
 
             logger.info(f"Database search returned {len(apartments)} apartments")
@@ -171,15 +162,6 @@ class ApartmentService:
             # Filter by property type
             if apt["property_type"] not in property_types:
                 continue
-
-            # Filter by available date (must be available on or before move-in date)
-            if desired_move_in:
-                try:
-                    apt_available = datetime.strptime(apt["available_date"], "%Y-%m-%d")
-                    if apt_available > desired_move_in:
-                        continue
-                except ValueError:
-                    pass
 
             filtered.append(apt)
 
