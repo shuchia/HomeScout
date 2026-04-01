@@ -436,6 +436,9 @@ export default function ComparePage() {
                         </div>
                       )}
 
+                      {/* Availability */}
+                      <AvailabilityCell availableDate={apt.available_date} sourceUrl={apt.source_url} />
+
                       {/* Amenities (top 5 + expand) */}
                       <AmenitiesList amenities={apt.amenities} />
 
@@ -755,8 +758,19 @@ function AvailabilityCell({ availableDate, sourceUrl }: { availableDate?: string
     )
   }
 
+  const ViewUnitsLink = () => sourceUrl ? (
+    <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="block text-xs text-[var(--color-primary)] hover:underline mt-0.5">
+      View units &rarr;
+    </a>
+  ) : null
+
   if (availableDate === 'Now') {
-    return <span className="text-sm text-green-600 font-medium">Available now</span>
+    return (
+      <div>
+        <span className="text-sm text-green-600 font-medium">Available now</span>
+        <ViewUnitsLink />
+      </div>
+    )
   }
 
   const parsed = new Date(availableDate)
@@ -766,12 +780,20 @@ function AvailabilityCell({ availableDate, sourceUrl }: { availableDate?: string
 
   const isPast = parsed <= new Date()
   if (isPast) {
-    return <span className="text-sm text-green-600 font-medium">Available now</span>
+    return (
+      <div>
+        <span className="text-sm text-green-600 font-medium">Available now</span>
+        <ViewUnitsLink />
+      </div>
+    )
   }
 
   return (
-    <span className="text-sm text-gray-700">
-      {parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-    </span>
+    <div>
+      <span className="text-sm text-gray-700">
+        {parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+      </span>
+      <ViewUnitsLink />
+    </div>
   )
 }
