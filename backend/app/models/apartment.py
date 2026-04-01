@@ -160,13 +160,14 @@ class ApartmentModel(Base):
         """Convert model to a lighter dict for list/search responses.
 
         Limits images to ``max_images`` and omits heavy fields not needed
-        in card views (description truncated, no source_url, etc.).
+        in card views (description truncated, etc.).
         """
         all_images = self.images_cached if self.images_cached else (self.images or [])
         desc = self.description or ""
         return {
             "id": self.id,
             "address": self.address,
+            "source_url": self.source_url,
             "rent": self.rent,
             "bedrooms": self.bedrooms,
             "bathrooms": int(self.bathrooms) if self.bathrooms == int(self.bathrooms) else self.bathrooms,
