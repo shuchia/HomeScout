@@ -8,16 +8,21 @@ from dotenv import load_dotenv
 import os
 import logging
 
+import asyncio
+import hashlib
+import json
+
 from app.schemas import (
     SearchRequest,
     SearchResponse,
     HealthResponse,
-    ApartmentWithScore
+    ApartmentWithScore,
+    ScoreBatchRequest,
 )
 from app.services.apartment_service import ApartmentService
 from app.services.tier_service import TierService
 from app.services.analytics_service import AnalyticsService
-from app.auth import get_optional_user, UserContext
+from app.auth import get_current_user, get_optional_user, UserContext
 from app.routers.data_collection import router as data_collection_router
 from app.routers.apartments import router as apartments_router
 from app.routers.webhooks import router as webhooks_router
@@ -271,6 +276,69 @@ async def search_apartments(
             status_code=500,
             detail=f"An error occurred while searching for apartments: {str(e)}",
         )
+
+
+@app.post("/api/search/score-batch")
+async def score_batch(
+    request: ScoreBatchRequest,
+    user: UserContext = Depends(get_current_user),
+):
+    """Score a batch of apartments using Claude AI. Pro only."""
+    tier = await TierService.get_user_tier(user.user_id)
+    if tier != "pro":
+        raise HTTPException(status_code=403, detail="AI scoring requires a Pro subscription.")
+
+    if len(request.apartment_ids) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 apartments per batch.")
+
+    try:
+        # Fetch apartment data by IDs
+        apartments = await apartment_service.get_apartments_by_ids(request.apartment_ids)
+        if not apartments:
+            return {"scores": []}
+
+        # Check cache
+        ids_key = ",".join(sorted(request.apartment_ids))
+        ctx = request.search_context
+        raw = f"{ids_key}:{ctx.city}:{ctx.budget}:{ctx.bedrooms}:{ctx.bathrooms}:{ctx.property_type}:{ctx.move_in_date}"
+        cache_key = f"score_batch:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
+
+        if apartment_service._redis:
+            try:
+                cached = await apartment_service._redis.get(cache_key)
+                if cached:
+                    return {"scores": json.loads(cached)}
+            except Exception:
+                pass
+
+        # Call Claude
+        from app.services.claude_service import ClaudeService
+        claude = ClaudeService()
+
+        scores = await asyncio.to_thread(
+            claude.score_apartments,
+            city=ctx.city,
+            budget=ctx.budget,
+            bedrooms=ctx.bedrooms,
+            bathrooms=ctx.bathrooms,
+            property_type=ctx.property_type,
+            move_in_date=ctx.move_in_date,
+            other_preferences="",
+            apartments=apartments,
+        )
+
+        # Cache for 1 hour
+        if apartment_service._redis:
+            try:
+                await apartment_service._redis.setex(cache_key, 3600, json.dumps(scores))
+            except Exception:
+                pass
+
+        return {"scores": scores}
+
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Score batch failed: {e}")
+        return {"scores": []}
 
 
 @app.get("/metrics")
