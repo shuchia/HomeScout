@@ -202,6 +202,99 @@ class ApartmentService:
                 property_type, move_in_date
             )
 
+    async def get_apartments_paginated(
+        self,
+        city: str,
+        budget: int,
+        bedrooms: int,
+        bathrooms: int,
+        property_type: str,
+        move_in_date: str,
+        other_preferences: str = None,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> Tuple[List[Dict], int, bool]:
+        """
+        Get paginated heuristic-scored apartments.
+
+        Page 1: filters from DB, scores, caches full list in Redis.
+        Page 2+: reads from Redis cache, falls back to re-query on miss.
+
+        Returns:
+            Tuple of (page_results, total_count, has_more)
+        """
+        from app.services.scoring_service import ScoringService
+
+        # Build cache key from search params (excluding page)
+        raw = f"{city}:{budget}:{bedrooms}:{bathrooms}:{property_type}:{move_in_date}:{other_preferences or ''}"
+        cache_key = f"search_pages:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
+
+        # Try cache first (for page 2+ or even page 1 re-hits)
+        cached = None
+        if self._redis:
+            try:
+                cached = await self._redis.get(cache_key)
+            except Exception:
+                pass
+
+        if cached:
+            all_scored = json.loads(cached)
+            # Reset TTL on access (keep alive while user is browsing)
+            if self._redis:
+                try:
+                    await self._redis.expire(cache_key, 600)
+                except Exception:
+                    pass
+        else:
+            # Filter and score
+            filtered = await self.search_apartments(
+                city=city, budget=budget, bedrooms=bedrooms,
+                bathrooms=bathrooms, property_type=property_type,
+                move_in_date=move_in_date,
+            )
+
+            if not filtered:
+                return [], 0, False
+
+            all_scored = ScoringService.score_apartments_list(
+                apartments=filtered, budget=budget,
+                bedrooms=bedrooms, bathrooms=bathrooms,
+                other_preferences=other_preferences,
+            )
+
+            # Cache the full list (10 min TTL)
+            if self._redis:
+                try:
+                    await self._redis.setex(cache_key, 600, json.dumps(all_scored))
+                except Exception:
+                    pass
+
+        total_count = len(all_scored)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_results = all_scored[start:end]
+        has_more = end < total_count
+
+        return page_results, total_count, has_more
+
+    async def get_apartments_by_ids(self, apartment_ids: List[str]) -> List[Dict]:
+        """Fetch apartments by their IDs."""
+        if self._use_database:
+            from sqlalchemy import select
+            from app.models.apartment import ApartmentModel
+            async with get_session_context() as session:
+                stmt = select(ApartmentModel).where(
+                    ApartmentModel.id.in_(apartment_ids),
+                    ApartmentModel.is_active == 1,
+                )
+                result = await session.execute(stmt)
+                return [apt.to_summary_dict() for apt in result.scalars()]
+        else:
+            if not self._apartments_data:
+                self._apartments_data = self._load_apartments_from_json()
+            id_set = set(apartment_ids)
+            return [apt for apt in self._apartments_data if apt["id"] in id_set]
+
     async def get_top_apartments(
         self,
         city: str,
