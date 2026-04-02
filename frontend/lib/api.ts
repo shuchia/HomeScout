@@ -77,7 +77,7 @@ export class ApiError extends Error {
  * @returns Promise with apartment results and scores
  * @throws ApiError if request fails
  */
-export async function searchApartments(params: SearchParams): Promise<SearchResponse> {
+export async function searchApartments(params: SearchParams & { page?: number; page_size?: number }): Promise<SearchResponse> {
   try {
     const response = await fetchWithAuth(`${API_URL}/api/search`, {
       method: 'POST',
@@ -106,6 +106,36 @@ export async function searchApartments(params: SearchParams): Promise<SearchResp
       undefined,
       error instanceof Error ? error.message : 'Unknown error'
     );
+  }
+}
+
+/**
+ * Score a batch of apartments using Claude AI
+ * Calls POST /api/search/score-batch endpoint
+ *
+ * @param apartmentIds - Array of apartment IDs to score
+ * @param searchContext - Search context for scoring
+ * @returns Promise with scores array
+ */
+export async function scoreBatch(
+  apartmentIds: string[],
+  searchContext: { city: string; budget: number; bedrooms: number; bathrooms: number; property_type: string; move_in_date: string; other_preferences?: string }
+): Promise<{ scores: Array<{ apartment_id: string; match_score: number; reasoning: string; highlights: string[] }> }> {
+  try {
+    const response = await fetchWithAuth(`${API_URL}/api/search/score-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apartment_ids: apartmentIds,
+        search_context: searchContext,
+      }),
+    })
+    if (!response.ok) {
+      return { scores: [] }
+    }
+    return response.json()
+  } catch {
+    return { scores: [] }
   }
 }
 
