@@ -186,63 +186,38 @@ async def search_apartments(
             )
 
     try:
-        if tier == "pro":
-            # Full Claude AI-scored search
-            top_apartments, total_count = await apartment_service.get_top_apartments(
-                city=request.city,
-                budget=request.budget,
-                bedrooms=request.bedrooms,
-                bathrooms=request.bathrooms,
-                property_type=request.property_type,
-                move_in_date=request.move_in_date,
-                other_preferences=request.other_preferences,
-                near_label=request.near_label,
-                top_n=10,
-            )
-            apartments_out = [
-                ApartmentWithScore(**apt) for apt in top_apartments
-            ]
-        else:
-            # Free / anonymous: heuristic score and rank
-            from app.services.scoring_service import ScoringService
+        page_results, total_count, has_more = await apartment_service.get_apartments_paginated(
+            city=request.city,
+            budget=request.budget,
+            bedrooms=request.bedrooms,
+            bathrooms=request.bathrooms,
+            property_type=request.property_type,
+            move_in_date=request.move_in_date,
+            other_preferences=request.other_preferences,
+            page=request.page,
+            page_size=request.page_size,
+        )
 
-            filtered = await apartment_service.search_apartments(
-                city=request.city,
-                budget=request.budget,
-                bedrooms=request.bedrooms,
-                bathrooms=request.bathrooms,
-                property_type=request.property_type,
-                move_in_date=request.move_in_date,
-            )
-            scored = ScoringService.score_apartments_list(
-                apartments=filtered,
-                budget=request.budget,
-                bedrooms=request.bedrooms,
-                bathrooms=request.bathrooms,
-                other_preferences=request.other_preferences,
-            )
-            total_count = len(scored)
-            apartments_out = [
-                {
-                    **apt,
-                    "match_score": None,
-                    "reasoning": None,
-                    "highlights": [],
-                }
-                for apt in scored[:10]
-            ]
+        # Set heuristic scores, null out AI fields (AI backfilled by score-batch)
+        apartments_out = [
+            {
+                **apt,
+                "match_score": None,
+                "reasoning": None,
+                "highlights": [],
+            }
+            for apt in page_results
+        ]
 
-        # ── Increment counter for free users (after successful search) ──
-        if tier == "free":
+        # Increment counter for free users (only on page 1)
+        if tier == "free" and request.page == 1:
             await TierService.increment_search_count(user.user_id)
-            # remaining decreases by 1 after this search
             searches_remaining = max(0, searches_remaining - 1)
 
-        # ── Apply proximity distances ────────────────────────────────
+        # Apply proximity distances
         from app.services.distance import add_distances
 
         if request.near_lat is not None and request.near_lng is not None:
-            # Convert ApartmentWithScore objects to dicts for distance calc
             result_dicts = []
             for apt in apartments_out:
                 if isinstance(apt, dict):
@@ -255,9 +230,11 @@ async def search_apartments(
             max_dist = request.max_distance_miles if tier == "pro" else None
             result_dicts = add_distances(result_dicts, request.near_lat, request.near_lng, max_dist)
             apartments_out = result_dicts
-            total_count = len(result_dicts)
+            if max_dist:
+                total_count = len(result_dicts)
+                has_more = False
 
-        # Add true cost data to apartments
+        # Add true cost data
         from app.routers.apartments import _add_cost_breakdown
         is_pro = tier == "pro"
         final_apartments = []
@@ -276,6 +253,8 @@ async def search_apartments(
         return {
             "apartments": apartments_out,
             "total_results": total_count,
+            "page": request.page,
+            "has_more": has_more,
             "tier": tier,
             "searches_remaining": searches_remaining,
         }
