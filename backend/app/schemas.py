@@ -17,6 +17,8 @@ class SearchRequest(BaseModel):
     near_lng: Optional[float] = Field(None, description="Longitude of reference location")
     near_label: Optional[str] = Field(None, description="Display name of reference location")
     max_distance_miles: Optional[float] = Field(None, ge=0.5, le=10, description="Max distance filter (Pro only)")
+    page: int = Field(1, ge=1, description="Page number (1-indexed)")
+    page_size: int = Field(10, ge=1, le=50, description="Results per page")
 
     class Config:
         json_schema_extra = {
@@ -193,17 +195,24 @@ class ComparisonAnalysis(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    """Response model for apartment search"""
-    apartments: List[ApartmentWithScore]
-    total_results: int = Field(..., description="Total number of apartments returned")
+    """Response from the search endpoint."""
+    apartments: List[dict]
+    total_results: int
+    page: int = 1
+    has_more: bool = False
+    tier: Optional[str] = None
+    searches_remaining: Optional[int] = None
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "apartments": [],
-                "total_results": 10
-            }
-        }
+
+class ScoreBatchRequest(BaseModel):
+    """Request to score a batch of apartments via Claude AI."""
+    apartment_ids: List[str] = Field(..., max_length=10)
+    search_context: SearchContext
+
+
+class ScoreBatchResponse(BaseModel):
+    """Response with AI scores for a batch of apartments."""
+    scores: List[ApartmentScore]
 
 
 class HealthResponse(BaseModel):
