@@ -198,11 +198,11 @@ export default function ComparePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
               </Link>
-              <h1 className="text-2xl font-bold text-gray-900">Compare Apartments</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Compare</h1>
             </div>
             <button
               onClick={() => { clearComparison(); router.push('/') }}
-              className="text-gray-600 hover:text-gray-900 text-sm"
+              className="text-gray-600 hover:text-gray-900 text-sm whitespace-nowrap"
             >
               Clear All
             </button>
@@ -219,25 +219,25 @@ export default function ComparePage() {
             </svg>
             Get AI Comparison
           </h2>
-          <p className="text-gray-600 mb-4">
-            Click Score for a deep head-to-head AI analysis. Optionally add your preferences for a personalized comparison.
+          <p className="text-sm sm:text-base text-gray-600 mb-4">
+            Click Score for AI analysis. Add preferences for a personalized comparison.
           </p>
           {profileLoading ? (
             <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
           ) : isPro ? (
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
                 value={preferences}
                 onChange={(e) => setPreferences(e.target.value)}
-                placeholder="Optional: e.g., parking, quiet for WFH, near transit"
+                placeholder="Optional: e.g., parking, quiet for WFH"
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleScore() }}
               />
               <button
                 onClick={handleScore}
                 disabled={scoring}
-                className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                className="w-full sm:w-auto px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {scoring ? (
                   <>
@@ -305,18 +305,18 @@ export default function ComparePage() {
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900">{winnerApt.address}</h3>
-                <p className="text-gray-600 mt-1">{analysis.winner.reason}</p>
+                <h3 className="text-base sm:text-xl font-semibold text-gray-900">{winnerApt.address}</h3>
+                <p className="text-sm text-gray-600 mt-1">{analysis.winner.reason}</p>
               </div>
             </div>
-            <div className="flex gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
               {analysis.apartment_scores.map((score) => {
                 const apt = apartments.find(a => a.id === score.apartment_id)
                 const isWinner = score.apartment_id === winnerAptId
                 return (
                   <div
                     key={score.apartment_id}
-                    className={`flex-1 p-3 rounded-lg ${isWinner ? 'bg-green-50 border border-green-200' : 'bg-[var(--color-bg)]'}`}
+                    className={`p-3 rounded-lg ${isWinner ? 'bg-green-50 border border-green-200' : 'bg-[var(--color-bg)]'}`}
                   >
                     <p className="text-sm text-gray-600 truncate">{apt?.address || score.apartment_id}</p>
                     <div className="flex items-center gap-2 mt-1">
@@ -344,15 +344,17 @@ export default function ComparePage() {
                 return (
                   <div key={category} className="border-b border-gray-100 pb-4 last:border-0">
                     <h4 className="text-sm font-medium text-gray-900 mb-2">{category}</h4>
-                    <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${apartments.length}, 1fr)` }}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {analysis.apartment_scores.map((aptScore) => {
                         const catScore = aptScore.category_scores[category]
+                        const apt = apartments.find(a => a.id === aptScore.apartment_id)
                         const isHighest = catScore && catScore.score === maxScore && scores.filter(s => s === maxScore).length === 1
                         return (
                           <div
                             key={aptScore.apartment_id}
                             className={`p-3 rounded-lg ${isHighest ? 'bg-green-50 border border-green-200' : 'bg-[var(--color-bg)]'}`}
                           >
+                            <p className="text-xs text-gray-500 truncate mb-1 sm:hidden">{apt?.address || ''}</p>
                             <div className="flex items-center gap-2">
                               <span className={`inline-block px-2 py-0.5 rounded-full text-white text-sm font-bold ${getScoreColor(catScore?.score || 0)}`}>
                                 {catScore?.score || 0}
