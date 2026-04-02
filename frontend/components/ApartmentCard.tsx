@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 interface ApartmentCardProps {
   apartment: ApartmentWithScore;
   moveInDate?: string;
+  aiLoading?: boolean;
 }
 
 // Format rent as currency
@@ -54,7 +55,7 @@ const getLabelColor = (label: string): string => {
   }
 };
 
-export default function ApartmentCard({ apartment, moveInDate }: ApartmentCardProps) {
+export default function ApartmentCard({ apartment, moveInDate, aiLoading }: ApartmentCardProps) {
   const { tier, profileLoading } = useAuth();
   const [showBreakdown, setShowBreakdown] = useState(false);
   const {
@@ -86,7 +87,9 @@ export default function ApartmentCard({ apartment, moveInDate }: ApartmentCardPr
         </div>
 
         {/* Match Score Badge */}
-        {match_score != null ? (
+        {aiLoading ? (
+          <div className="absolute top-3 right-3 bg-gray-300 animate-pulse px-3 py-1 rounded-full w-24 h-7" />
+        ) : match_score != null ? (
           <div
             className={`absolute top-3 right-3 ${getScoreColor(
               match_score
@@ -279,8 +282,20 @@ export default function ApartmentCard({ apartment, moveInDate }: ApartmentCardPr
         {/* Divider */}
         <hr className="border-gray-200" />
 
+        {/* AI Score Loading Skeleton */}
+        {aiLoading && (
+          <div className="space-y-2 animate-pulse">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-16 bg-gray-200 rounded-full" />
+              <div className="h-4 w-24 bg-gray-100 rounded" />
+            </div>
+            <div className="h-3 w-full bg-gray-100 rounded" />
+            <div className="h-3 w-3/4 bg-gray-100 rounded" />
+          </div>
+        )}
+
         {/* AI Reasoning - Pro users see full insights, free users see upsell */}
-        {match_score != null && reasoning ? (
+        {!aiLoading && match_score != null && reasoning ? (
           <div className="space-y-2">
             <p className="text-sm text-gray-700 italic">&quot;{reasoning}&quot;</p>
             <ul className="space-y-1">
