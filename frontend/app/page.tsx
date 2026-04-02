@@ -3,18 +3,22 @@
 import { useState, useEffect } from 'react';
 import SearchForm from '@/components/SearchForm';
 import ApartmentCard from '@/components/ApartmentCard';
-import { ApartmentWithScore } from '@/types/apartment';
+import { ApartmentWithScore, SearchParams } from '@/types/apartment';
+import { searchApartments, scoreBatch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import { InviteCodeBanner } from '@/components/InviteCodeBanner';
 
-function loadSessionResults(): { results: ApartmentWithScore[]; remaining: number | null } {
-  if (typeof window === 'undefined') return { results: [], remaining: null };
+function loadSessionResults(): { results: ApartmentWithScore[]; remaining: number | null; currentPage: number; hasMore: boolean } {
+  if (typeof window === 'undefined') return { results: [], remaining: null, currentPage: 1, hasMore: false };
   try {
     const raw = sessionStorage.getItem('snugd-search-results');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { results: parsed.results || [], remaining: parsed.remaining ?? null, currentPage: parsed.currentPage || 1, hasMore: parsed.hasMore || false };
+    }
   } catch { /* ignore */ }
-  return { results: [], remaining: null };
+  return { results: [], remaining: null, currentPage: 1, hasMore: false };
 }
 
 export default function Home() {
@@ -26,15 +30,22 @@ export default function Home() {
   const [searchesRemaining, setSearchesRemaining] = useState<number | null>(() => loadSessionResults().remaining);
   const [rateLimited, setRateLimited] = useState(false);
   const [moveInDate, setMoveInDate] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(() => loadSessionResults().currentPage);
+  const [hasMore, setHasMore] = useState(() => loadSessionResults().hasMore);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [aiLoadingIds, setAiLoadingIds] = useState<Set<string>>(new Set());
+  const [lastSearchParams, setLastSearchParams] = useState<(SearchParams & { page?: number }) | null>(null);
 
   const { user, loading: authLoading, signInWithGoogle, tier, isPro } = useAuth();
 
   // Persist search results to sessionStorage
   useEffect(() => {
     if (results.length > 0) {
-      sessionStorage.setItem('snugd-search-results', JSON.stringify({ results, remaining: searchesRemaining }));
+      sessionStorage.setItem('snugd-search-results', JSON.stringify({
+        results, remaining: searchesRemaining, currentPage, hasMore
+      }));
     }
-  }, [results, searchesRemaining]);
+  }, [results, searchesRemaining, currentPage, hasMore]);
 
   // Clear state on sign-out
   useEffect(() => {
@@ -44,15 +55,50 @@ export default function Home() {
       setError(null);
       setRateLimited(false);
       setSearchesRemaining(null);
+      setCurrentPage(1);
+      setHasMore(false);
+      setAiLoadingIds(new Set());
+      setLastSearchParams(null);
       sessionStorage.removeItem('snugd-search-results');
     }
   }, [user]);
+
+  // Trigger AI score backfill when new results arrive (Pro only)
+  useEffect(() => {
+    if (!isPro || results.length === 0 || aiLoadingIds.size === 0) return;
+
+    const idsToScore = Array.from(aiLoadingIds);
+    if (idsToScore.length === 0 || !lastSearchParams) return;
+
+    scoreBatch(idsToScore, {
+      city: lastSearchParams.city,
+      budget: lastSearchParams.budget,
+      bedrooms: lastSearchParams.bedrooms,
+      bathrooms: lastSearchParams.bathrooms,
+      property_type: lastSearchParams.property_type,
+      move_in_date: lastSearchParams.move_in_date,
+      other_preferences: lastSearchParams.other_preferences,
+    }).then(({ scores }) => {
+      if (scores.length > 0) {
+        setResults(prev => prev.map(apt => {
+          const score = scores.find(s => s.apartment_id === apt.id);
+          return score ? { ...apt, match_score: score.match_score, reasoning: score.reasoning, highlights: score.highlights } : apt;
+        }));
+      }
+      setAiLoadingIds(new Set());
+    });
+  }, [aiLoadingIds.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle search results
   const handleResults = (apartments: ApartmentWithScore[]) => {
     setResults(apartments);
     setHasSearched(true);
     setRateLimited(false);
+    setCurrentPage(1);
+    // Set AI loading for Pro users
+    if (isPro) {
+      setAiLoadingIds(new Set(apartments.map(a => a.id)));
+    }
   };
 
   // Handle errors — detect rate limiting or daily limit
@@ -62,11 +108,37 @@ export default function Home() {
     setRateLimited(lower.includes('too many') || lower.includes('limit') || lower.includes('rate'));
   };
 
-  // Handle search metadata (tier, remaining searches)
-  const handleSearchMeta = (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string }) => {
+  // Handle search metadata (tier, remaining searches, pagination)
+  const handleSearchMeta = (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string; has_more?: boolean; page?: number }) => {
     setSearchesRemaining(meta.searches_remaining ?? null);
     if (meta.move_in_date) setMoveInDate(meta.move_in_date);
+    if (meta.has_more !== undefined) setHasMore(meta.has_more);
+    if (meta.page !== undefined) setCurrentPage(meta.page);
   };
+
+  // Load more results
+  async function handleLoadMore() {
+    if (!lastSearchParams || loadingMore) return;
+    setLoadingMore(true);
+
+    try {
+      const nextPage = currentPage + 1;
+      const response = await searchApartments({ ...lastSearchParams, page: nextPage });
+      const newApts = response.apartments;
+      setResults(prev => [...prev, ...newApts]);
+      setCurrentPage(nextPage);
+      setHasMore(response.has_more);
+
+      // Set AI loading for new apartments (Pro only)
+      if (isPro && newApts.length > 0) {
+        setAiLoadingIds(new Set(newApts.map(a => a.id)));
+      }
+    } catch {
+      setError('Failed to load more results');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   if (authLoading) {
     return (
@@ -119,6 +191,7 @@ export default function Home() {
                 onLoading={setIsLoading}
                 onError={handleError}
                 onSearchMeta={handleSearchMeta}
+                onSearchParams={(params) => setLastSearchParams(params)}
               />
               )}
               {tier === 'free' && searchesRemaining !== null && (
@@ -217,9 +290,29 @@ export default function Home() {
                   </div>
                   <div className="grid gap-6 sm:grid-cols-2">
                     {results.map((apartment) => (
-                      <ApartmentCard key={apartment.id} apartment={apartment} moveInDate={moveInDate ?? undefined} />
+                      <ApartmentCard key={apartment.id} apartment={apartment} moveInDate={moveInDate ?? undefined} aiLoading={aiLoadingIds.has(apartment.id)} />
                     ))}
                   </div>
+
+                  {/* Load More */}
+                  {hasMore && (
+                    <div className="flex justify-center mt-6">
+                      <button
+                        onClick={handleLoadMore}
+                        disabled={loadingMore}
+                        className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {loadingMore ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                            Loading...
+                          </>
+                        ) : (
+                          'Load More'
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
