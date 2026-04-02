@@ -1,6 +1,6 @@
 """
-Tests for the search endpoint with Claude AI scoring.
-Tests the full pipeline: filtering -> Claude scoring -> ranking.
+Tests for the search endpoint with paginated heuristic-only results.
+AI scoring is now handled by the separate /api/search/score-batch endpoint.
 """
 import pytest
 from unittest.mock import patch, MagicMock
@@ -32,9 +32,11 @@ class TestSearchEndpoint:
         assert response.status_code == 200
         data = response.json()
 
-        # Should return apartments and total count
+        # Should return apartments, total count, and pagination fields
         assert "apartments" in data
         assert "total_results" in data
+        assert "page" in data
+        assert "has_more" in data
         assert isinstance(data["apartments"], list)
 
         # If there are results, verify structure
@@ -46,6 +48,8 @@ class TestSearchEndpoint:
             assert "match_score" in apt
             assert "reasoning" in apt
             assert "highlights" in apt
+            # Search endpoint returns null scores (AI via score-batch)
+            assert apt["match_score"] is None
 
     def test_search_respects_budget_filter(self):
         """Test that all returned apartments are within budget."""
@@ -91,8 +95,8 @@ class TestSearchEndpoint:
         for apt in data["apartments"]:
             assert apt["bedrooms"] == bedrooms, f"Expected {bedrooms} bedrooms, got {apt['bedrooms']}"
 
-    def test_search_includes_match_scores(self):
-        """Test that apartments have valid match scores (0-100)."""
+    def test_search_returns_null_match_scores(self):
+        """Test that search returns null match scores (AI scoring moved to score-batch)."""
         response = httpx.post(
             f"{BASE_URL}/api/search",
             json={
@@ -110,10 +114,10 @@ class TestSearchEndpoint:
         data = response.json()
 
         for apt in data["apartments"]:
-            assert 0 <= apt["match_score"] <= 100, f"Invalid match score: {apt['match_score']}"
+            assert apt["match_score"] is None, f"Expected null match_score, got {apt['match_score']}"
 
-    def test_search_results_sorted_by_score(self):
-        """Test that apartments are sorted by match score (highest first)."""
+    def test_search_includes_pagination_fields(self):
+        """Test that response includes page and has_more fields."""
         response = httpx.post(
             f"{BASE_URL}/api/search",
             json={
@@ -130,12 +134,14 @@ class TestSearchEndpoint:
         assert response.status_code == 200
         data = response.json()
 
-        if len(data["apartments"]) >= 2:
-            scores = [apt["match_score"] for apt in data["apartments"]]
-            assert scores == sorted(scores, reverse=True), "Apartments not sorted by score"
+        assert "page" in data
+        assert "has_more" in data
+        assert isinstance(data["page"], int)
+        assert isinstance(data["has_more"], bool)
+        assert data["page"] >= 1
 
     def test_search_with_preferences(self):
-        """Test that preferences influence scoring."""
+        """Test that preferences are accepted (scoring via score-batch)."""
         response = httpx.post(
             f"{BASE_URL}/api/search",
             json={
@@ -152,13 +158,7 @@ class TestSearchEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-
-        # Should have reasoning that references preferences
-        if data["apartments"]:
-            apt = data["apartments"][0]
-            # Reasoning should mention something related to preferences
-            assert apt["reasoning"], "Missing reasoning"
-            assert apt["highlights"], "Missing highlights"
+        assert "apartments" in data
 
     def test_search_bryn_mawr(self):
         """Test search for Bryn Mawr apartments."""
@@ -208,7 +208,7 @@ class TestSearchEndpoint:
         assert data["total_results"] == 0
 
     def test_search_limit_results(self):
-        """Test that search returns at most 10 results."""
+        """Test that search returns at most 10 results per page."""
         response = httpx.post(
             f"{BASE_URL}/api/search",
             json={
@@ -225,7 +225,7 @@ class TestSearchEndpoint:
         assert response.status_code == 200
         data = response.json()
 
-        assert len(data["apartments"]) <= 10, "Should return at most 10 results"
+        assert len(data["apartments"]) <= 10, "Should return at most 10 results per page"
 
 
 class TestHealthEndpoints:

@@ -55,9 +55,9 @@ class TestAnonymousSearch:
         app.dependency_overrides[get_optional_user] = _mock_anon
         try:
             with patch(
-                "app.main.apartment_service.search_apartments",
+                "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=[SAMPLE_APARTMENT],
+                return_value=([SAMPLE_APARTMENT], 1, False),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 
@@ -67,6 +67,8 @@ class TestAnonymousSearch:
             assert data["searches_remaining"] is None
             assert data["total_results"] == 1
             assert len(data["apartments"]) == 1
+            assert data["page"] == 1
+            assert data["has_more"] is False
 
             apt = data["apartments"][0]
             assert apt["match_score"] is None
@@ -82,19 +84,19 @@ class TestAnonymousSearch:
         try:
             with (
                 patch(
-                    "app.main.apartment_service.search_apartments",
+                    "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=[SAMPLE_APARTMENT],
+                    return_value=([SAMPLE_APARTMENT], 1, False),
                 ),
                 patch(
-                    "app.main.apartment_service.get_top_apartments",
+                    "app.services.claude_service.ClaudeService.score_apartments",
                     new_callable=AsyncMock,
-                ) as mock_top,
+                ) as mock_claude,
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 
             assert response.status_code == 200
-            mock_top.assert_not_called()
+            mock_claude.assert_not_called()
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
@@ -121,9 +123,9 @@ class TestFreeUserSearch:
                     new_callable=AsyncMock,
                 ) as mock_incr,
                 patch(
-                    "app.main.apartment_service.search_apartments",
+                    "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=[SAMPLE_APARTMENT],
+                    return_value=([SAMPLE_APARTMENT], 1, False),
                 ),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
@@ -181,33 +183,28 @@ class TestFreeUserSearch:
                     new_callable=AsyncMock,
                 ),
                 patch(
-                    "app.main.apartment_service.search_apartments",
+                    "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=[],
+                    return_value=([], 0, False),
                 ),
                 patch(
-                    "app.main.apartment_service.get_top_apartments",
+                    "app.services.claude_service.ClaudeService.score_apartments",
                     new_callable=AsyncMock,
-                ) as mock_top,
+                ) as mock_claude,
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 
             assert response.status_code == 200
-            mock_top.assert_not_called()
+            mock_claude.assert_not_called()
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
 
 class TestProUserSearch:
-    """Pro users get full Claude AI-scored results."""
+    """Pro users get heuristic results (AI scoring moved to score-batch)."""
 
-    def test_pro_user_gets_scored_results(self):
-        scored_apartment = {
-            **SAMPLE_APARTMENT,
-            "match_score": 85,
-            "reasoning": "Great match for your needs.",
-            "highlights": ["Under budget", "Good location"],
-        }
+    def test_pro_user_gets_results_without_ai_scores(self):
+        """Pro search returns apartments with match_score=None (AI via score-batch)."""
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         try:
             with (
@@ -217,9 +214,9 @@ class TestProUserSearch:
                     return_value="pro",
                 ),
                 patch(
-                    "app.main.apartment_service.get_top_apartments",
+                    "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([scored_apartment], 1),
+                    return_value=([SAMPLE_APARTMENT], 1, False),
                 ),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
@@ -232,9 +229,10 @@ class TestProUserSearch:
             assert len(data["apartments"]) == 1
 
             apt = data["apartments"][0]
-            assert apt["match_score"] == 85
-            assert apt["reasoning"] == "Great match for your needs."
-            assert "Under budget" in apt["highlights"]
+            # Search endpoint no longer returns AI scores
+            assert apt["match_score"] is None
+            assert apt["reasoning"] is None
+            assert apt["highlights"] == []
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
@@ -257,9 +255,9 @@ class TestProUserSearch:
                     new_callable=AsyncMock,
                 ) as mock_incr,
                 patch(
-                    "app.main.apartment_service.get_top_apartments",
+                    "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([], 0),
+                    return_value=([], 0, False),
                 ),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
@@ -270,8 +268,8 @@ class TestProUserSearch:
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
-    def test_pro_user_calls_claude(self):
-        """Pro users should use get_top_apartments (Claude AI scoring)."""
+    def test_pro_user_uses_paginated_search(self):
+        """Pro users use get_apartments_paginated (same as free/anonymous)."""
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         try:
             with (
@@ -281,34 +279,29 @@ class TestProUserSearch:
                     return_value="pro",
                 ),
                 patch(
-                    "app.main.apartment_service.get_top_apartments",
+                    "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([], 0),
-                ) as mock_top,
-                patch(
-                    "app.main.apartment_service.search_apartments",
-                    new_callable=AsyncMock,
-                ) as mock_search,
+                    return_value=([], 0, False),
+                ) as mock_paginated,
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 
             assert response.status_code == 200
-            mock_top.assert_called_once()
-            mock_search.assert_not_called()
+            mock_paginated.assert_called_once()
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
 
 class TestSearchResponseShape:
-    """Verify the response always includes tier and searches_remaining fields."""
+    """Verify the response always includes tier, searches_remaining, page, and has_more fields."""
 
     def test_response_includes_tier_and_remaining(self):
         app.dependency_overrides[get_optional_user] = _mock_anon
         try:
             with patch(
-                "app.main.apartment_service.search_apartments",
+                "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=[],
+                return_value=([], 0, False),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 
@@ -317,5 +310,25 @@ class TestSearchResponseShape:
             assert "searches_remaining" in data
             assert "apartments" in data
             assert "total_results" in data
+            assert "page" in data
+            assert "has_more" in data
+        finally:
+            app.dependency_overrides.pop(get_optional_user, None)
+
+    def test_response_has_more_when_paginated(self):
+        """Verify has_more=True when there are more pages."""
+        app.dependency_overrides[get_optional_user] = _mock_anon
+        try:
+            with patch(
+                "app.main.apartment_service.get_apartments_paginated",
+                new_callable=AsyncMock,
+                return_value=([SAMPLE_APARTMENT], 25, True),
+            ):
+                response = client.post("/api/search", json=SEARCH_BODY)
+
+            data = response.json()
+            assert data["has_more"] is True
+            assert data["total_results"] == 25
+            assert data["page"] == 1
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
