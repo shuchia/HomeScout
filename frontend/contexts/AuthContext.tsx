@@ -103,6 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!cachedSession) {
           applySession(null)
+          // Clear stale comparison data when no session (e.g., session expired)
+          useComparison.getState().clearComparison()
           return
         }
 
