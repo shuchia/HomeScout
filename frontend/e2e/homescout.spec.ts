@@ -50,6 +50,8 @@ const MOCK_SEARCH_RESPONSE = {
     },
   ],
   total_results: 2,
+  page: 1,
+  has_more: false,
 };
 
 /** Free/anonymous search results with qualitative labels (no match_score) */
@@ -104,6 +106,8 @@ const MOCK_FREE_SEARCH_RESPONSE = {
     },
   ],
   total_results: 2,
+  page: 1,
+  has_more: false,
   tier: 'free',
   searches_remaining: 2,
 };
@@ -372,7 +376,7 @@ test.describe('Snugd E2E Tests', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ apartments: [], total_results: 0 }),
+          body: JSON.stringify({ apartments: [], total_results: 0, page: 1, has_more: false }),
         });
       });
 
