@@ -84,6 +84,7 @@ export default function ComparePage() {
             bathrooms: searchContext.bathrooms,
             property_type: searchContext.property_type,
             move_in_date: searchContext.move_in_date,
+            near_label: searchContext.near_label,
           }
         : undefined
 

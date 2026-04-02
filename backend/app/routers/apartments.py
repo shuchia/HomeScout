@@ -308,7 +308,10 @@ async def compare_apartments(
     ]
 
     if not request.apartment_ids:
-        tier = "anonymous" if not user else "free"
+        if not user:
+            tier = "anonymous"
+        else:
+            tier = await TierService.get_user_tier(user.user_id)
         return {
             "apartments": [],
             "comparison_fields": comparison_fields,

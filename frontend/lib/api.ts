@@ -3,7 +3,7 @@
  * Handles all communication with the FastAPI server
  */
 
-import { SearchParams, SearchResponse, HealthResponse, Apartment, ApartmentWithScore, SearchContext, ComparisonAnalysis } from '@/types/apartment';
+import { SearchParams, SearchResponse, HealthResponse, Apartment, SearchContext, ComparisonAnalysis } from '@/types/apartment';
 import { Tour, TourTag, TourNote } from '@/types/tour';
 import { getAccessToken, isTokenExpiringSoon, refreshAccessToken } from './auth-store';
 
@@ -244,7 +244,7 @@ export async function getApartmentsBatch(ids: string[]): Promise<Apartment[]> {
  * Response from the compare API endpoint
  */
 export interface CompareResponse {
-  apartments: ApartmentWithScore[];
+  apartments: Apartment[];
   comparison_fields: string[];
   comparison_analysis?: ComparisonAnalysis;
   tier?: string;
