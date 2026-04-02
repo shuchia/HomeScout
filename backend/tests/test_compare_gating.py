@@ -327,3 +327,71 @@ class TestCompareResponseShape:
             assert data["comparison_analysis"] is None
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
+
+
+class TestProClaudeFailures:
+    """Pro user gets apartments but no analysis when Claude fails."""
+
+    def test_pro_claude_timeout_returns_no_analysis(self):
+        """Pro user gets apartments but no analysis when Claude times out."""
+        app.dependency_overrides[get_optional_user] = _mock_pro_user
+        try:
+            with patch(
+                "app.routers.apartments.TierService.get_user_tier",
+                new_callable=AsyncMock,
+                return_value="pro",
+            ), patch(
+                "app.routers.apartments.is_database_enabled",
+                return_value=False,
+            ), patch(
+                "app.routers.apartments._get_apartments_data",
+                return_value=_make_json_data(),
+            ), patch(
+                "app.routers.apartments._get_claude_service",
+            ) as mock_claude:
+                mock_instance = MagicMock()
+                mock_instance.compare_apartments_with_analysis.side_effect = TimeoutError("timed out")
+                mock_claude.return_value = mock_instance
+                response = client.post("/api/apartments/compare", json={
+                    "apartment_ids": ["apt-001", "apt-002"],
+                    "preferences": "test",
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["apartments"]) == 2
+            assert data["comparison_analysis"] is None
+        finally:
+            app.dependency_overrides.pop(get_optional_user, None)
+
+    def test_pro_claude_exception_returns_no_analysis(self):
+        """Pro user gets apartments but no analysis when Claude raises."""
+        app.dependency_overrides[get_optional_user] = _mock_pro_user
+        try:
+            with patch(
+                "app.routers.apartments.TierService.get_user_tier",
+                new_callable=AsyncMock,
+                return_value="pro",
+            ), patch(
+                "app.routers.apartments.is_database_enabled",
+                return_value=False,
+            ), patch(
+                "app.routers.apartments._get_apartments_data",
+                return_value=_make_json_data(),
+            ), patch(
+                "app.routers.apartments._get_claude_service",
+            ) as mock_claude:
+                mock_instance = MagicMock()
+                mock_instance.compare_apartments_with_analysis.side_effect = Exception("API error")
+                mock_claude.return_value = mock_instance
+                response = client.post("/api/apartments/compare", json={
+                    "apartment_ids": ["apt-001", "apt-002"],
+                    "preferences": "test",
+                })
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["apartments"]) == 2
+            assert data["comparison_analysis"] is None
+        finally:
+            app.dependency_overrides.pop(get_optional_user, None)

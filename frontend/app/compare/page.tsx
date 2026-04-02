@@ -273,9 +273,24 @@ export default function ComparePage() {
 
         {/* Loading State */}
         {loading && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--color-primary)] mb-4"></div>
-            <p className="text-gray-600">Loading apartments...</p>
+          <div className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
+            <div className="p-6 space-y-4">
+              <div className="h-6 w-48 bg-gray-200 rounded" />
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="space-y-3">
+                    <div className="h-32 bg-gray-200 rounded-lg" />
+                    <div className="h-4 w-3/4 bg-gray-200 rounded" />
+                    <div className="h-4 w-1/2 bg-gray-100 rounded" />
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2 pt-4">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="h-10 bg-gray-100 rounded" />
+                ))}
+              </div>
+            </div>
           </div>
         )}
 

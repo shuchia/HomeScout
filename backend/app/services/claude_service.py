@@ -35,6 +35,18 @@ class ClaudeService:
         )
 
     @staticmethod
+    def _strip_code_block(text: str) -> str:
+        """Strip markdown code block wrappers from text."""
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
+
+    @staticmethod
     def prepare_apartment_for_scoring(apt: dict) -> dict:
         """Prepare apartment data for Claude scoring. No truncation."""
         data = {
@@ -226,17 +238,7 @@ Be honest and practical in your scoring. A perfect 100% match is rare. Most good
             Parsed JSON as Python list
         """
         try:
-            # Check if response is wrapped in markdown code blocks
-            if "```json" in response_text:
-                # Extract JSON from ```json ... ``` blocks
-                json_start = response_text.find("```json") + 7
-                json_end = response_text.find("```", json_start)
-                response_text = response_text[json_start:json_end].strip()
-            elif "```" in response_text:
-                # Extract JSON from ``` ... ``` blocks
-                json_start = response_text.find("```") + 3
-                json_end = response_text.find("```", json_start)
-                response_text = response_text[json_start:json_end].strip()
+            response_text = self._strip_code_block(response_text)
 
             # Parse JSON
             scores = json.loads(response_text)
@@ -405,14 +407,7 @@ Return ONLY a JSON object with "subject" and "body" fields. No additional text."
 
     def _parse_dict_response(self, response_text: str) -> dict:
         """Parse a JSON dict from Claude's response, handling markdown code blocks."""
-        if "```json" in response_text:
-            json_start = response_text.find("```json") + 7
-            json_end = response_text.find("```", json_start)
-            response_text = response_text[json_start:json_end].strip()
-        elif "```" in response_text:
-            json_start = response_text.find("```") + 3
-            json_end = response_text.find("```", json_start)
-            response_text = response_text[json_start:json_end].strip()
+        response_text = self._strip_code_block(response_text)
 
         result = json.loads(response_text)
 
@@ -627,14 +622,7 @@ Return valid JSON only, no additional text."""
 
     def _parse_comparison_response(self, response_text: str) -> Dict:
         """Parse the comparison analysis JSON from Claude's response."""
-        if "```json" in response_text:
-            json_start = response_text.find("```json") + 7
-            json_end = response_text.find("```", json_start)
-            response_text = response_text[json_start:json_end].strip()
-        elif "```" in response_text:
-            json_start = response_text.find("```") + 3
-            json_end = response_text.find("```", json_start)
-            response_text = response_text[json_start:json_end].strip()
+        response_text = self._strip_code_block(response_text)
 
         result = json.loads(response_text)
 

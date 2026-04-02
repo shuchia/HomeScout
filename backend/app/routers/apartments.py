@@ -362,12 +362,12 @@ async def compare_apartments(
                         preferences=prefs,
                         search_context=search_ctx,
                     ),
-                    timeout=15.0,
+                    timeout=25.0,
                 )
             from app.schemas import ComparisonAnalysis
             comparison_analysis = ComparisonAnalysis(**raw_analysis)
         except asyncio.TimeoutError:
-            logger.warning("Claude comparison timed out after 15s")
+            logger.warning("Claude comparison timed out after 25s")
         except Exception as e:
             logger.error(f"Claude comparison analysis failed: {e}")
 
