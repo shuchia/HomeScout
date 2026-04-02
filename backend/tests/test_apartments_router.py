@@ -25,10 +25,10 @@ async def test_get_apartments_batch_empty():
 async def test_get_apartment_success():
     """Test fetching an existing apartment by ID."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/apartments/apt-001")
+        response = await client.get("/api/apartments/bryn-001")
     assert response.status_code == 200
     data = response.json()
-    assert data["id"] == "apt-001"
+    assert data["id"] == "bryn-001"
     assert "address" in data
     assert "rent" in data
 
@@ -37,13 +37,13 @@ async def test_get_apartment_success():
 async def test_get_apartments_batch_success():
     """Test fetching multiple apartments by ID."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/api/apartments/batch", json=["apt-001", "apt-002"])
+        response = await client.post("/api/apartments/batch", json=["bryn-001", "bryn-002"])
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 2
     ids = [apt["id"] for apt in data]
-    assert "apt-001" in ids
-    assert "apt-002" in ids
+    assert "bryn-001" in ids
+    assert "bryn-002" in ids
 
 
 @pytest.mark.asyncio
@@ -52,7 +52,7 @@ async def test_get_apartments_batch_partial():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/apartments/batch",
-            json=["apt-001", "nonexistent-id", "apt-002"]
+            json=["bryn-001", "nonexistent-id", "bryn-002"]
         )
     assert response.status_code == 200
     data = response.json()
@@ -63,7 +63,7 @@ async def test_get_apartments_batch_partial():
     assert nonexistent["is_available"] is False
 
     # Existing apartments should have full data
-    apt_001 = next(apt for apt in data if apt["id"] == "apt-001")
+    apt_001 = next(apt for apt in data if apt["id"] == "bryn-001")
     assert "address" in apt_001
     assert "rent" in apt_001
 
@@ -99,7 +99,7 @@ async def test_compare_apartments_max_three():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/apartments/compare",
-            json={"apartment_ids": ["apt-001", "apt-002", "apt-003", "apt-004"]}
+            json={"apartment_ids": ["bryn-001", "bryn-002", "bryn-003", "bryn-004"]}
         )
     assert response.status_code == 422  # Validation error from Field max_length
 
@@ -110,7 +110,7 @@ async def test_compare_apartments_success():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/apartments/compare",
-            json={"apartment_ids": ["apt-001", "apt-002"]}
+            json={"apartment_ids": ["bryn-001", "bryn-002"]}
         )
     assert response.status_code == 200
     data = response.json()
@@ -126,23 +126,23 @@ async def test_compare_apartments_with_nonexistent():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/apartments/compare",
-            json={"apartment_ids": ["apt-001", "nonexistent-id"]}
+            json={"apartment_ids": ["bryn-001", "nonexistent-id"]}
         )
     assert response.status_code == 200
     data = response.json()
     # Only the existing apartment should be returned
     assert len(data["apartments"]) == 1
-    assert data["apartments"][0]["id"] == "apt-001"
+    assert data["apartments"][0]["id"] == "bryn-001"
 
 
 @pytest.mark.asyncio
 async def test_compare_apartments_with_preferences():
-    """Test comparison with preferences triggers analysis."""
+    """Test comparison with preferences for anonymous user returns no analysis."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/apartments/compare",
             json={
-                "apartment_ids": ["apt-001", "apt-002"],
+                "apartment_ids": ["bryn-001", "bryn-002"],
                 "preferences": "parking, quiet neighborhood",
                 "search_context": {
                     "city": "Bryn Mawr, PA",
@@ -157,21 +157,8 @@ async def test_compare_apartments_with_preferences():
     assert response.status_code == 200
     data = response.json()
     assert len(data["apartments"]) == 2
-    assert "comparison_analysis" in data
-    analysis = data["comparison_analysis"]
-    assert "winner" in analysis
-    assert analysis["winner"]["apartment_id"] in ["apt-001", "apt-002"]
-    assert "reason" in analysis["winner"]
-    assert "categories" in analysis
-    assert len(analysis["categories"]) >= 3  # At least Value, Space, Amenities
-    assert "apartment_scores" in analysis
-    assert len(analysis["apartment_scores"]) == 2
-    for score in analysis["apartment_scores"]:
-        assert "overall_score" in score
-        assert 0 <= score["overall_score"] <= 100
-        assert "category_scores" in score
-        for cat in analysis["categories"]:
-            assert cat in score["category_scores"]
+    # Anonymous users do not get Claude analysis (Pro only)
+    assert data.get("comparison_analysis") is None
 
 
 @pytest.mark.asyncio
@@ -180,7 +167,7 @@ async def test_compare_apartments_without_preferences_no_analysis():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/apartments/compare",
-            json={"apartment_ids": ["apt-001", "apt-002"]}
+            json={"apartment_ids": ["bryn-001", "bryn-002"]}
         )
     assert response.status_code == 200
     data = response.json()

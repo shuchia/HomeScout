@@ -91,7 +91,7 @@ class TestPresignedUrl:
         assert url == "https://s3.example.com/presigned"
         mock_s3.generate_presigned_url.assert_called_once_with(
             "get_object",
-            Params={"Bucket": "homescout-tours", "Key": "tours/user-123/tour-456/abc.jpg"},
+            Params={"Bucket": "snugd-tours", "Key": "tours/user-123/tour-456/abc.jpg"},
             ExpiresIn=3600,
         )
 
@@ -110,8 +110,8 @@ class TestDeletePhoto:
 
         assert mock_s3.delete_object.call_count == 2
         mock_s3.delete_object.assert_any_call(
-            Bucket="homescout-tours", Key="tours/user-123/tour-456/abc.jpg"
+            Bucket="snugd-tours", Key="tours/user-123/tour-456/abc.jpg"
         )
         mock_s3.delete_object.assert_any_call(
-            Bucket="homescout-tours", Key="tours/user-123/tour-456/thumbs/abc.jpg"
+            Bucket="snugd-tours", Key="tours/user-123/tour-456/thumbs/abc.jpg"
         )
