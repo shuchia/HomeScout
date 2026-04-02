@@ -1,7 +1,7 @@
 """Tests for Redis-based rate limiting middleware."""
 import os
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -40,7 +40,7 @@ def _build_app_and_client(mock_redis_client=None):
     async def list_apartments():
         return {"apartments": []}
 
-    patcher = patch.object(rl_module, "redis")
+    patcher = patch.object(rl_module, "aioredis")
     mock_redis_mod = patcher.start()
     if mock_redis_client is None:
         mock_redis_mod.from_url.side_effect = Exception("No Redis")
@@ -53,8 +53,8 @@ def _build_app_and_client(mock_redis_client=None):
 
 
 def _make_mock_redis(counter_value=1):
-    """Create a mock Redis client that returns the given counter value on incr."""
-    mock = MagicMock()
+    """Create a mock Redis client that returns the given counter value on incr/expire."""
+    mock = AsyncMock()
     mock.incr.return_value = counter_value
     mock.expire.return_value = True
     return mock
@@ -90,12 +90,12 @@ class TestRateLimitNormalRequests:
         """Simulate multiple requests all under the limit."""
         call_count = 0
 
-        def incr_side_effect(key):
+        async def incr_side_effect(key):
             nonlocal call_count
             call_count += 1
             return call_count
 
-        mock_redis = MagicMock()
+        mock_redis = AsyncMock()
         mock_redis.incr.side_effect = incr_side_effect
         mock_redis.expire.return_value = True
 
@@ -207,7 +207,7 @@ class TestRedisUnavailable:
 
     def test_redis_error_passes_through(self):
         """When Redis raises an exception on incr, request still passes."""
-        mock_redis = MagicMock()
+        mock_redis = AsyncMock()
         mock_redis.incr.side_effect = Exception("Redis connection lost")
         client, patcher = _build_app_and_client(mock_redis)
         try:

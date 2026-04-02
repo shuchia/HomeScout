@@ -71,7 +71,7 @@ class TestProximitySearchSchema:
         mock_tier.get_user_tier = AsyncMock(return_value="free")
         mock_tier.check_search_limit = AsyncMock(return_value=(True, 2))
         mock_tier.increment_search_count = AsyncMock()
-        mock_svc.search_apartments = AsyncMock(return_value=[SAMPLE_APT_CLOSE])
+        mock_svc.get_apartments_paginated = AsyncMock(return_value=([SAMPLE_APT_CLOSE], 1, False))
 
         response = client.post("/api/search", json=SEARCH_BODY_WITH_PROXIMITY)
         assert response.status_code == 200
@@ -85,7 +85,7 @@ class TestProximitySearchSchema:
         mock_tier.get_user_tier = AsyncMock(return_value="free")
         mock_tier.check_search_limit = AsyncMock(return_value=(True, 2))
         mock_tier.increment_search_count = AsyncMock()
-        mock_svc.search_apartments = AsyncMock(return_value=[SAMPLE_APT_CLOSE, SAMPLE_APT_FAR])
+        mock_svc.get_apartments_paginated = AsyncMock(return_value=([SAMPLE_APT_CLOSE, SAMPLE_APT_FAR], 2, False))
 
         response = client.post("/api/search", json=SEARCH_BODY_WITH_PROXIMITY)
         assert response.status_code == 200
@@ -101,7 +101,7 @@ class TestProximitySearchSchema:
         mock_tier.get_user_tier = AsyncMock(return_value="free")
         mock_tier.check_search_limit = AsyncMock(return_value=(True, 2))
         mock_tier.increment_search_count = AsyncMock()
-        mock_svc.search_apartments = AsyncMock(return_value=[SAMPLE_APT_FAR, SAMPLE_APT_CLOSE])
+        mock_svc.get_apartments_paginated = AsyncMock(return_value=([SAMPLE_APT_FAR, SAMPLE_APT_CLOSE], 2, False))
 
         response = client.post("/api/search", json=SEARCH_BODY_WITH_PROXIMITY)
         apts = response.json()["apartments"]
@@ -116,7 +116,7 @@ class TestProximitySearchSchema:
         mock_tier.get_user_tier = AsyncMock(return_value="free")
         mock_tier.check_search_limit = AsyncMock(return_value=(True, 2))
         mock_tier.increment_search_count = AsyncMock()
-        mock_svc.search_apartments = AsyncMock(return_value=[SAMPLE_APT_CLOSE, SAMPLE_APT_FAR])
+        mock_svc.get_apartments_paginated = AsyncMock(return_value=([SAMPLE_APT_CLOSE, SAMPLE_APT_FAR], 2, False))
 
         body = {**SEARCH_BODY_WITH_PROXIMITY, "max_distance_miles": 1.0}
         response = client.post("/api/search", json=body)
@@ -129,7 +129,7 @@ class TestProximitySearchSchema:
     def test_max_distance_filters_for_pro(self, mock_tier, mock_svc):
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         mock_tier.get_user_tier = AsyncMock(return_value="pro")
-        mock_svc.get_top_apartments = AsyncMock(return_value=([SAMPLE_APT_CLOSE, SAMPLE_APT_FAR], 2))
+        mock_svc.get_apartments_paginated = AsyncMock(return_value=([SAMPLE_APT_CLOSE, SAMPLE_APT_FAR], 2, False))
 
         body = {**SEARCH_BODY_WITH_PROXIMITY, "max_distance_miles": 1.0}
         response = client.post("/api/search", json=body)

@@ -29,17 +29,17 @@ class TestCheckSearchLimit:
     @patch("app.services.tier_service.TierService._get_redis")
     async def test_free_user_under_limit_allowed(self, mock_redis):
         r = AsyncMock()
-        r.get.return_value = b"2"  # 2 of 3 used
+        r.get.return_value = b"10"  # 10 of 20 used
         mock_redis.return_value = r
         allowed, remaining = await TierService.check_search_limit("user-123")
         assert allowed is True
-        assert remaining == 1
+        assert remaining == 10
 
     @pytest.mark.asyncio
     @patch("app.services.tier_service.TierService._get_redis")
     async def test_free_user_at_limit_blocked(self, mock_redis):
         r = AsyncMock()
-        r.get.return_value = b"3"  # 3 of 3 used
+        r.get.return_value = b"20"  # 20 of 20 used
         mock_redis.return_value = r
         allowed, remaining = await TierService.check_search_limit("user-123")
         assert allowed is False
