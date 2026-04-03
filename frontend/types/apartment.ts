@@ -122,7 +122,10 @@ export interface SearchContext {
   bathrooms: number;
   property_type: string;
   move_in_date: string;
+  near_lat?: number;
+  near_lng?: number;
   near_label?: string;
+  max_distance_miles?: number;
 }
 
 /**

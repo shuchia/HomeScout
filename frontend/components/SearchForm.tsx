@@ -62,19 +62,26 @@ interface SearchFormProps {
 }
 
 export default function SearchForm({ onResults, onLoading, onError, onSearchMeta, onSearchParams }: SearchFormProps) {
-  // Form state
-  const [city, setCity] = useState('Arlington, VA');
-  const [budget, setBudget] = useState(2000);
-  const [bedrooms, setBedrooms] = useState(1);
-  const [bathrooms, setBathrooms] = useState(1);
-  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>(['Apartment']);
-  const [moveInDate, setMoveInDate] = useState('2026-03-01');
-  const [otherPreferences, setOtherPreferences] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { setSearchContext } = useComparison();
-  const [nearLocation, setNearLocation] = useState<{ lat: number; lng: number; label: string } | null>(null);
-  const [maxDistance, setMaxDistance] = useState(5);
+  const { searchContext, setSearchContext } = useComparison();
   const { isPro } = useAuth();
+
+  // Form state — restore from persisted searchContext if available
+  const [city, setCity] = useState(searchContext?.city || 'Arlington, VA');
+  const [budget, setBudget] = useState(searchContext?.budget || 2000);
+  const [bedrooms, setBedrooms] = useState(searchContext?.bedrooms ?? 1);
+  const [bathrooms, setBathrooms] = useState(searchContext?.bathrooms ?? 1);
+  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>(
+    searchContext?.property_type ? searchContext.property_type.split(', ') : ['Apartment']
+  );
+  const [moveInDate, setMoveInDate] = useState(searchContext?.move_in_date || '2026-03-01');
+  const [otherPreferences, setOtherPreferences] = useState(searchContext?.other_preferences || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nearLocation, setNearLocation] = useState<{ lat: number; lng: number; label: string } | null>(
+    searchContext?.near_lat && searchContext?.near_lng && searchContext?.near_label
+      ? { lat: searchContext.near_lat, lng: searchContext.near_lng, label: searchContext.near_label }
+      : null
+  );
+  const [maxDistance, setMaxDistance] = useState(searchContext?.max_distance_miles || 5);
 
   // Handle property type checkbox toggle
   const handlePropertyTypeChange = (type: string) => {
@@ -124,7 +131,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
       onSearchMeta?.({ tier: response.tier, searches_remaining: response.searches_remaining, move_in_date: moveInDate, has_more: response.has_more, page: response.page });
       onSearchParams?.(params);
 
-      // Save search context for comparison page
+      // Save search context for comparison page + form persistence
       setSearchContext({
         city: city.trim(),
         budget,
@@ -133,7 +140,10 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         property_type: selectedPropertyTypes.join(', '),
         move_in_date: moveInDate,
         other_preferences: otherPreferences.trim(),
+        near_lat: nearLocation?.lat,
+        near_lng: nearLocation?.lng,
         near_label: nearLocation?.label,
+        max_distance_miles: nearLocation && isPro ? maxDistance : undefined,
       });
     } catch (error) {
       if (error instanceof ApiError) {

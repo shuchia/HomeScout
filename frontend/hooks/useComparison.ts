@@ -9,7 +9,10 @@ interface SearchContext {
   property_type: string
   move_in_date: string
   other_preferences: string
+  near_lat?: number
+  near_lng?: number
   near_label?: string
+  max_distance_miles?: number
 }
 
 interface ComparisonStore {
