@@ -1,21 +1,22 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useComparison } from '@/hooks/useComparison'
 import { useAuth } from '@/contexts/AuthContext'
 
 /**
  * ComparisonBar - Sticky footer showing selected apartments for comparison
  * Shows 3 slots for apartments, with indicators for filled slots
- * Only visible to authenticated users.
+ * Only visible to authenticated users. Hidden on the compare page itself.
  */
 export function ComparisonBar() {
   const { apartmentIds, clearComparison } = useComparison()
   const { user } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
-  // Don't render if no apartments are selected or user is not signed in
-  if (apartmentIds.length === 0 || !user) return null
+  // Don't render if: no apartments selected, not signed in, or already on compare page
+  if (apartmentIds.length === 0 || !user || pathname === '/compare') return null
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 z-50">
