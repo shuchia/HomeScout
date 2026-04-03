@@ -362,7 +362,7 @@ async def compare_apartments(
                         preferences=prefs,
                         search_context=search_ctx,
                     ),
-                    timeout=25.0,
+                    timeout=45.0,
                 )
             from app.schemas import ComparisonAnalysis
             comparison_analysis = ComparisonAnalysis(**raw_analysis)

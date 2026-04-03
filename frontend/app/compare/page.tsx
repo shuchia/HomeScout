@@ -90,7 +90,12 @@ export default function ComparePage() {
 
       const response = await compareApartments(apartmentIds, preferences, apiSearchContext)
       setApartments(response.apartments)
-      setAnalysis(response.comparison_analysis || null)
+      if (response.comparison_analysis) {
+        setAnalysis(response.comparison_analysis)
+      } else {
+        setAnalysis(null)
+        setError('AI analysis timed out. Tap Score to try again.')
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
