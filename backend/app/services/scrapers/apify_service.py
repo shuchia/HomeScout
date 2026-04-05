@@ -604,17 +604,29 @@ class ApifyService(BaseScraper):
             monthly_fees = raw.get("monthlyFees") or fees_data.get("monthly", [])
             one_time_fees = raw.get("oneTimeFees") or fees_data.get("oneTime", [])
 
+        other_monthly = 0
+
         if isinstance(monthly_fees, list):
             for fee in monthly_fees:
                 if isinstance(fee, dict):
                     name = (fee.get("name") or fee.get("label") or "").lower()
                     amount = self._parse_fee_amount(fee.get("amount") or fee.get("value"))
-                    if amount and ("pet" in name or "dog" in name or "cat" in name):
+                    if not amount:
+                        continue
+                    if "pet" in name or "dog" in name or "cat" in name:
                         pet_rent = amount
-                    elif amount and "parking" in name:
+                    elif "parking" in name or "garage" in name:
                         parking_fee = amount
-                    elif amount and ("amenity" in name or "community" in name or "trash" in name):
+                    elif "amenity" in name or "community" in name or "trash" in name or "valet" in name:
                         amenity_fee = (amenity_fee or 0) + amount
+                    elif "insurance" in name:
+                        # Mandatory property insurance — add to amenity_fee and flag it
+                        amenity_fee = (amenity_fee or 0) + amount
+                        amenities.append("Renters Insurance Required")
+                    else:
+                        # Catch-all: utility admin, pest control, sewer, etc.
+                        other_monthly += amount
+                        logger.debug(f"Unmatched monthly fee captured: '{name}' = ${amount}")
 
         if isinstance(one_time_fees, list):
             for fee in one_time_fees:
@@ -728,6 +740,7 @@ class ApifyService(BaseScraper):
             amenity_fee=amenity_fee,
             application_fee=application_fee,
             security_deposit=security_deposit,
+            other_monthly_fees=other_monthly or None,
             contact_phone=contact_phone,
             contact_email=contact_email,
             raw_data=raw,

@@ -322,3 +322,79 @@ def test_baths_as_float(scraper):
     raw = {**_base(), "baths": 1.5}
     result = scraper._normalize_apartments_com_listing(raw)
     assert result is not None
+
+
+# --- monthly fee pattern matching ---
+
+def test_utility_admin_fee_captured(scraper):
+    """Utility billing admin fee should go to other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Utility Billing Admin Fee", "amount": "$6.44"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 6
+
+
+def test_pest_control_fee_captured(scraper):
+    """Pest control fee should go to other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Pest Control", "amount": "$5"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 5
+
+
+def test_sewer_fee_captured(scraper):
+    """Sewer fee should go to other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Sewer", "amount": "$15"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 15
+
+
+def test_mandatory_insurance_goes_to_amenity_fee(scraper):
+    """Mandatory property insurance should be captured in amenity_fee."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Renters Insurance Program", "amount": "$14.50"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.amenity_fee == 14
+    # Should also inject amenity for CostEstimator to zero out the estimate
+    assert any("insurance" in a.lower() for a in result.amenities)
+
+
+def test_multiple_unmatched_fees_accumulate(scraper):
+    """Multiple unmatched fees should accumulate in other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Utility Billing Admin", "amount": "$6"},
+        {"name": "Pest Control", "amount": "$5"},
+        {"name": "Sewer", "amount": "$15"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 26
+
+
+def test_garage_parking_captured(scraper):
+    """Garage fee should match parking pattern."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Garage Parking", "amount": "$115"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.parking_fee == 115
+
+
+def test_valet_trash_captured(scraper):
+    """Valet trash fee should match amenity pattern."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Valet Trash", "amount": "$20"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.amenity_fee == 20
