@@ -78,6 +78,35 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Update task definitions with new image
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        run: |
+          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
+          NEW_IMAGE="${REGISTRY}:${IMAGE_TAG}"
+          echo "Updating task definitions to use image: $NEW_IMAGE"
+
+          for TASK_DEF in snugd-dev-api snugd-dev-worker snugd-dev-beat; do
+            # Get current task definition
+            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
+
+            # Update the container image in the definition
+            UPDATED=$(echo "$CURRENT" | python3 -c "
+          import sys, json
+          td = json.load(sys.stdin)
+          for c in td['containerDefinitions']:
+              c['image'] = '$NEW_IMAGE'
+          # Keep only fields needed for register-task-definition
+          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
+          out = {k: td[k] for k in keep if k in td}
+          print(json.dumps(out))
+          ")
+
+            # Register new revision
+            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
+            echo "Updated $TASK_DEF"
+          done
+
       - name: Run Alembic migrations
         run: |
           SUBNETS='${{ secrets.DEV_PRIVATE_SUBNETS }}'
@@ -120,35 +149,6 @@ jobs:
               echo "::error::Migration failed after $MAX_RETRIES attempts"
               exit 1
             fi
-          done
-
-      - name: Update task definitions with new image
-        env:
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        run: |
-          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          NEW_IMAGE="${REGISTRY}:${IMAGE_TAG}"
-          echo "Updating task definitions to use image: $NEW_IMAGE"
-
-          for TASK_DEF in snugd-dev-api snugd-dev-worker snugd-dev-beat; do
-            # Get current task definition
-            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
-
-            # Update the container image in the definition
-            UPDATED=$(echo "$CURRENT" | python3 -c "
-          import sys, json
-          td = json.load(sys.stdin)
-          for c in td['containerDefinitions']:
-              c['image'] = '$NEW_IMAGE'
-          # Keep only fields needed for register-task-definition
-          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
-          out = {k: td[k] for k in keep if k in td}
-          print(json.dumps(out))
-          ")
-
-            # Register new revision
-            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
-            echo "Updated $TASK_DEF"
           done
 
       - name: Deploy ECS services
@@ -205,6 +205,27 @@ jobs:
           docker tag ${REGISTRY}:dev-${SHA} ${REGISTRY}:qa-${SHA}
           docker push ${REGISTRY}:qa-${SHA}
 
+      - name: Update task definitions with new image
+        run: |
+          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          NEW_IMAGE="${REGISTRY}:qa-${SHA}"
+
+          for TASK_DEF in snugd-qa-api snugd-qa-worker snugd-qa-beat; do
+            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
+            UPDATED=$(echo "$CURRENT" | python3 -c "
+          import sys, json
+          td = json.load(sys.stdin)
+          for c in td['containerDefinitions']:
+              c['image'] = '$NEW_IMAGE'
+          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
+          out = {k: td[k] for k in keep if k in td}
+          print(json.dumps(out))
+          ")
+            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
+            echo "Updated $TASK_DEF"
+          done
+
       - name: Run Alembic migrations
         run: |
           SUBNETS='${{ secrets.QA_PRIVATE_SUBNETS }}'
@@ -245,27 +266,6 @@ jobs:
               echo "::error::Migration failed after $MAX_RETRIES attempts"
               exit 1
             fi
-          done
-
-      - name: Update task definitions with new image
-        run: |
-          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          NEW_IMAGE="${REGISTRY}:qa-${SHA}"
-
-          for TASK_DEF in snugd-qa-api snugd-qa-worker snugd-qa-beat; do
-            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
-            UPDATED=$(echo "$CURRENT" | python3 -c "
-          import sys, json
-          td = json.load(sys.stdin)
-          for c in td['containerDefinitions']:
-              c['image'] = '$NEW_IMAGE'
-          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
-          out = {k: td[k] for k in keep if k in td}
-          print(json.dumps(out))
-          ")
-            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
-            echo "Updated $TASK_DEF"
           done
 
       - name: Deploy ECS services
@@ -319,6 +319,27 @@ jobs:
           docker tag ${REGISTRY}:qa-${SHA} ${REGISTRY}:prod-${SHA}
           docker push ${REGISTRY}:prod-${SHA}
 
+      - name: Update task definitions with new image
+        run: |
+          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          NEW_IMAGE="${REGISTRY}:prod-${SHA}"
+
+          for TASK_DEF in snugd-prod-api snugd-prod-worker snugd-prod-beat; do
+            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
+            UPDATED=$(echo "$CURRENT" | python3 -c "
+          import sys, json
+          td = json.load(sys.stdin)
+          for c in td['containerDefinitions']:
+              c['image'] = '$NEW_IMAGE'
+          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
+          out = {k: td[k] for k in keep if k in td}
+          print(json.dumps(out))
+          ")
+            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
+            echo "Updated $TASK_DEF"
+          done
+
       - name: Run Alembic migrations
         run: |
           SUBNETS='${{ secrets.PROD_PRIVATE_SUBNETS }}'
@@ -359,27 +380,6 @@ jobs:
               echo "::error::Migration failed after $MAX_RETRIES attempts"
               exit 1
             fi
-          done
-
-      - name: Update task definitions with new image
-        run: |
-          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          NEW_IMAGE="${REGISTRY}:prod-${SHA}"
-
-          for TASK_DEF in snugd-prod-api snugd-prod-worker snugd-prod-beat; do
-            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
-            UPDATED=$(echo "$CURRENT" | python3 -c "
-          import sys, json
-          td = json.load(sys.stdin)
-          for c in td['containerDefinitions']:
-              c['image'] = '$NEW_IMAGE'
-          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
-          out = {k: td[k] for k in keep if k in td}
-          print(json.dumps(out))
-          ")
-            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
-            echo "Updated $TASK_DEF"
           done
 
       - name: Deploy ECS services
