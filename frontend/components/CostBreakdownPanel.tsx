@@ -53,6 +53,7 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
     breakdown.pet_rent +
     breakdown.parking_fee +
     breakdown.amenity_fee +
+    (breakdown.other_monthly_fees || 0) +
     breakdown.est_electric +
     breakdown.est_gas +
     breakdown.est_water +
@@ -78,6 +79,9 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
         {breakdown.amenity_fee > 0 && (
           <LineItem label="Amenity Fee" amount={breakdown.amenity_fee} source="scraped" />
         )}
+        {(breakdown.other_monthly_fees || 0) > 0 && (
+          <LineItem label="Other Fees" amount={breakdown.other_monthly_fees} source="scraped" />
+        )}
 
         <div className="border-t border-gray-100 my-1" />
 
@@ -96,8 +100,16 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
         ) : (
           <LineItem label="Water" amount={breakdown.est_water} source="estimated" />
         )}
-        <LineItem label="Internet" amount={breakdown.est_internet} source="estimated" />
-        <LineItem label="Renter&apos;s Insurance" amount={breakdown.est_renters_insurance} source="estimated" />
+        {isIncluded('internet') ? (
+          <LineItem label="Internet" amount={0} source="included" />
+        ) : (
+          <LineItem label="Internet" amount={breakdown.est_internet} source="estimated" />
+        )}
+        {isIncluded('renters_insurance') ? (
+          <LineItem label="Renter&apos;s Insurance" amount={0} source="included" />
+        ) : (
+          <LineItem label="Renter&apos;s Insurance" amount={breakdown.est_renters_insurance} source="estimated" />
+        )}
         {isIncluded('laundry') ? (
           <LineItem label="Laundry" amount={0} source="included" />
         ) : (
