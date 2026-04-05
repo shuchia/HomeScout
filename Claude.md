@@ -144,43 +144,52 @@ curl -X POST http://localhost:8000/api/admin/data-collection/jobs \
 HomeScout is a full-stack apartment finder using Claude AI for intelligent matching, with Supabase for authentication and user data.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              Frontend (Next.js)                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│  SearchForm → API Client → Results Grid (ApartmentCard)                 │
-│  AuthContext (Google OAuth + tier) ←→ Supabase Auth                     │
-│  useFavorites hook ←→ Supabase Database (favorites table)               │
-│  useComparison (Zustand+persist) → Compare Page + Claude Analysis       │
-│  Auth gates on Search + Compare pages (require sign-in)                 │
-│  Tier gating: free (3 searches/day, 5 favorites) vs pro (unlimited)    │
-│  True Cost Calculator: Est. True Cost on cards, Pro gets full breakdown     │
-│  /pricing, /settings pages for billing + account management             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Backend (FastAPI)                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│  /api/search              → Filter + Claude AI scoring (pro only)       │
-│  /api/apartments/{id}     → Get single apartment (DB or JSON)           │
-│  /api/apartments/batch    → Get multiple apartments by ID (DB or JSON)  │
-│  /api/apartments/compare  → Claude analysis (pro) or basic (free)       │
-│  /api/billing/*           → Stripe checkout, portal, webhooks           │
-│  /api/saved-searches      → CRUD saved searches (pro only)              │
-│  /api/webhooks/stripe     → Stripe event handling                       │
-│  /api/webhooks/supabase   → Handle Supabase events                      │
-│  Rate limiting middleware → Redis-based (60/min auth, 10/min anon)      │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Data Sources                                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│  PostgreSQL (scraped data) │ apartments.json (fallback/mock)            │
-│  MarketConfig (19 markets) │ Claude AI (scoring + comparison analysis)  │
-│  Apify (apartments.com)   │ Redis (Celery + rate limits + metering)    │
-│  Stripe (payments)        │ Resend (email alerts)                      │
-└─────────────────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------------------+
+|                              Frontend (Next.js)                          |
++-------------------------------------------------------------------------+
+|  SearchForm -> API Client -> Results Grid (ApartmentCard)                |
+|  AuthContext (Google OAuth + tier) <-> Supabase Auth                     |
+|  useFavorites hook <-> Supabase Database (favorites table)               |
+|  useComparison (Zustand+persist) -> Compare Page + Claude Analysis       |
+|  Tour Pipeline: /tours dashboard + /tours/[id] detail (capture/email)    |
+|  Onboarding walkthrough (Joyride) + Invite code redemption               |
+|  Auth gates on Search + Compare pages (require sign-in)                  |
+|  Tier gating: free (3 searches/day, 5 favorites) vs pro (unlimited)     |
+|  True Cost Calculator: Est. True Cost on cards, Pro gets full breakdown  |
+|  Landing page (/landing) + Feedback widget + Bottom nav (mobile)         |
+|  /pricing, /settings pages for billing + account management              |
++-------------------------------------------------------------------------+
+                                    |
+                                    v
++-------------------------------------------------------------------------+
+|                           Backend (FastAPI)                               |
++-------------------------------------------------------------------------+
+|  /api/search              -> Filter + Claude AI scoring (pro only)       |
+|  /api/search/score-batch  -> Lazy AI scoring for paginated results (pro) |
+|  /api/apartments/*        -> CRUD, batch, compare (DB or JSON)           |
+|  /api/tours/*             -> Tour pipeline CRUD + AI features            |
+|  /api/billing/*           -> Stripe checkout, portal, webhooks           |
+|  /api/saved-searches      -> CRUD saved searches (pro only)              |
+|  /api/invite/*            -> Invite code redemption + status             |
+|  /api/feedback            -> Beta feedback collection                    |
+|  /api/waitlist            -> No-auth waitlist signup                     |
+|  /api/webhooks/*          -> Stripe + Supabase event handling            |
+|  /api/admin/*             -> Data collection + invite code generation    |
+|  /metrics                 -> Prometheus metrics endpoint                 |
+|  Rate limiting middleware -> Redis-based (120/min auth, 30/min anon)     |
++-------------------------------------------------------------------------+
+                                    |
+                                    v
++-------------------------------------------------------------------------+
+|                           Data Sources & Infrastructure                   |
++-------------------------------------------------------------------------+
+|  PostgreSQL (scraped data) | apartments.json (fallback/mock)             |
+|  MarketConfig (tiered)     | Claude AI (scoring, comparison, touring)    |
+|  Apify (apartments.com)   | Redis (Celery + rate limits + metering)     |
+|  Stripe (payments)        | Resend (email alerts)                       |
+|  AWS S3 (tour photos)     | OpenAI Whisper (voice transcription)        |
+|  Prometheus (monitoring)  | Slack (alert notifications)                 |
++-------------------------------------------------------------------------+
 ```
 
 ### Key Flow: Search
@@ -188,7 +197,7 @@ HomeScout is a full-stack apartment finder using Claude AI for intelligent match
 2. User submits search criteria via `SearchForm.tsx`
 3. `lib/api.ts` sends POST to `/api/search` with Supabase JWT
 4. Backend verifies JWT via `auth.py`, determines tier via `TierService`
-5. **Free tier**: checks daily search limit (3/day via Redis counter), returns filtered results without AI scoring
+5. **Free tier**: checks daily search limit (3/day via Redis counter), returns filtered results with heuristic scoring (no AI)
 6. **Pro tier**: `claude_service.py` calls Claude API, returns scored results with `match_score`, `reasoning`, `highlights`
 7. Frontend displays results; free users see "Pro" badge instead of match scores
 8. Response includes `tier` and `searches_remaining` for UI state
@@ -215,6 +224,16 @@ HomeScout is a full-stack apartment finder using Claude AI for intelligent match
 6. Backend updates `profiles.user_tier = 'pro'` via `TierService.update_user_tier()`
 7. Frontend calls `refreshProfile()` to pick up new tier
 
+### Key Flow: Touring Pipeline
+1. User clicks "Start Tour" on an apartment card (TourPrompt component)
+2. Tour created via `POST /api/tours` with apartment_id and initial stage "interested"
+3. `/tours` dashboard shows all tours grouped by stage (TourCard components)
+4. Tour detail page (`/tours/[id]`) allows notes, photos, voice capture, star ratings, tags
+5. AI features (Pro): inquiry email generation, day planner, note enhancement, decision brief
+6. Voice notes captured via VoiceCapture component, transcribed async by Whisper
+7. Photos uploaded to S3 via photo_service, managed per tour
+8. Stages: interested -> outreach_sent -> scheduled -> toured -> deciding (linear but skippable)
+
 ### Dual Data Mode
 The backend supports two data modes, controlled by `USE_DATABASE` env var:
 - **JSON Mode** (default): Uses static `app/data/apartments.json`
@@ -223,19 +242,20 @@ The backend supports two data modes, controlled by `USE_DATABASE` env var:
 All apartment endpoints (`get`, `batch`, `compare`, `list`) check `is_database_enabled()` and query the appropriate source.
 
 ### Type Synchronization
-Frontend TypeScript interfaces (`types/apartment.ts`) must match backend Pydantic models (`schemas.py`). Changes to data models require updates in both places.
+Frontend TypeScript interfaces (`types/apartment.ts`, `types/tour.ts`) must match backend Pydantic models (`schemas.py`). Changes to data models require updates in both places.
 
 ## Continuous Scraping Pipeline
 
 The backend uses a market-driven dispatcher pattern for continuous apartment scraping:
 
-### Beat Schedule (4 orchestrator tasks)
+### Beat Schedule (5 orchestrator tasks)
 | Task | Schedule | Purpose |
 |------|----------|---------|
 | `dispatch_scrapes` | Every hour at :00 | Check which markets are due, spawn scrape tasks |
 | `decay_and_verify` | Every hour at :30 | Update confidence scores, dispatch verification |
 | `cleanup_maintenance` | Daily at 3 AM | Deactivate dead listings, reset circuit breakers |
 | `send_daily_alerts` | Daily at 1 PM UTC (8 AM ET) | Email Pro users with new listings matching saved searches |
+| `check_tour_reminders` | Every 10 minutes | Check and send tour reminder notifications |
 
 ### Market Tiers
 | Tier | Frequency | Decay Rate | Cities |
@@ -267,13 +287,16 @@ curl -X PUT http://localhost:8000/api/admin/data-collection/markets/bryn-mawr \
 
 ## Key Files
 
-### Frontend - Core
+### Frontend - Core Pages
 - `app/page.tsx` - Main page with auth gate, search form + results grid, free search counter
 - `app/favorites/page.tsx` - User's saved favorites (requires auth)
 - `app/compare/page.tsx` - Enhanced comparison with Claude AI analysis, winner summary, category scores (Score gated to Pro)
 - `app/pricing/page.tsx` - Free vs Pro comparison with Stripe checkout button
 - `app/settings/page.tsx` - Profile, subscription management, data export, account deletion
 - `app/auth/callback/page.tsx` - OAuth callback handler
+- `app/landing/page.tsx` - Public landing page (with its own layout)
+- `app/tours/page.tsx` - Tour pipeline dashboard, grouped by stage
+- `app/tours/[id]/page.tsx` - Tour detail: notes, photos, voice, AI features
 
 ### Frontend - Components
 - `components/SearchForm.tsx` - Search form with all inputs, `onSearchMeta` callback for tier info
@@ -287,50 +310,106 @@ curl -X PUT http://localhost:8000/api/admin/data-collection/markets/bryn-mawr \
 - `components/ComparisonBar.tsx` - Floating bar showing comparison selection
 - `components/UpgradePrompt.tsx` - Reusable upgrade CTA (inline or block mode), links to /pricing
 - `components/CostBreakdownPanel.tsx` - Pro-only detailed cost breakdown with source indicators (scraped vs estimated)
+- `components/NearLocationInput.tsx` - Location input for proximity search
+- `components/RadiusSlider.tsx` - Radius filter for proximity search (Pro)
+- `components/TourCard.tsx` - Tour summary card for dashboard
+- `components/TourPrompt.tsx` - Start tour CTA on apartment cards
+- `components/TourScheduler.tsx` - Schedule tour dates
+- `components/VoiceCapture.tsx` - Voice note recording component
+- `components/DecisionBrief.tsx` - AI-generated decision summary (Pro)
+- `components/DayPlanner.tsx` - AI tour day planning (Pro)
+- `components/StarRating.tsx` - Star rating input for tours
+- `components/TagPicker.tsx` - Tag management for tours
+- `components/BottomNav.tsx` - Mobile bottom navigation bar
+- `components/FeedbackWidget.tsx` - Beta feedback submission widget
+- `components/InviteCodeBanner.tsx` - Invite code entry banner
+- `components/OnboardingWalkthrough.tsx` - Guided onboarding (Joyride)
 
 ### Frontend - State & Hooks
 - `contexts/AuthContext.tsx` - Google OAuth via Supabase, tier/isPro/refreshProfile (E2E test bypass in non-production)
 - `hooks/useFavorites.ts` - Favorites CRUD with optimistic updates, 5 favorite limit for free tier (`atLimit`)
 - `hooks/useComparison.ts` - Zustand store with persist for comparison state + search context
 - `lib/supabase.ts` - Supabase client and type definitions (Profile includes user_tier, subscription_status)
-- `lib/api.ts` - API client with auth headers (searchApartments, getApartmentsBatch, compareApartments)
+- `lib/api.ts` - API client with auth headers (searchApartments, getApartmentsBatch, compareApartments, tours API)
+- `lib/auth-store.ts` - Auth state persistence utilities
+- `lib/geocode.ts` - Geocoding utilities for proximity search (Nominatim)
 - `types/apartment.ts` - TypeScript interfaces (match_score nullable, SearchResponse includes tier/searches_remaining)
+- `types/tour.ts` - Tour pipeline TypeScript interfaces
 
 ### Backend - API
-- `app/main.py` - FastAPI app with tier-gated search endpoint, rate limiting middleware
+- `app/main.py` - FastAPI app with tier-gated search endpoint, score-batch endpoint, rate limiting, Prometheus metrics
 - `app/auth.py` - Supabase JWT verification (get_current_user, get_optional_user)
-- `app/routers/apartments.py` - Apartment detail, batch, compare endpoints (compare gated by tier)
+- `app/routers/apartments.py` - Apartment detail, batch, list, compare endpoints (compare gated by tier)
 - `app/routers/billing.py` - Stripe checkout, portal, and webhook endpoints
 - `app/routers/saved_searches.py` - Saved search CRUD (Pro only)
+- `app/routers/tours.py` - Full tour pipeline CRUD: tours, notes, photos, tags, AI features (inquiry email, day plan, decision brief, voice notes, note enhancement)
 - `app/routers/webhooks.py` - Supabase webhook handlers
-- `app/routers/data_collection.py` - Admin endpoints for scraping jobs
+- `app/routers/data_collection.py` - Admin endpoints for scraping jobs, markets, sources, metrics
+- `app/routers/feedback.py` - Beta feedback submission (auth required)
+- `app/routers/invite.py` - Invite code redemption + status, admin code generation
+- `app/routers/waitlist.py` - Public waitlist signup, admin listing
 - `app/schemas.py` - Pydantic models
-- `app/middleware/rate_limit.py` - Redis-based rate limiting (60/min auth, 10/min anon, 10/min expensive)
+- `app/middleware/rate_limit.py` - Redis-based rate limiting (120/min auth, 30/min anon, 20/min expensive)
 
 ### Backend - Services
-- `app/services/claude_service.py` - Claude AI integration (search scoring + comparison analysis)
-- `app/services/apartment_service.py` - Filter logic, ranking
+- `app/services/claude_service.py` - Claude AI integration (search scoring, comparison analysis, inquiry emails, day plans, note enhancement, decision briefs)
+- `app/services/apartment_service.py` - Filter logic, ranking, Claude semaphore
+- `app/services/scoring_service.py` - Heuristic scoring for free tier (non-AI fallback)
 - `app/services/tier_service.py` - Tier checking (Supabase profiles), Redis daily search metering, tier updates
 - `app/services/analytics_service.py` - Fire-and-forget event logging to Supabase analytics_events table
 - `app/services/cost_estimator.py` - True cost estimation from scraped fees + regional averages
+- `app/services/distance.py` - Haversine distance calculation for proximity search
+- `app/services/scrapers/apify_service.py` - Apify integration for apartments.com scraping
+- `app/services/scrapers/base_scraper.py` - Base scraper interface
+- `app/services/scrapers/scrapingbee_service.py` - ScrapingBee integration
+- `app/services/normalization/normalizer.py` - Data normalization
+- `app/services/normalization/address_standardizer.py` - Address standardization
+- `app/services/deduplication/deduplicator.py` - Duplicate detection
+- `app/services/storage/photo_service.py` - Tour photo management
+- `app/services/storage/s3_service.py` - AWS S3 integration for photo storage
+- `app/services/transcription/whisper_service.py` - OpenAI Whisper voice transcription
+- `app/services/monitoring/alerts.py` - Slack alert notifications
+- `app/services/monitoring/metrics.py` - Prometheus metrics collection
 - `app/data/apartments.json` - Fallback dataset (12 Bryn Mawr apartments, used in JSON mode)
 - `app/data/cost_estimates.json` - Regional utility cost lookup tables by zip prefix + bedroom count
-- `app/tasks/true_cost_tasks.py` - Celery task for recomputing true cost estimates
 
-### Backend - Data Collection (Infrastructure)
-- `app/celery_app.py` - Celery configuration and beat schedule (4 tasks including daily alerts)
-- `app/database.py` - Async SQLAlchemy setup
+### Backend - Tasks
+- `app/celery_app.py` - Celery configuration and beat schedule (5 tasks)
+- `app/tasks/dispatcher.py` - Market-driven scrape dispatcher
 - `app/tasks/scrape_tasks.py` - Scraping task definitions
+- `app/tasks/maintenance_tasks.py` - Listing cleanup, circuit breaker reset
 - `app/tasks/alert_tasks.py` - Daily email alerts for Pro users with saved searches (via Resend)
-- `app/services/scrapers/apify_service.py` - Apify integration
-- `app/services/normalization/normalizer.py` - Data normalization
-- `app/services/deduplication/deduplicator.py` - Duplicate detection
+- `app/tasks/true_cost_tasks.py` - Celery task for recomputing true cost estimates
+- `app/tasks/tour_reminder_tasks.py` - Tour reminder notifications
+- `app/tasks/transcription_tasks.py` - Async voice note transcription
 
-### Database
+### Backend - Data Layer
+- `app/database.py` - Async SQLAlchemy setup
+- `app/logging_config.py` - Logging configuration
+- `app/models.py` - SQLAlchemy models
+- `app/models/apartment.py` - Apartment model
+- `app/models/market_config.py` - Market configuration with tier system (hot/standard/cool)
+- `app/models/data_source.py` - Data source tracking
+- `app/models/scrape_job.py` - Scrape job state tracking
+
+### Database Migrations
 - `supabase/migrations/001_initial_schema.sql` - Supabase schema (profiles, favorites, saved_searches, notifications)
 - `supabase/migrations/002_add_tier_columns.sql` - Add user_tier, stripe_customer_id, subscription_status to profiles
 - `supabase/migrations/003_add_analytics_events.sql` - Analytics events table
 - `supabase/migrations/004_update_saved_searches.sql` - Add last_alerted_at, is_active to saved_searches
+- `supabase/migrations/005_tour_pipeline.sql` - Tour pipeline tables (tours, notes, photos, tags)
+- `supabase/migrations/006_beta_launch.sql` - Beta launch tables (invite codes, feedback)
+- `supabase/migrations/007_waitlist.sql` - Waitlist signups table
+- `supabase/migrations/008_tour_contact_info.sql` - Tour contact info fields
+
+### Infrastructure
+- `infra/main.tf` - Root Terraform configuration (AWS)
+- `infra/environments/dev.tfvars`, `qa.tfvars`, `prod.tfvars` - Per-environment variables
+- `infra/modules/` - Terraform modules: networking, alb, ecr, ecs, elasticache, rds, monitoring
+- `infra/bootstrap/` - Terraform state backend setup
+- `.github/workflows/ci.yml` - CI pipeline (lint, test)
+- `.github/workflows/deploy-backend.yml` - Backend deployment pipeline
+- `scripts/deploy.sh` - Deployment script
 
 ## Environment Variables
 
@@ -369,6 +448,12 @@ SCRAPINGBEE_API_KEY=your-scrapingbee-key
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/homescout
 REDIS_URL=redis://localhost:6379/0
 
+# Optional - Tour features
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+S3_BUCKET_NAME=homescout-tour-photos
+OPENAI_API_KEY=your-openai-key
+
 # CORS
 FRONTEND_URL=http://localhost:3000
 ```
@@ -376,7 +461,7 @@ FRONTEND_URL=http://localhost:3000
 ## Supabase Setup
 
 ### Database Schema
-Run all migrations in order in Supabase SQL Editor:
+Run all migrations (001-008) in order in Supabase SQL Editor:
 
 **Tables:**
 - `profiles` - User profiles with tier info (user_tier, stripe_customer_id, subscription_status, current_period_end)
@@ -384,6 +469,13 @@ Run all migrations in order in Supabase SQL Editor:
 - `saved_searches` - Saved search criteria with alert tracking (last_alerted_at, is_active)
 - `notifications` - User notifications
 - `analytics_events` - Event logging (search, compare, upgrade events)
+- `tours` - Tour pipeline entries (apartment_id, stage, star_rating, contact info)
+- `tour_notes` - Text and voice notes per tour
+- `tour_photos` - Photo metadata per tour (S3 keys)
+- `tour_tags` - User-defined tags per tour
+- `invite_codes` - Beta invite codes with usage tracking
+- `feedback` - Beta feedback submissions
+- `waitlist` - Waitlist signups (email, name, referral_source)
 
 **Row Level Security (RLS):**
 - Users can only access their own data
@@ -391,7 +483,7 @@ Run all migrations in order in Supabase SQL Editor:
 - Service role policies for backend tier updates and alert tracking
 
 ### Authentication
-1. Enable Google OAuth in Supabase Dashboard → Authentication → Providers
+1. Enable Google OAuth in Supabase Dashboard -> Authentication -> Providers
 2. Add Google Client ID and Secret from Google Cloud Console
 3. Set redirect URL: `http://localhost:3000/auth/callback`
 
@@ -400,13 +492,35 @@ Run all migrations in order in Supabase SQL Editor:
 ### Search & Apartments
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/api/search` | POST | Optional | Search; Pro gets Claude AI scoring, free gets filtered results (3/day limit) |
+| `/api/search` | POST | Optional | Search; Pro gets Claude AI scoring, free gets heuristic scoring (3/day limit) |
+| `/api/search/score-batch` | POST | Required (Pro) | Lazy AI scoring for paginated results (max 10 apartments) |
 | `/api/apartments/{id}` | GET | No | Get single apartment (DB or JSON) |
 | `/api/apartments/batch` | POST | No | Get multiple apartments by IDs (DB or JSON) |
 | `/api/apartments/compare` | POST | Optional | Compare 2-3 apartments; Pro gets Claude analysis, free gets basic comparison |
 | `/api/apartments/count` | GET | No | Total apartment count |
 | `/api/apartments/list` | GET | No | List apartments with filters (city, rent, bedrooms) |
 | `/api/apartments/stats` | GET | No | Apartment statistics by city |
+
+### Tours (Auth Required)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/tours` | POST | Create tour for an apartment |
+| `/api/tours` | GET | List user's tours |
+| `/api/tours/{id}` | GET | Get tour details |
+| `/api/tours/{id}` | PATCH | Update tour (stage, rating, contact info) |
+| `/api/tours/{id}` | DELETE | Delete tour |
+| `/api/tours/{id}/notes` | POST/GET | Create/list text notes |
+| `/api/tours/{id}/notes/voice` | POST | Upload voice note (async transcription) |
+| `/api/tours/{id}/notes/{nid}` | DELETE | Delete note |
+| `/api/tours/{id}/photos` | POST/GET | Upload/list photos |
+| `/api/tours/{id}/photos/{pid}` | PATCH/DELETE | Update caption/delete photo |
+| `/api/tours/{id}/tags` | POST | Add tag |
+| `/api/tours/{id}/tags/{tid}` | PATCH/DELETE | Update/delete tag |
+| `/api/tours/tags/suggestions` | GET | Get tag suggestions |
+| `/api/tours/{id}/inquiry-email` | POST | AI-generated inquiry email (Pro) |
+| `/api/tours/{id}/enhance-note` | POST | AI note enhancement (Pro) |
+| `/api/tours/day-plan` | POST | AI tour day planner (Pro) |
+| `/api/tours/decision-brief` | POST | AI decision brief (Pro) |
 
 ### Billing & Saved Searches
 | Endpoint | Method | Auth | Description |
@@ -417,22 +531,45 @@ Run all migrations in order in Supabase SQL Editor:
 | `/api/saved-searches` | POST | Required (Pro) | Create a saved search |
 | `/api/saved-searches/{id}` | DELETE | Required | Delete a saved search |
 
+### Invite & Waitlist
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/invite/redeem` | POST | Required | Redeem invite code (90-day Pro trial) |
+| `/api/invite/status` | GET | Required | Check invite status |
+| `/api/admin/invite-codes` | POST | Admin key | Generate invite codes |
+| `/api/waitlist` | POST | No | Join waitlist |
+| `/api/admin/waitlist` | GET | Network-level | List waitlist signups |
+| `/api/feedback` | POST | Required | Submit beta feedback |
+
 ### Webhooks
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/webhooks/supabase` | POST | Handle Supabase events |
+| `/webhooks/supabase/check-matches` | POST | Handle Supabase events |
 | `/api/webhooks/stripe` | POST | Handle Stripe events (checkout.completed, subscription.updated/deleted, payment_failed) |
 
 ### Admin (Data Collection)
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/admin/data-collection/jobs` | POST | Trigger manual scrape |
-| `/api/admin/data-collection/jobs` | GET | List scrape jobs |
+| `/api/admin/data-collection/jobs` | POST/GET | Trigger/list scrape jobs |
+| `/api/admin/data-collection/jobs/{id}` | GET | Job status |
+| `/api/admin/data-collection/sources` | GET | List data sources |
+| `/api/admin/data-collection/sources/{id}` | PUT | Update data source |
+| `/api/admin/data-collection/markets` | GET/POST | List/create markets |
+| `/api/admin/data-collection/markets/{id}` | PUT | Update market config |
+| `/api/admin/data-collection/markets/{id}/scrape` | POST | Trigger immediate scrape |
+| `/api/admin/data-collection/metrics` | GET | Scraping metrics |
 | `/api/admin/data-collection/health` | GET | Data collection health check |
+
+### Monitoring
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/metrics` | GET | Prometheus metrics |
 
 ## Claude AI Integration
 
-The Claude integration has two modes, both in `claude_service.py`:
+The Claude integration uses two models, both configured in `claude_service.py`:
+- **Haiku** (`claude-haiku-4-5-20251001`): Fast, structured output - search scoring, inquiry emails, day plans, note enhancement
+- **Sonnet** (`claude-sonnet-4-5-20250929`): Deep reasoning - comparison analysis, decision briefs
 
 ### Search Scoring (`score_apartments()`)
 - **System prompt**: Defines Claude as apartment matching expert
@@ -470,17 +607,24 @@ The Claude integration has two modes, both in `claude_service.py`:
 }
 ```
 
+### Tour AI Features
+- **Inquiry email**: Generates professional apartment inquiry email from tour data
+- **Day planner**: Plans efficient multi-tour day with travel routing
+- **Note enhancement**: Expands brief notes into detailed observations
+- **Decision brief**: Comprehensive comparison of toured apartments with recommendation
+
 ## Monetization & Tier System
 
 ### Tier Model (Renter Freemium)
-| Feature | Free | Pro ($12/mo) |
+| Feature | Free | Pro ($12/mo or invite code) |
 |---------|------|-------------|
-| Search | 3/day, no AI scoring | Unlimited + Claude AI match scores |
+| Search | 3/day, heuristic scoring only | Unlimited + Claude AI match scores |
 | Compare | Basic table only | Claude head-to-head analysis |
 | Favorites | 5 max | Unlimited |
 | Saved Searches | None | Unlimited + daily email alerts |
 | True Cost | Headline number only | Full breakdown with sources |
-| Rate Limit | 10 req/min | 60 req/min |
+| Tours | Basic CRUD | AI inquiry emails, day planner, decision briefs, note enhancement |
+| Rate Limit | 30 req/min | 120 req/min |
 
 ### Backend Auth & Tier Flow
 - `app/auth.py` decodes Supabase JWTs (HS256, audience "authenticated")
@@ -493,15 +637,21 @@ The Claude integration has two modes, both in `claude_service.py`:
 - Checkout: `POST /api/billing/checkout` creates Stripe Checkout Session
 - Portal: `POST /api/billing/portal` creates Stripe Customer Portal (manage subscription)
 - Webhooks handle 4 events:
-  - `checkout.session.completed` → set tier to "pro", store stripe_customer_id
-  - `customer.subscription.updated` → update subscription_status and current_period_end
-  - `customer.subscription.deleted` → revert tier to "free"
-  - `invoice.payment_failed` → set subscription_status to "past_due"
+  - `checkout.session.completed` -> set tier to "pro", store stripe_customer_id
+  - `customer.subscription.updated` -> update subscription_status and current_period_end
+  - `customer.subscription.deleted` -> revert tier to "free"
+  - `invoice.payment_failed` -> set subscription_status to "past_due"
+
+### Invite Code System
+- Admin generates codes via `POST /api/admin/invite-codes` (requires X-Admin-Key header)
+- Users redeem codes via `POST /api/invite/redeem` -> sets tier to "pro" for 90 days
+- Codes have configurable max_uses (1-100), atomic redemption prevents race conditions
+- InviteCodeBanner component on frontend for code entry
 
 ### Rate Limiting
 - Redis-based sliding window counter per minute
-- Authenticated: 60 req/min, Anonymous: 10 req/min
-- Expensive paths (`/api/search`, `/api/apartments/compare`): 10 req/min
+- Authenticated: 120 req/min, Anonymous: 30 req/min
+- Expensive paths (`/api/search`, `/api/apartments/compare`): 20 req/min
 - Returns HTTP 429 with `{"detail": "Rate limit exceeded. Please slow down."}`
 - Fail-open: if Redis unavailable, requests pass through
 - Disabled during tests via `TESTING` env var
@@ -541,6 +691,15 @@ The Claude integration has two modes, both in `claude_service.py`:
 - Comparison table with Overall Score row, rent/beds/baths/amenities
 - Zustand store with `persist` middleware keeps state across page navigation
 
+### Touring Pipeline
+- Tour lifecycle: interested -> outreach_sent -> scheduled -> toured -> deciding
+- Stages are linear but skippable
+- Notes (text + voice), photos, star ratings, tags per tour
+- Pro AI features: inquiry email, day planner, note enhancement, decision brief
+- Voice notes transcribed async via OpenAI Whisper + Celery
+- Photos stored in S3, managed via photo_service
+- Tour reminders checked every 10 minutes via Celery beat
+
 ### Saved Searches (Pro only)
 - Create saved search criteria via `/api/saved-searches`
 - Daily email alerts for new matching apartments (via Resend)
@@ -558,13 +717,21 @@ The Claude integration has two modes, both in `claude_service.py`:
 - `/settings` page: profile info, subscription management (via Stripe Portal), data export, account deletion
 - Settings page handles `?upgrade=success` query param with success banner and profile refresh
 
+### Beta Features
+- Landing page at `/landing` with its own layout
+- Invite code system (90-day Pro trial via InviteCodeBanner)
+- Onboarding walkthrough (Joyride-based OnboardingWalkthrough component)
+- Feedback widget for bug reports and suggestions
+- Waitlist signup (no auth required)
+- Mobile bottom navigation (BottomNav component)
+
 ## Development Notes
 
 - Budget filtering is strict (no flexibility) - `apartment_service.py`
 - Bedrooms filter is exact match, bathrooms is "at least"
 - City matching is case-insensitive partial match on address
 - Image domains configured in `next.config.ts` (images.unsplash.com)
-- CORS configured in `main.py` for localhost:3000
+- CORS configured in `main.py` for localhost:3000 + FRONTEND_URL
 - Search scoring uses `claude-haiku-4-5-20251001` (fast, structured output)
 - Comparison analysis and decision briefs use `claude-sonnet-4-5-20250929` (deep reasoning)
 - Inquiry emails, day plans, and note enhancement use Haiku
@@ -572,7 +739,7 @@ The Claude integration has two modes, both in `claude_service.py`:
 - Favorites use optimistic updates with rollback on error, 5 limit enforced on frontend for free tier
 - Auth has 5-second timeout to prevent infinite loading
 - Don't use `--reload` flag with uvicorn (causes venv file watching issues)
-- Search endpoint: Pro gets Claude scoring, free/anonymous get filtered results only; response includes `tier` and `searches_remaining`
+- Search endpoint: Pro gets Claude scoring, free/anonymous get heuristic scoring only; response includes `tier` and `searches_remaining`
 - Compare endpoint: Pro gets Claude analysis, free/anonymous get basic comparison table; Claude called only for Pro with 2+ apartments
 - All apartment endpoints (get, batch, compare) support both DB and JSON modes via `is_database_enabled()`
 - E2E tests mock auth via `localStorage.__test_auth_user` + Supabase API route interception
@@ -592,6 +759,8 @@ The Claude integration has two modes, both in `claude_service.py`:
 - 15-second timeout on all Claude calls with heuristic fallback for scoring
 - Concurrent Claude calls limited to 5 via `_claude_semaphore` in `apartment_service.py`
 - Token usage logged after every Claude call (`claude_usage` log prefix) for cost tracking
+- Proximity search uses Haversine distance (`distance.py`) and Nominatim geocoding (`lib/geocode.ts`)
+- Heuristic scoring (`scoring_service.py`) provides non-AI fallback for free tier searches
 
 ## Backend Testing
 
@@ -600,16 +769,32 @@ cd backend
 ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
 ```
 
-77 tests across 9 test files:
+259 tests across 25 test files:
 - `test_auth.py` (6) - JWT verification, get_current_user, get_optional_user
 - `test_tier_service.py` (5) - Tier checking, Redis metering, fail-open
 - `test_billing.py` (13) - Stripe checkout, portal, webhooks, customer lookup
-- `test_search_gating.py` (9) - Anonymous/free/pro search behavior, daily limits
-- `test_compare_gating.py` (9) - Anonymous/free/pro compare behavior, Claude gating
+- `test_search_gating.py` (10) - Anonymous/free/pro search behavior, daily limits
+- `test_search_endpoint.py` (8) - Search endpoint integration tests
+- `test_compare_gating.py` (11) - Anonymous/free/pro compare behavior, Claude gating
 - `test_saved_searches.py` (8) - CRUD, auth required, Pro-only creation
 - `test_rate_limit.py` (13) - Rate limits, expensive paths, Redis fail-open
 - `test_alert_tasks.py` (5) - Daily email alerts, filtering, error handling
 - `test_webhooks.py` (2) - Supabase webhook auth
+- `test_tours.py` (39) - Full tour pipeline CRUD + AI features
+- `test_apartments_router.py` (12) - Apartment list, detail, batch endpoints
+- `test_scoring_service.py` (32) - Heuristic scoring logic
+- `test_cost_estimator.py` (11) - True cost estimation
+- `test_distance.py` (10) - Haversine distance calculations
+- `test_proximity_search.py` (5) - Proximity search filtering
+- `test_budget_filter.py` (3) - Budget filtering edge cases
+- `test_apify_availability.py` (11) - Apify availability parsing
+- `test_apify_type_safety.py` (31) - Apify response type safety
+- `test_claude_cache.py` (4) - Claude prompt caching
+- `test_claude_data.py` (4) - Claude data formatting
+- `test_photo_service.py` (6) - Tour photo S3 integration
+- `test_whisper_service.py` (4) - Whisper transcription
+- `test_transcription_tasks.py` (3) - Async transcription tasks
+- `test_tour_reminder_tasks.py` (3) - Tour reminder scheduling
 
 Tests use `TESTING=1` env var (set in conftest.py) to disable rate limiting middleware.
 
@@ -617,9 +802,13 @@ Tests use `TESTING=1` env var (set in conftest.py) to disable rate limiting midd
 
 ```bash
 cd frontend
-npx playwright test            # Run all 25 tests
+npx playwright test            # Run all tests
 npx playwright test --ui       # Run with Playwright UI
 npx playwright test --headed   # Run in headed browser mode
 ```
+
+Test files:
+- `e2e/homescout.spec.ts` - Core app flows (search, compare, favorites, pricing)
+- `e2e/tours.spec.ts` - Tour pipeline E2E tests
 
 Tests mock auth via `mockAuth()` helper that injects a test user into `localStorage.__test_auth_user` and intercepts Supabase API calls. The `AuthContext` checks for this key in non-production environments before initializing the real Supabase auth flow.

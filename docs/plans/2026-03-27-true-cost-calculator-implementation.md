@@ -1569,3 +1569,909 @@ Expected: Build succeeds with no type errors.
 ```bash
 git add -A && git commit -m "fix: address test/lint issues from true cost calculator"
 ```
+
+---
+
+# Phase 2: Fee Extraction Fix — Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Fix silent fee data loss in the Apify scraper so `true_cost_monthly` is accurate. Three bugs: nested fees format ignored, common fees have no matching pattern, unmatched fees silently dropped.
+
+**Architecture:** Fix the scraper's fee parsing to handle both flat and nested Apify formats, widen matching patterns, add `other_monthly_fees` catch-all across the full stack (ScrapedListing → DB → CostEstimator → API → frontend), and resolve estimate vs scraped conflicts for insurance and internet.
+
+**Tech Stack:** Python/FastAPI, PostgreSQL, Next.js/TypeScript
+
+---
+
+### Task 8: Parse nested `fees[]` list format from epctex Apify actor
+
+**Files:**
+- Modify: `backend/app/services/scrapers/apify_service.py:510-554`
+- Test: `backend/tests/test_apify_type_safety.py`
+
+**Step 1: Write failing tests for nested fees format**
+
+Add to `backend/tests/test_apify_type_safety.py`:
+
+```python
+def test_fees_as_nested_list_extracts_application_fee(scraper):
+    """The epctex actor returns fees as a list of {title, policies} objects."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Fees",
+            "policies": [{
+                "header": "Other Fees",
+                "values": [
+                    {"key": "Application Fee", "value": "$50"},
+                    {"key": "Admin Fee", "value": "$150"},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.application_fee == 50
+
+
+def test_fees_as_nested_list_extracts_monthly_fees(scraper):
+    """Nested format should extract pet rent and parking."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Pet Policies (Pets Negotiable)",
+            "policies": [{
+                "header": "Dogs Allowed",
+                "values": [
+                    {"key": "Monthly Pet Rent", "value": "$35"},
+                ]
+            }]
+        },
+        {
+            "title": "Parking",
+            "policies": [{
+                "header": "Covered Parking",
+                "values": [
+                    {"key": "Assigned Parking", "value": "$115/mo"},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.pet_rent == 35
+    assert result.parking_fee == 115
+
+
+def test_fees_as_nested_list_extracts_deposit(scraper):
+    """Nested format should extract security deposit."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Fees",
+            "policies": [{
+                "header": "Deposits",
+                "values": [
+                    {"key": "Security Deposit", "value": "$1,500"},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.security_deposit == 1500
+
+
+def test_fees_nested_list_with_included_utilities(scraper):
+    """Nested format should detect included utilities and add to amenities."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Details",
+            "policies": [{
+                "header": "Utilities Included",
+                "values": [
+                    {"key": "Water", "value": ""},
+                    {"key": "Trash Removal", "value": ""},
+                    {"key": "Sewer", "value": ""},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert "Water Included" in result.amenities
+    assert "Trash Removal Included" in result.amenities
+```
+
+**Step 2: Run tests to verify they fail**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_apify_type_safety.py -v -k "nested_list"
+```
+Expected: FAIL — nested list fees are silently reset to `{}`.
+
+**Step 3: Add `_extract_fees_from_nested_list` method to `ApifyService`**
+
+Add this new method to `ApifyService` class in `backend/app/services/scrapers/apify_service.py` (before `_normalize_apartments_com_listing`):
+
+```python
+def _extract_fees_from_nested_list(self, fees_list: list) -> tuple:
+    """Parse the epctex nested fees format.
+
+    Input: [{title, policies: [{header, values: [{key, value}]}]}]
+    Returns: (monthly_fees, one_time_fees, included_utilities)
+        monthly/one_time are [{name, amount}] dicts for the existing matching loop.
+        included_utilities is a list of utility name strings.
+    """
+    monthly_fees = []
+    one_time_fees = []
+    included_utilities = []
+
+    ONE_TIME_KEYS = {"deposit", "security", "application", "admin", "one time", "one-time", "move-in"}
+
+    for section in fees_list:
+        if not isinstance(section, dict):
+            continue
+        title = (section.get("title") or "").lower()
+        policies = section.get("policies") or []
+        if not isinstance(policies, list):
+            continue
+
+        for policy in policies:
+            if not isinstance(policy, dict):
+                continue
+            header = (policy.get("header") or "").lower()
+            values = policy.get("values") or []
+            if not isinstance(values, list):
+                continue
+
+            # Detect "Utilities Included" sections
+            if "utilities included" in header or ("included" in header and "fee" not in header):
+                for v in values:
+                    if isinstance(v, dict) and v.get("key"):
+                        included_utilities.append(v["key"])
+                continue
+
+            for v in values:
+                if not isinstance(v, dict):
+                    continue
+                key = (v.get("key") or "").lower()
+                value = v.get("value") or ""
+                amount = self._parse_fee_amount(value)
+                name = f"{header} {key}".strip()
+                fee_entry = {"name": name, "amount": value}
+
+                # Classify: pet section
+                if "pet" in title or "pet" in header:
+                    if "monthly" in key or "rent" in key:
+                        monthly_fees.append(fee_entry)
+                    elif any(k in key for k in ONE_TIME_KEYS):
+                        one_time_fees.append(fee_entry)
+                    elif amount and amount < 100:
+                        monthly_fees.append(fee_entry)
+                    elif amount:
+                        one_time_fees.append(fee_entry)
+                # Classify: parking section
+                elif "parking" in title or "parking" in header:
+                    monthly_fees.append(fee_entry)
+                # Classify: by key content
+                elif any(k in key for k in ONE_TIME_KEYS) or any(k in header for k in ONE_TIME_KEYS):
+                    one_time_fees.append(fee_entry)
+                elif amount:
+                    # Heuristic: >= $200 likely one-time
+                    if amount >= 200:
+                        one_time_fees.append(fee_entry)
+                    else:
+                        monthly_fees.append(fee_entry)
+
+    return monthly_fees, one_time_fees, included_utilities
+```
+
+**Step 4: Update fee extraction block to handle both formats**
+
+Replace lines 517-522 in `_normalize_apartments_com_listing`:
+
+```python
+        # Extract fee data from raw listing
+        pet_rent = None
+        parking_fee = None
+        amenity_fee = None
+        application_fee = None
+        security_deposit = None
+
+        # Parse fees — handle both flat and nested formats
+        fees_raw = raw.get("fees")
+        monthly_fees = raw.get("monthlyFees") or []
+        one_time_fees = raw.get("oneTimeFees") or []
+        included_utilities = []
+
+        if isinstance(fees_raw, dict):
+            # Flat dict format: {monthly: [...], oneTime: [...]}
+            monthly_fees = monthly_fees or fees_raw.get("monthly", [])
+            one_time_fees = one_time_fees or fees_raw.get("oneTime", [])
+        elif isinstance(fees_raw, list) and fees_raw:
+            # Nested list format from epctex actor
+            nested_monthly, nested_one_time, included_utilities = self._extract_fees_from_nested_list(fees_raw)
+            monthly_fees = monthly_fees or nested_monthly
+            one_time_fees = one_time_fees or nested_one_time
+```
+
+After the petPolicy block (after line 553), add:
+
+```python
+        # Add included utilities to amenities so CostEstimator detects them
+        for util_name in included_utilities:
+            amenity_str = f"{util_name} Included"
+            if amenity_str.lower() not in {a.lower() for a in amenities}:
+                amenities.append(amenity_str)
+```
+
+**Step 5: Run tests to verify they pass**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_apify_type_safety.py -v -k "nested_list"
+```
+Expected: PASS
+
+**Step 6: Run full test suite for regressions**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
+```
+Expected: All existing tests still pass.
+
+**Step 7: Commit**
+
+```bash
+git add backend/app/services/scrapers/apify_service.py backend/tests/test_apify_type_safety.py
+git commit -m "fix(scraper): parse nested fees list format from epctex Apify actor
+
+The epctex apartments-scraper-api returns fees as a list of
+{title, policies} objects, not a flat dict. The old code silently
+reset this to {} and lost all fee data. Now handles both formats
+and detects included utilities from nested sections."
+```
+
+---
+
+### Task 9: Add `other_monthly_fees` catch-all field across the stack
+
+**Files:**
+- Modify: `backend/app/services/scrapers/base_scraper.py:52-57`
+- Modify: `backend/app/models/apartment.py:57-75`
+- Modify: `backend/app/schemas.py:44-58`
+- Modify: `backend/app/services/cost_estimator.py`
+- Modify: `backend/app/services/normalization/normalizer.py:155-161`
+- Modify: `backend/app/routers/apartments.py:38-80`
+- Modify: `backend/app/tasks/true_cost_tasks.py`
+- Test: `backend/tests/test_cost_estimator.py`
+
+**Step 1: Write failing tests**
+
+Add to `backend/tests/test_cost_estimator.py` inside `TestCostEstimator`:
+
+```python
+    def test_other_monthly_fees_included_in_total(self):
+        """other_monthly_fees should be added to true_cost_monthly."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=[],
+            scraped_fees={"other_monthly_fees": 27},
+        )
+        assert breakdown["other_monthly_fees"] == 27
+        assert breakdown["true_cost_monthly"] == (
+            1500 + 27
+            + breakdown["est_electric"] + breakdown["est_gas"]
+            + breakdown["est_water"] + breakdown["est_internet"]
+            + breakdown["est_renters_insurance"] + breakdown["est_laundry"]
+        )
+
+    def test_other_monthly_fees_in_sources(self):
+        """other_monthly_fees should appear in scraped sources."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=[],
+            scraped_fees={"other_monthly_fees": 20},
+        )
+        assert "other_monthly_fees" in breakdown["sources"]["scraped"]
+
+    def test_other_monthly_fees_defaults_to_zero(self):
+        """Missing other_monthly_fees should default to 0."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=[],
+            scraped_fees={},
+        )
+        assert breakdown["other_monthly_fees"] == 0
+```
+
+**Step 2: Run tests to verify they fail**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_cost_estimator.py -v -k "other_monthly"
+```
+Expected: FAIL — `other_monthly_fees` key doesn't exist.
+
+**Step 3: Add field to ScrapedListing**
+
+In `backend/app/services/scrapers/base_scraper.py`, after line 57 (`security_deposit`), add:
+
+```python
+    other_monthly_fees: Optional[int] = None  # Catch-all for unmatched monthly fees
+```
+
+In `to_dict()` (line 95), add:
+
+```python
+            "other_monthly_fees": self.other_monthly_fees,
+```
+
+**Step 4: Add column to ApartmentModel**
+
+In `backend/app/models/apartment.py`, after line 62 (`security_deposit`), add:
+
+```python
+    other_monthly_fees = Column(Integer, nullable=True)  # Catch-all for unmatched monthly fees
+```
+
+In `to_dict()`, after the `security_deposit` line (line 149), add:
+
+```python
+            "other_monthly_fees": self.other_monthly_fees,
+```
+
+In `to_summary_dict()`, after the `security_deposit` line (line 196), add:
+
+```python
+            "other_monthly_fees": self.other_monthly_fees,
+```
+
+**Step 5: Add field to CostEstimator**
+
+In `backend/app/services/cost_estimator.py`:
+
+After line 102 (`amenity_fee`), add:
+```python
+        other_monthly_fees = scraped_fees.get("other_monthly_fees") or 0
+```
+
+Update the `monthly_extras` sum (line 109-113) to include it:
+```python
+        monthly_extras = (
+            pet_rent + parking_fee + amenity_fee + other_monthly_fees
+            + est_electric + est_gas + est_water
+            + est_internet + est_renters_insurance + est_laundry
+        )
+```
+
+Update `scraped_sources` (line 118-121):
+```python
+        scraped_sources = [
+            k for k in ("pet_rent", "parking_fee", "amenity_fee", "other_monthly_fees")
+            if scraped_fees.get(k)
+        ]
+```
+
+Add to return dict (after `"amenity_fee": amenity_fee,` around line 148):
+```python
+            "other_monthly_fees": other_monthly_fees,
+```
+
+**Step 6: Add field to Pydantic schema**
+
+In `backend/app/schemas.py`, in `CostBreakdown` class, after `amenity_fee` (line 49):
+
+```python
+    other_monthly_fees: int = 0
+```
+
+**Step 7: Update normalizer**
+
+In `backend/app/services/normalization/normalizer.py`, add to the `scraped_fees` dict (after line 159):
+
+```python
+            "other_monthly_fees": data.get("other_monthly_fees"),
+```
+
+**Step 8: Update apartments router**
+
+In `backend/app/routers/apartments.py`:
+
+In `_add_cost_breakdown()`, add to the `scraped_fees` dict (after line 51):
+```python
+                "other_monthly_fees": apartment.get("other_monthly_fees"),
+```
+
+In the `cost_breakdown` reconstruction (after line 63), add:
+```python
+            "other_monthly_fees": apartment.get("other_monthly_fees") or 0,
+```
+
+In `_build_sources()` (line 78), update:
+```python
+    scraped = [k for k in ("pet_rent", "parking_fee", "amenity_fee", "other_monthly_fees") if apartment.get(k)]
+```
+
+**Step 9: Update true_cost_tasks.py**
+
+In `backend/app/tasks/true_cost_tasks.py`, add to `scraped_fees` dict (after line 41):
+```python
+                    "other_monthly_fees": apt.other_monthly_fees,
+```
+
+**Step 10: Run tests to verify they pass**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_cost_estimator.py -v
+```
+Expected: All pass including the 3 new ones.
+
+**Step 11: Run full backend test suite**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
+```
+Expected: All pass.
+
+**Step 12: Commit**
+
+```bash
+git add backend/
+git commit -m "feat(cost): add other_monthly_fees catch-all field across the stack
+
+Fees that don't match pet/parking/amenity categories now accumulate
+in other_monthly_fees instead of being silently dropped. Field added
+to ScrapedListing, ApartmentModel, CostEstimator, schemas, normalizer,
+router, and recompute task."
+```
+
+---
+
+### Task 10: Widen fee matching patterns and populate catch-all in scraper
+
+**Files:**
+- Modify: `backend/app/services/scrapers/apify_service.py:524-534`
+- Test: `backend/tests/test_apify_type_safety.py`
+
+**Step 1: Write failing tests**
+
+Add to `backend/tests/test_apify_type_safety.py`:
+
+```python
+def test_utility_admin_fee_captured(scraper):
+    """Utility billing admin fee should go to other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Utility Billing Admin Fee", "amount": "$6.44"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 6
+
+
+def test_pest_control_fee_captured(scraper):
+    """Pest control fee should go to other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Pest Control", "amount": "$5"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 5
+
+
+def test_sewer_fee_captured(scraper):
+    """Sewer fee should go to other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Sewer", "amount": "$15"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 15
+
+
+def test_mandatory_insurance_goes_to_amenity_fee(scraper):
+    """Mandatory property insurance should be captured in amenity_fee."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Renters Insurance Program", "amount": "$14.50"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.amenity_fee == 14
+    # Should also inject amenity for CostEstimator to zero out the estimate
+    assert any("insurance" in a.lower() for a in result.amenities)
+
+
+def test_multiple_unmatched_fees_accumulate(scraper):
+    """Multiple unmatched fees should accumulate in other_monthly_fees."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Utility Billing Admin", "amount": "$6"},
+        {"name": "Pest Control", "amount": "$5"},
+        {"name": "Sewer", "amount": "$15"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.other_monthly_fees == 26
+
+
+def test_garage_parking_captured(scraper):
+    """Garage fee should match parking pattern."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Garage Parking", "amount": "$115"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.parking_fee == 115
+
+
+def test_valet_trash_captured(scraper):
+    """Valet trash fee should match amenity pattern."""
+    raw = {**_base(), "monthlyFees": [
+        {"name": "Valet Trash", "amount": "$20"},
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.amenity_fee == 20
+```
+
+**Step 2: Run tests to verify they fail**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_apify_type_safety.py -v -k "utility_admin or pest_control or sewer or mandatory_insurance or unmatched or garage or valet"
+```
+Expected: FAIL
+
+**Step 3: Widen fee matching and add catch-all**
+
+Replace the monthly fee matching block in `apify_service.py` (lines 524-534):
+
+```python
+        other_monthly = 0
+
+        if isinstance(monthly_fees, list):
+            for fee in monthly_fees:
+                if isinstance(fee, dict):
+                    name = (fee.get("name") or fee.get("label") or "").lower()
+                    amount = self._parse_fee_amount(fee.get("amount") or fee.get("value"))
+                    if not amount:
+                        continue
+                    if "pet" in name or "dog" in name or "cat" in name:
+                        pet_rent = amount
+                    elif "parking" in name or "garage" in name:
+                        parking_fee = amount
+                    elif "amenity" in name or "community" in name or "trash" in name or "valet" in name:
+                        amenity_fee = (amenity_fee or 0) + amount
+                    elif "insurance" in name:
+                        # Mandatory property insurance — add to amenity_fee and flag it
+                        amenity_fee = (amenity_fee or 0) + amount
+                        amenities.append("Renters Insurance Required")
+                    else:
+                        # Catch-all: utility admin, pest control, sewer, etc.
+                        other_monthly += amount
+                        logger.debug(f"Unmatched monthly fee captured: '{name}' = ${amount}")
+```
+
+After the petPolicy block and the included_utilities injection, set the field on the ScrapedListing construction (around line 635-641). Add `other_monthly_fees=other_monthly or None` to the ScrapedListing constructor call.
+
+**Step 4: Run tests to verify they pass**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_apify_type_safety.py -v -k "utility_admin or pest_control or sewer or mandatory_insurance or unmatched or garage or valet"
+```
+Expected: PASS
+
+**Step 5: Run full test suite**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
+```
+Expected: All pass.
+
+**Step 6: Commit**
+
+```bash
+git add backend/app/services/scrapers/apify_service.py backend/tests/test_apify_type_safety.py
+git commit -m "fix(scraper): widen fee patterns and capture unmatched fees
+
+Added garage, valet, insurance matching. Mandatory property insurance
+injected as amenity for estimate conflict resolution. Unmatched monthly
+fees accumulate in other_monthly_fees. Logged at DEBUG level."
+```
+
+---
+
+### Task 11: Resolve estimated vs scraped insurance and internet conflicts
+
+**Files:**
+- Modify: `backend/app/services/cost_estimator.py`
+- Test: `backend/tests/test_cost_estimator.py`
+
+**Step 1: Write failing tests**
+
+Add to `backend/tests/test_cost_estimator.py` inside `TestCostEstimator`:
+
+```python
+    def test_scraped_insurance_zeroes_estimate(self):
+        """When amenities indicate mandatory insurance, est_renters_insurance should be 0."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=["Renters Insurance Required"],
+            scraped_fees={"amenity_fee": 14},
+        )
+        assert breakdown["est_renters_insurance"] == 0
+        assert "renters_insurance" in breakdown["sources"]["included"]
+
+    def test_internet_included_zeroes_estimate(self):
+        """When amenities say internet included, est_internet should be 0."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=["Internet Included"],
+            scraped_fees={},
+        )
+        assert breakdown["est_internet"] == 0
+        assert "internet" in breakdown["sources"]["included"]
+
+    def test_wifi_included_zeroes_estimate(self):
+        """WiFi Included should also zero est_internet."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=["WiFi Included"],
+            scraped_fees={},
+        )
+        assert breakdown["est_internet"] == 0
+```
+
+**Step 2: Run tests to verify they fail**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_cost_estimator.py -v -k "scraped_insurance or internet_included or wifi_included"
+```
+Expected: FAIL
+
+**Step 3: Add detection constants and update logic**
+
+In `backend/app/services/cost_estimator.py`, add after line 27 (after `_IN_UNIT_LAUNDRY`):
+
+```python
+_INSURANCE_REQUIRED = {"renters insurance required", "renters insurance program", "insurance required"}
+_INTERNET_INCLUDED = {"internet included", "wifi included", "wi-fi included", "high-speed internet included"}
+```
+
+In `compute_true_cost()`, after line 89 (`has_in_unit_laundry`), add:
+
+```python
+        insurance_required = bool(amenity_set & _INSURANCE_REQUIRED)
+        internet_included = all_included or bool(amenity_set & _INTERNET_INCLUDED)
+```
+
+Update line 95-96:
+
+```python
+        est_internet = 0 if internet_included else estimates["internet"]
+        est_renters_insurance = 0 if insurance_required else estimates["renters_insurance"]
+```
+
+Add to `included_sources` block (after the laundry check around line 141):
+
+```python
+        if insurance_required:
+            included_sources.append("renters_insurance")
+        if internet_included:
+            included_sources.append("internet")
+```
+
+**Step 4: Run tests to verify they pass**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/test_cost_estimator.py -v
+```
+Expected: All pass.
+
+**Step 5: Run full test suite**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
+```
+Expected: All pass.
+
+**Step 6: Commit**
+
+```bash
+git add backend/app/services/cost_estimator.py backend/tests/test_cost_estimator.py
+git commit -m "fix(cost): resolve estimated vs scraped insurance and internet conflicts
+
+When property mandates renters insurance (captured in amenity_fee),
+est_renters_insurance is zeroed to prevent double-counting.
+When Internet/WiFi is included in amenities, est_internet is zeroed.
+Both tracked in sources.included for transparency."
+```
+
+---
+
+### Task 12: Update frontend for `other_monthly_fees` and new included sources
+
+**Files:**
+- Modify: `frontend/types/apartment.ts`
+- Modify: `frontend/components/CostBreakdownPanel.tsx`
+
+**Step 1: Add field to TypeScript interface**
+
+In `frontend/types/apartment.ts`, in the `CostBreakdown` interface, after `amenity_fee`:
+
+```typescript
+  other_monthly_fees: number;
+```
+
+**Step 2: Update CostBreakdownPanel**
+
+In `frontend/components/CostBreakdownPanel.tsx`:
+
+Add `other_monthly_fees` to `monthlyTotal` calculation (after `amenity_fee`, line 55):
+
+```typescript
+  const monthlyTotal =
+    breakdown.base_rent +
+    breakdown.pet_rent +
+    breakdown.parking_fee +
+    breakdown.amenity_fee +
+    (breakdown.other_monthly_fees || 0) +
+    breakdown.est_electric +
+    breakdown.est_gas +
+    breakdown.est_water +
+    breakdown.est_internet +
+    breakdown.est_renters_insurance +
+    breakdown.est_laundry;
+```
+
+Add line item after the amenity fee block (after line 80):
+
+```tsx
+        {(breakdown.other_monthly_fees || 0) > 0 && (
+          <LineItem label="Other Fees" amount={breakdown.other_monthly_fees} source="scraped" />
+        )}
+```
+
+Update the utilities section to handle new included sources. After the internet line (line 99), handle internet included:
+
+```tsx
+        {isIncluded('internet') ? (
+          <LineItem label="Internet" amount={0} source="included" />
+        ) : (
+          <LineItem label="Internet" amount={breakdown.est_internet} source="estimated" />
+        )}
+        {isIncluded('renters_insurance') ? (
+          <LineItem label="Renter&apos;s Insurance" amount={0} source="included" />
+        ) : (
+          <LineItem label="Renter&apos;s Insurance" amount={breakdown.est_renters_insurance} source="estimated" />
+        )}
+```
+
+(This replaces the current lines 99-100 which don't handle internet/insurance included.)
+
+**Step 3: Verify frontend builds**
+
+```bash
+cd frontend && npm run build
+```
+Expected: Build succeeds with no type errors.
+
+**Step 4: Commit**
+
+```bash
+git add frontend/types/apartment.ts frontend/components/CostBreakdownPanel.tsx
+git commit -m "feat(ui): show other_monthly_fees and handle internet/insurance included
+
+CostBreakdownPanel now renders 'Other Fees' line item for catch-all
+monthly fees. Internet and Renter's Insurance now show 'Included'
+when detected from listing amenities."
+```
+
+---
+
+### Task 13: Database migration and recompute
+
+**Step 1: Add column to database**
+
+Run in Supabase SQL Editor or via psql:
+
+```sql
+ALTER TABLE apartments ADD COLUMN IF NOT EXISTS other_monthly_fees INTEGER;
+```
+
+Or if using Alembic:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "add other_monthly_fees column"
+alembic upgrade head
+```
+
+**Step 2: Trigger recompute of existing listings**
+
+```bash
+cd backend
+source .venv/bin/activate
+python -c "
+from app.tasks.true_cost_tasks import recompute_true_costs
+result = recompute_true_costs.delay()
+print(f'Dispatched recompute task: {result.id}')
+"
+```
+
+**Step 3: Verify**
+
+```bash
+curl "http://localhost:8000/api/apartments/list?limit=1" | python -m json.tool | grep -E "true_cost|other_monthly"
+```
+
+**Step 4: Commit migration**
+
+```bash
+git add backend/alembic/ || true
+git commit -m "chore(db): add other_monthly_fees column to apartments"
+```
+
+---
+
+### Task 14: Final integration verification
+
+**Step 1: Run full backend test suite**
+
+```bash
+cd backend
+ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
+```
+Expected: All tests pass.
+
+**Step 2: Run frontend lint and build**
+
+```bash
+cd frontend && npm run lint && npm run build
+```
+Expected: No errors.
+
+**Step 3: Manual end-to-end verification**
+
+Trigger a scrape for Pittsburgh (which has student housing with nested fees):
+
+```bash
+curl -X POST http://localhost:8000/api/admin/data-collection/markets/pittsburgh/scrape
+```
+
+After completion, check a listing:
+
+```bash
+curl "http://localhost:8000/api/apartments/list?city=Pittsburgh&limit=3" | python -m json.tool
+```
+
+Verify:
+- `other_monthly_fees` is non-null for listings with misc fees
+- `true_cost_monthly` is higher than before (includes previously-dropped fees)
+- `amenity_fee` includes mandatory insurance fees
+- Nested fees format listings have fee data populated
+
+**Step 4: Fix any issues, commit**
+
+```bash
+git add -A && git commit -m "fix: address issues from fee extraction integration testing"
+```
