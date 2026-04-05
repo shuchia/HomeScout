@@ -167,3 +167,38 @@ class TestCostEstimator:
         assert breakdown["est_electric"] == 0
         assert breakdown["est_gas"] == 0
         assert breakdown["est_water"] == 0
+
+    def test_scraped_insurance_zeroes_estimate(self):
+        """When amenities indicate mandatory insurance, est_renters_insurance should be 0."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=["Renters Insurance Required"],
+            scraped_fees={"amenity_fee": 14},
+        )
+        assert breakdown["est_renters_insurance"] == 0
+        assert "renters_insurance" in breakdown["sources"]["included"]
+
+    def test_internet_included_zeroes_estimate(self):
+        """When amenities say internet included, est_internet should be 0."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=["Internet Included"],
+            scraped_fees={},
+        )
+        assert breakdown["est_internet"] == 0
+        assert "internet" in breakdown["sources"]["included"]
+
+    def test_wifi_included_zeroes_estimate(self):
+        """WiFi Included should also zero est_internet."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=["WiFi Included"],
+            scraped_fees={},
+        )
+        assert breakdown["est_internet"] == 0

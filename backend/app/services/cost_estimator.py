@@ -25,6 +25,8 @@ _IN_UNIT_LAUNDRY = {
     "washer and dryer",
     "w/d in unit",
 }
+_INSURANCE_REQUIRED = {"renters insurance required", "renters insurance program", "insurance required"}
+_INTERNET_INCLUDED = {"internet included", "wifi included", "wi-fi included", "high-speed internet included"}
 
 
 class CostEstimator:
@@ -87,13 +89,15 @@ class CostEstimator:
         water_included = all_included or bool(amenity_set & _WATER_INCLUDED)
         electric_included = all_included or bool(amenity_set & _ELECTRIC_INCLUDED)
         has_in_unit_laundry = bool(amenity_set & _IN_UNIT_LAUNDRY)
+        insurance_required = bool(amenity_set & _INSURANCE_REQUIRED)
+        internet_included = all_included or bool(amenity_set & _INTERNET_INCLUDED)
 
         # Build estimates (zero out included utilities)
         est_electric = 0 if electric_included else estimates["electric"]
         est_gas = 0 if heat_included else estimates["gas"]
         est_water = 0 if water_included else estimates["water"]
-        est_internet = estimates["internet"]
-        est_renters_insurance = estimates["renters_insurance"]
+        est_internet = 0 if internet_included else estimates["internet"]
+        est_renters_insurance = 0 if insurance_required else estimates["renters_insurance"]
         est_laundry = 0 if has_in_unit_laundry else estimates["laundry"]
 
         # Scraped monthly fees (default to 0 if not scraped)
@@ -140,6 +144,10 @@ class CostEstimator:
             included_sources.append("water")
         if has_in_unit_laundry:
             included_sources.append("laundry")
+        if insurance_required:
+            included_sources.append("renters_insurance")
+        if internet_included:
+            included_sources.append("internet")
 
         return {
             "base_rent": rent,
