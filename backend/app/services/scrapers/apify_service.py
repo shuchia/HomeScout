@@ -436,6 +436,81 @@ class ApifyService(BaseScraper):
             raw_data=raw,
         )
 
+    def _extract_fees_from_nested_list(
+        self, fees_list: list
+    ) -> tuple[list, list, list[str]]:
+        """Parse epctex nested fees format into flat monthly/one-time lists.
+
+        The epctex apartments-scraper-api returns fees as::
+
+            [{title, policies: [{header, values: [{key, value}]}]}]
+
+        Returns (monthly_fees, one_time_fees, included_utilities) where each
+        fee list contains ``{name, amount}`` dicts compatible with the existing
+        matching loop.
+        """
+        monthly_fees: list[dict] = []
+        one_time_fees: list[dict] = []
+        included_utilities: list[str] = []
+
+        for section in fees_list:
+            if not isinstance(section, dict):
+                continue
+            title = (section.get("title") or "").lower()
+            is_pet_section = "pet" in title
+            is_parking_section = "parking" in title
+
+            for policy in section.get("policies") or []:
+                if not isinstance(policy, dict):
+                    continue
+                header = (policy.get("header") or "").lower()
+
+                # Detect included utilities
+                if "utilities included" in header or ("included" in header and "fee" not in header):
+                    for val in policy.get("values") or []:
+                        if isinstance(val, dict):
+                            key = (val.get("key") or "").strip()
+                            if key:
+                                included_utilities.append(key)
+                    continue
+
+                for val in policy.get("values") or []:
+                    if not isinstance(val, dict):
+                        continue
+                    key = val.get("key") or ""
+                    raw_value = val.get("value") or ""
+                    amount = self._parse_fee_amount(raw_value)
+                    if not amount:
+                        continue
+
+                    fee_entry = {"name": key, "amount": amount}
+                    key_lower = key.lower()
+
+                    # Classification heuristics
+                    if is_parking_section:
+                        monthly_fees.append(fee_entry)
+                    elif is_pet_section:
+                        if any(w in key_lower for w in ("rent", "monthly")):
+                            monthly_fees.append(fee_entry)
+                        elif any(w in key_lower for w in ("deposit", "fee")):
+                            one_time_fees.append(fee_entry)
+                        else:
+                            # Default for pet section
+                            if amount < 100:
+                                monthly_fees.append(fee_entry)
+                            else:
+                                one_time_fees.append(fee_entry)
+                    elif any(w in key_lower for w in ("deposit", "application", "admin", "one time")):
+                        one_time_fees.append(fee_entry)
+                    else:
+                        # Default: < $200 → monthly, >= $200 → one-time
+                        if amount < 200:
+                            monthly_fees.append(fee_entry)
+                        else:
+                            one_time_fees.append(fee_entry)
+
+        return monthly_fees, one_time_fees, included_utilities
+
     def _normalize_apartments_com_listing(self, raw: Dict[str, Any]) -> Optional[ScrapedListing]:
         """Normalize Apartments.com listing data from apartments-scraper-api."""
         # Handle nested location object
@@ -514,12 +589,20 @@ class ApifyService(BaseScraper):
         application_fee = None
         security_deposit = None
 
-        # Try structured fee fields
-        fees_data = raw.get("fees", {})
-        if not isinstance(fees_data, dict):
-            fees_data = {}
-        monthly_fees = raw.get("monthlyFees") or fees_data.get("monthly", [])
-        one_time_fees = raw.get("oneTimeFees") or fees_data.get("oneTime", [])
+        # Try structured fee fields — handle both flat dict and nested list
+        fees_data = raw.get("fees")
+        included_utilities: list[str] = []
+
+        if isinstance(fees_data, list):
+            # epctex nested format: [{title, policies: [{header, values}]}]
+            monthly_fees, one_time_fees, included_utilities = (
+                self._extract_fees_from_nested_list(fees_data)
+            )
+        else:
+            if not isinstance(fees_data, dict):
+                fees_data = {}
+            monthly_fees = raw.get("monthlyFees") or fees_data.get("monthly", [])
+            one_time_fees = raw.get("oneTimeFees") or fees_data.get("oneTime", [])
 
         if isinstance(monthly_fees, list):
             for fee in monthly_fees:
@@ -539,9 +622,11 @@ class ApifyService(BaseScraper):
                     name = (fee.get("name") or fee.get("label") or "").lower()
                     amount = self._parse_fee_amount(fee.get("amount") or fee.get("value"))
                     if amount and ("application" in name or "admin" in name):
-                        application_fee = amount
+                        if not application_fee:
+                            application_fee = amount
                     elif amount and ("deposit" in name or "security" in name):
-                        security_deposit = amount
+                        if not security_deposit:
+                            security_deposit = amount
 
         # Also check petPolicy for pet rent
         pet_policy = raw.get("petPolicy") or raw.get("pets") or {}
@@ -551,6 +636,12 @@ class ApifyService(BaseScraper):
             )
             if pet_fee:
                 pet_rent = pet_fee
+
+        # Inject included utilities into amenities so CostEstimator detects them
+        for util_name in included_utilities:
+            amenity_str = f"{util_name} Included"
+            if amenity_str.lower() not in {a.lower() for a in amenities}:
+                amenities.append(amenity_str)
 
         # Extract availability date from models + rentals
         available_date = None

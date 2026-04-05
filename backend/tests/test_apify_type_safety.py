@@ -134,6 +134,94 @@ def test_fees_as_string(scraper):
     assert result is not None
 
 
+# --- fees nested list format (epctex actor) ---
+
+def test_fees_as_nested_list_extracts_application_fee(scraper):
+    """The epctex actor returns fees as a list of {title, policies} objects."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Fees",
+            "policies": [{
+                "header": "Other Fees",
+                "values": [
+                    {"key": "Application Fee", "value": "$50"},
+                    {"key": "Admin Fee", "value": "$150"},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.application_fee == 50
+
+
+def test_fees_as_nested_list_extracts_monthly_fees(scraper):
+    """Nested format should extract pet rent and parking."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Pet Policies (Pets Negotiable)",
+            "policies": [{
+                "header": "Dogs Allowed",
+                "values": [
+                    {"key": "Monthly Pet Rent", "value": "$35"},
+                ]
+            }]
+        },
+        {
+            "title": "Parking",
+            "policies": [{
+                "header": "Covered Parking",
+                "values": [
+                    {"key": "Assigned Parking", "value": "$115/mo"},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.pet_rent == 35
+    assert result.parking_fee == 115
+
+
+def test_fees_as_nested_list_extracts_deposit(scraper):
+    """Nested format should extract security deposit."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Fees",
+            "policies": [{
+                "header": "Deposits",
+                "values": [
+                    {"key": "Security Deposit", "value": "$1,500"},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert result.security_deposit == 1500
+
+
+def test_fees_nested_list_with_included_utilities(scraper):
+    """Nested format should detect included utilities and add to amenities."""
+    raw = {**_base(), "fees": [
+        {
+            "title": "Details",
+            "policies": [{
+                "header": "Utilities Included",
+                "values": [
+                    {"key": "Water", "value": ""},
+                    {"key": "Trash Removal", "value": ""},
+                    {"key": "Sewer", "value": ""},
+                ]
+            }]
+        }
+    ]}
+    result = scraper._normalize_apartments_com_listing(raw)
+    assert result is not None
+    assert "Water Included" in result.amenities
+    assert "Trash Removal Included" in result.amenities
+
+
 # --- petPolicy field ---
 
 def test_pet_policy_as_list(scraper):
