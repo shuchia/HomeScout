@@ -100,6 +100,7 @@ class CostEstimator:
         pet_rent = scraped_fees.get("pet_rent") or 0
         parking_fee = scraped_fees.get("parking_fee") or 0
         amenity_fee = scraped_fees.get("amenity_fee") or 0
+        other_monthly_fees = scraped_fees.get("other_monthly_fees") or 0
 
         # One-time fees
         application_fee = scraped_fees.get("application_fee") or 0
@@ -107,7 +108,7 @@ class CostEstimator:
 
         # Compute totals
         monthly_extras = (
-            pet_rent + parking_fee + amenity_fee
+            pet_rent + parking_fee + amenity_fee + other_monthly_fees
             + est_electric + est_gas + est_water
             + est_internet + est_renters_insurance + est_laundry
         )
@@ -116,7 +117,7 @@ class CostEstimator:
 
         # Track data sources for transparency
         scraped_sources = [
-            k for k in ("pet_rent", "parking_fee", "amenity_fee")
+            k for k in ("pet_rent", "parking_fee", "amenity_fee", "other_monthly_fees")
             if scraped_fees.get(k)
         ]
         estimated_sources = [
@@ -145,6 +146,7 @@ class CostEstimator:
             "pet_rent": pet_rent,
             "parking_fee": parking_fee,
             "amenity_fee": amenity_fee,
+            "other_monthly_fees": other_monthly_fees,
             "est_electric": est_electric,
             "est_gas": est_gas,
             "est_water": est_water,

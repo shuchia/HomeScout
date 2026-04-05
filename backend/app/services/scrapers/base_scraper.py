@@ -55,6 +55,7 @@ class ScrapedListing:
     amenity_fee: Optional[int] = None
     application_fee: Optional[int] = None
     security_deposit: Optional[int] = None
+    other_monthly_fees: Optional[int] = None  # Catch-all for unmatched monthly fees
 
     # Contact info (extracted from listing)
     contact_phone: Optional[str] = None
@@ -93,6 +94,7 @@ class ScrapedListing:
             "amenity_fee": self.amenity_fee,
             "application_fee": self.application_fee,
             "security_deposit": self.security_deposit,
+            "other_monthly_fees": self.other_monthly_fees,
             "contact_phone": self.contact_phone,
             "contact_email": self.contact_email,
             "raw_data": self.raw_data,

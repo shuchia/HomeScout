@@ -47,6 +47,7 @@ class CostBreakdown(BaseModel):
     pet_rent: int = 0
     parking_fee: int = 0
     amenity_fee: int = 0
+    other_monthly_fees: int = 0
     est_electric: int = 0
     est_gas: int = 0
     est_water: int = 0

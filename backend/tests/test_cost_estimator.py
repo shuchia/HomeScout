@@ -116,6 +116,45 @@ class TestCostEstimator:
         assert "est_electric" in breakdown["sources"]["estimated"]
         assert "water" in breakdown["sources"]["included"]
 
+    def test_other_monthly_fees_included_in_total(self):
+        """other_monthly_fees should be added to true_cost_monthly."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=[],
+            scraped_fees={"other_monthly_fees": 27},
+        )
+        assert breakdown["other_monthly_fees"] == 27
+        assert breakdown["true_cost_monthly"] == (
+            1500 + 27
+            + breakdown["est_electric"] + breakdown["est_gas"]
+            + breakdown["est_water"] + breakdown["est_internet"]
+            + breakdown["est_renters_insurance"] + breakdown["est_laundry"]
+        )
+
+    def test_other_monthly_fees_in_sources(self):
+        """other_monthly_fees should appear in scraped sources."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=[],
+            scraped_fees={"other_monthly_fees": 20},
+        )
+        assert "other_monthly_fees" in breakdown["sources"]["scraped"]
+
+    def test_other_monthly_fees_defaults_to_zero(self):
+        """Missing other_monthly_fees should default to 0."""
+        breakdown = self.estimator.compute_true_cost(
+            rent=1500,
+            zip_code="15213",
+            bedrooms=1,
+            amenities=[],
+            scraped_fees={},
+        )
+        assert breakdown["other_monthly_fees"] == 0
+
     def test_all_utilities_included(self):
         """When all utilities included, all utility estimates should be 0."""
         breakdown = self.estimator.compute_true_cost(

@@ -60,6 +60,7 @@ class ApartmentModel(Base):
     amenity_fee = Column(Integer, nullable=True)
     application_fee = Column(Integer, nullable=True)
     security_deposit = Column(Integer, nullable=True)
+    other_monthly_fees = Column(Integer, nullable=True)  # Catch-all for unmatched monthly fees
 
     # True cost fields (estimated)
     est_electric = Column(Integer, nullable=True)
@@ -147,6 +148,7 @@ class ApartmentModel(Base):
             "amenity_fee": self.amenity_fee,
             "application_fee": self.application_fee,
             "security_deposit": self.security_deposit,
+            "other_monthly_fees": self.other_monthly_fees,
             "est_electric": self.est_electric,
             "est_gas": self.est_gas,
             "est_water": self.est_water,
@@ -194,6 +196,7 @@ class ApartmentModel(Base):
             "amenity_fee": self.amenity_fee,
             "application_fee": self.application_fee,
             "security_deposit": self.security_deposit,
+            "other_monthly_fees": self.other_monthly_fees,
             "est_electric": self.est_electric,
             "est_gas": self.est_gas,
             "est_water": self.est_water,

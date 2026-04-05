@@ -39,6 +39,7 @@ def recompute_true_costs(self):
                     "amenity_fee": apt.amenity_fee,
                     "application_fee": apt.application_fee,
                     "security_deposit": apt.security_deposit,
+                    "other_monthly_fees": apt.other_monthly_fees,
                 }
                 breakdown = estimator.compute_true_cost(
                     rent=apt.rent,

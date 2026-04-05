@@ -39,6 +39,7 @@ export interface CostBreakdown {
   pet_rent: number;
   parking_fee: number;
   amenity_fee: number;
+  other_monthly_fees: number;
   est_electric: number;
   est_gas: number;
   est_water: number;
