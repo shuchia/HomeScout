@@ -239,13 +239,12 @@ async def search_apartments(
                 total_count = len(result_dicts)
                 has_more = False
 
-        # Add true cost data
+        # Add true cost data (breakdown sent to all users — fee data is public)
         from app.routers.apartments import _add_cost_breakdown
-        is_pro = tier == "pro"
         final_apartments = []
         for apt in apartments_out:
             apt_dict = apt if isinstance(apt, dict) else apt.model_dump() if hasattr(apt, 'model_dump') else apt.__dict__
-            apt_dict = _add_cost_breakdown(apt_dict, include_breakdown=is_pro)
+            apt_dict = _add_cost_breakdown(apt_dict, include_breakdown=True)
             final_apartments.append(apt_dict)
         apartments_out = final_apartments
 

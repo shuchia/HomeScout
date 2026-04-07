@@ -169,7 +169,10 @@ async def _list_from_database(
             )
 
             result = await session.execute(stmt)
-            apartments = [apt.to_summary_dict() for apt in result.scalars()]
+            apartments = [
+                _add_cost_breakdown(apt.to_summary_dict(), include_breakdown=True)
+                for apt in result.scalars()
+            ]
 
             return {
                 "apartments": apartments,
@@ -376,10 +379,9 @@ async def compare_apartments(
         except Exception as e:
             logger.error(f"Claude comparison analysis failed: {e}")
 
-    # Add true cost data to apartments
-    is_pro = tier == "pro"
+    # Add true cost data to apartments (breakdown for all users — fee data is public)
     for i, apt in enumerate(apartments):
-        apartments[i] = _add_cost_breakdown(apt, include_breakdown=is_pro)
+        apartments[i] = _add_cost_breakdown(apt, include_breakdown=True)
 
     await AnalyticsService.log_event(
         "compare",
