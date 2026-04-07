@@ -652,6 +652,13 @@ class ApifyService(BaseScraper):
                         # Pet/other deposits — only use if no security deposit yet
                         if not security_deposit:
                             security_deposit = amount
+                    elif "amenity" in name or "move" in name:
+                        # One-time amenity/move-in fee
+                        admin_fee = (admin_fee or 0) + amount
+                    elif any(w in name for w in ("cat", "dog", "pet", "bird", "fish", "reptile")):
+                        # Pet-related one-time fees (pet deposit/fee) — skip,
+                        # already captured pet_rent from monthly fees
+                        pass
 
         # Also check petPolicy for pet rent
         pet_policy = raw.get("petPolicy") or raw.get("pets") or {}
