@@ -54,6 +54,7 @@ class ScrapedListing:
     parking_fee: Optional[int] = None
     amenity_fee: Optional[int] = None
     application_fee: Optional[int] = None
+    admin_fee: Optional[int] = None
     security_deposit: Optional[int] = None
     other_monthly_fees: Optional[int] = None  # Catch-all for unmatched monthly fees
 
@@ -93,6 +94,7 @@ class ScrapedListing:
             "parking_fee": self.parking_fee,
             "amenity_fee": self.amenity_fee,
             "application_fee": self.application_fee,
+            "admin_fee": self.admin_fee,
             "security_deposit": self.security_deposit,
             "other_monthly_fees": self.other_monthly_fees,
             "contact_phone": self.contact_phone,

@@ -157,6 +157,7 @@ class NormalizationService:
             "parking_fee": data.get("parking_fee"),
             "amenity_fee": data.get("amenity_fee"),
             "application_fee": data.get("application_fee"),
+            "admin_fee": data.get("admin_fee"),
             "security_deposit": data.get("security_deposit"),
             "other_monthly_fees": data.get("other_monthly_fees"),
         }

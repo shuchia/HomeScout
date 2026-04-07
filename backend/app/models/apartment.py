@@ -59,6 +59,7 @@ class ApartmentModel(Base):
     parking_fee = Column(Integer, nullable=True)
     amenity_fee = Column(Integer, nullable=True)
     application_fee = Column(Integer, nullable=True)
+    admin_fee = Column(Integer, nullable=True)
     security_deposit = Column(Integer, nullable=True)
     other_monthly_fees = Column(Integer, nullable=True)  # Catch-all for unmatched monthly fees
 
@@ -147,6 +148,7 @@ class ApartmentModel(Base):
             "parking_fee": self.parking_fee,
             "amenity_fee": self.amenity_fee,
             "application_fee": self.application_fee,
+            "admin_fee": self.admin_fee,
             "security_deposit": self.security_deposit,
             "other_monthly_fees": self.other_monthly_fees,
             "est_electric": self.est_electric,
@@ -195,6 +197,7 @@ class ApartmentModel(Base):
             "parking_fee": self.parking_fee,
             "amenity_fee": self.amenity_fee,
             "application_fee": self.application_fee,
+            "admin_fee": self.admin_fee,
             "security_deposit": self.security_deposit,
             "other_monthly_fees": self.other_monthly_fees,
             "est_electric": self.est_electric,

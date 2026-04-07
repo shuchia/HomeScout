@@ -108,6 +108,7 @@ class CostEstimator:
 
         # One-time fees
         application_fee = scraped_fees.get("application_fee") or 0
+        admin_fee = scraped_fees.get("admin_fee") or 0
         security_deposit = scraped_fees.get("security_deposit") or 0
 
         # Compute totals
@@ -117,11 +118,12 @@ class CostEstimator:
             + est_internet + est_renters_insurance + est_laundry
         )
         true_cost_monthly = rent + monthly_extras
-        true_cost_move_in = application_fee + security_deposit + true_cost_monthly
+        true_cost_move_in = application_fee + admin_fee + security_deposit + true_cost_monthly
 
         # Track data sources for transparency
         scraped_sources = [
-            k for k in ("pet_rent", "parking_fee", "amenity_fee", "other_monthly_fees")
+            k for k in ("pet_rent", "parking_fee", "amenity_fee", "other_monthly_fees",
+                        "application_fee", "admin_fee", "security_deposit")
             if scraped_fees.get(k)
         ]
         estimated_sources = [
@@ -162,6 +164,7 @@ class CostEstimator:
             "est_renters_insurance": est_renters_insurance,
             "est_laundry": est_laundry,
             "application_fee": application_fee,
+            "admin_fee": admin_fee,
             "security_deposit": security_deposit,
             "true_cost_monthly": true_cost_monthly,
             "true_cost_move_in": true_cost_move_in,

@@ -305,6 +305,25 @@ async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
                     times_seen=1,
                     first_seen_at=datetime.utcnow(),
                     market_id=listing_data.get("market_id"),
+                    # Scraped fee fields
+                    pet_rent=listing_data.get("pet_rent"),
+                    parking_fee=listing_data.get("parking_fee"),
+                    amenity_fee=listing_data.get("amenity_fee"),
+                    application_fee=listing_data.get("application_fee"),
+                    admin_fee=listing_data.get("admin_fee"),
+                    security_deposit=listing_data.get("security_deposit"),
+                    other_monthly_fees=listing_data.get("other_monthly_fees"),
+                    # Estimated utility costs
+                    est_electric=listing_data.get("est_electric"),
+                    est_gas=listing_data.get("est_gas"),
+                    est_water=listing_data.get("est_water"),
+                    est_internet=listing_data.get("est_internet"),
+                    est_renters_insurance=listing_data.get("est_renters_insurance"),
+                    est_laundry=listing_data.get("est_laundry"),
+                    utilities_included=listing_data.get("utilities_included"),
+                    # Precomputed true cost totals
+                    true_cost_monthly=listing_data.get("true_cost_monthly"),
+                    true_cost_move_in=listing_data.get("true_cost_move_in"),
                 )
                 session.add(apartment)
                 await session.commit()

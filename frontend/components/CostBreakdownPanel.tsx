@@ -48,6 +48,9 @@ function LineItem({ label, amount, source }: LineItemProps) {
 
 export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProps) {
   const { sources } = breakdown;
+  const isScraped = (field: string) => sources.scraped.includes(field);
+  const isIncluded = (utility: string) => sources.included.includes(utility);
+
   const monthlyTotal =
     breakdown.base_rent +
     breakdown.pet_rent +
@@ -62,25 +65,28 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
     breakdown.est_laundry;
 
   const moveInTotal =
-    breakdown.application_fee + breakdown.security_deposit + monthlyTotal;
+    breakdown.application_fee + (breakdown.admin_fee || 0) + breakdown.security_deposit + monthlyTotal;
 
-  const isIncluded = (utility: string) => sources.included.includes(utility);
+  const hasScrapedOneTimeFees =
+    breakdown.application_fee > 0 || (breakdown.admin_fee || 0) > 0 || breakdown.security_deposit > 0;
 
   return (
     <div className="space-y-3 pt-2">
+      {/* Monthly Costs */}
       <div className="space-y-0.5">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Monthly Costs</p>
         <LineItem label="Base Rent" amount={breakdown.base_rent} source="scraped" />
         {breakdown.pet_rent > 0 && (
-          <LineItem label="Pet Rent" amount={breakdown.pet_rent} source="scraped" />
+          <LineItem label="Pet Rent" amount={breakdown.pet_rent} source={isScraped('pet_rent') ? 'scraped' : 'estimated'} />
         )}
         {breakdown.parking_fee > 0 && (
-          <LineItem label="Parking" amount={breakdown.parking_fee} source="scraped" />
+          <LineItem label="Parking" amount={breakdown.parking_fee} source={isScraped('parking_fee') ? 'scraped' : 'estimated'} />
         )}
         {breakdown.amenity_fee > 0 && (
-          <LineItem label="Amenity Fee" amount={breakdown.amenity_fee} source="scraped" />
+          <LineItem label="Amenity Fee" amount={breakdown.amenity_fee} source={isScraped('amenity_fee') ? 'scraped' : 'estimated'} />
         )}
         {(breakdown.other_monthly_fees || 0) > 0 && (
-          <LineItem label="Other Fees" amount={breakdown.other_monthly_fees} source="scraped" />
+          <LineItem label="Other Fees" amount={breakdown.other_monthly_fees} source={isScraped('other_monthly_fees') ? 'scraped' : 'estimated'} />
         )}
 
         <div className="border-t border-gray-100 my-1" />
@@ -122,22 +128,27 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
         <span className="font-bold text-gray-900">{formatCost(monthlyTotal)}</span>
       </div>
 
-      {(breakdown.application_fee > 0 || breakdown.security_deposit > 0) && (
-        <div className="space-y-0.5 pt-2">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Move-in Costs</p>
-          {breakdown.application_fee > 0 && (
-            <LineItem label="Application Fee" amount={breakdown.application_fee} source="scraped" />
-          )}
-          {breakdown.security_deposit > 0 && (
-            <LineItem label="Security Deposit" amount={breakdown.security_deposit} source="scraped" />
-          )}
-          <LineItem label="First Month" amount={monthlyTotal} source="estimated" />
-          <div className="flex justify-between items-center border-t border-gray-200 pt-2">
-            <span className="font-semibold text-gray-900 text-sm">Est. Move-in Total</span>
-            <span className="font-bold text-gray-900">{formatCost(moveInTotal)}</span>
-          </div>
+      {/* Move-in Costs — always shown */}
+      <div className="space-y-0.5 pt-2">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Move-in Costs</p>
+        {breakdown.application_fee > 0 && (
+          <LineItem label="Application Fee" amount={breakdown.application_fee} source={isScraped('application_fee') ? 'scraped' : 'estimated'} />
+        )}
+        {(breakdown.admin_fee || 0) > 0 && (
+          <LineItem label="Admin Fee" amount={breakdown.admin_fee} source={isScraped('admin_fee') ? 'scraped' : 'estimated'} />
+        )}
+        {breakdown.security_deposit > 0 && (
+          <LineItem label="Security Deposit" amount={breakdown.security_deposit} source={isScraped('security_deposit') ? 'scraped' : 'estimated'} />
+        )}
+        {!hasScrapedOneTimeFees && (
+          <p className="text-xs text-gray-400 italic py-1">No fees listed — check with property</p>
+        )}
+        <LineItem label="First Month" amount={monthlyTotal} source="estimated" />
+        <div className="flex justify-between items-center border-t border-gray-200 pt-2">
+          <span className="font-semibold text-gray-900 text-sm">Est. Move-in Total</span>
+          <span className="font-bold text-gray-900">{formatCost(moveInTotal)}</span>
         </div>
-      )}
+      </div>
 
       <div className="flex gap-4 text-xs text-gray-400 pt-1">
         <span className="flex items-center gap-1">

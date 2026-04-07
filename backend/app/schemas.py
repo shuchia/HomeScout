@@ -55,6 +55,7 @@ class CostBreakdown(BaseModel):
     est_renters_insurance: int = 0
     est_laundry: int = 0
     application_fee: int = 0
+    admin_fee: int = 0
     security_deposit: int = 0
     sources: CostSources = Field(default_factory=CostSources)
 

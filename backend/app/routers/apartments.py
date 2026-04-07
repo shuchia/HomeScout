@@ -48,6 +48,7 @@ def _add_cost_breakdown(apartment: dict, include_breakdown: bool) -> dict:
                 "parking_fee": apartment.get("parking_fee"),
                 "amenity_fee": apartment.get("amenity_fee"),
                 "application_fee": apartment.get("application_fee"),
+                "admin_fee": apartment.get("admin_fee"),
                 "security_deposit": apartment.get("security_deposit"),
                 "other_monthly_fees": apartment.get("other_monthly_fees"),
             },
@@ -70,6 +71,7 @@ def _add_cost_breakdown(apartment: dict, include_breakdown: bool) -> dict:
             "est_renters_insurance": apartment.get("est_renters_insurance") or 0,
             "est_laundry": apartment.get("est_laundry") or 0,
             "application_fee": apartment.get("application_fee") or 0,
+            "admin_fee": apartment.get("admin_fee") or 0,
             "security_deposit": apartment.get("security_deposit") or 0,
             "sources": _build_sources(apartment),
         }
@@ -77,7 +79,8 @@ def _add_cost_breakdown(apartment: dict, include_breakdown: bool) -> dict:
 
 
 def _build_sources(apartment: dict) -> dict:
-    scraped = [k for k in ("pet_rent", "parking_fee", "amenity_fee", "other_monthly_fees") if apartment.get(k)]
+    scraped = [k for k in ("pet_rent", "parking_fee", "amenity_fee", "other_monthly_fees",
+                           "application_fee", "admin_fee", "security_deposit") if apartment.get(k)]
     estimated = [
         f"est_{k}" for k in ("electric", "gas", "water", "internet", "renters_insurance", "laundry")
         if apartment.get(f"est_{k}")

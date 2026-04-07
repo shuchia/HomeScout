@@ -479,30 +479,35 @@ class ApifyService(BaseScraper):
                         continue
                     key = val.get("key") or ""
                     raw_value = val.get("value") or ""
+                    key_lower = key.lower()
+
+                    # Skip non-fee metadata fields
+                    if any(w in key_lower for w in (
+                        "limit", "restriction", "weight", "comment",
+                        "breed", "count", "description", "note",
+                        "built in", "units/", "stories",
+                    )):
+                        continue
+
                     amount = self._parse_fee_amount(raw_value)
                     if not amount:
                         continue
 
-                    fee_entry = {"name": key, "amount": amount}
-                    key_lower = key.lower()
-
                     # Classification heuristics
                     if is_parking_section:
-                        monthly_fees.append(fee_entry)
+                        monthly_fees.append({"name": f"parking {key}", "amount": amount})
                     elif is_pet_section:
                         if any(w in key_lower for w in ("rent", "monthly")):
-                            monthly_fees.append(fee_entry)
+                            monthly_fees.append({"name": f"pet {key}", "amount": amount})
                         elif any(w in key_lower for w in ("deposit", "fee")):
-                            one_time_fees.append(fee_entry)
-                        else:
-                            # Default for pet section
-                            if amount < 100:
-                                monthly_fees.append(fee_entry)
-                            else:
-                                one_time_fees.append(fee_entry)
+                            one_time_fees.append({"name": key, "amount": amount})
+                        # Skip unrecognized pet fields (e.g. "Pet Limit")
                     elif any(w in key_lower for w in ("deposit", "application", "admin", "one time")):
-                        one_time_fees.append(fee_entry)
+                        one_time_fees.append({"name": key, "amount": amount})
+                    elif any(w in key_lower for w in ("lease",)):
+                        continue  # Skip lease option metadata
                     else:
+                        fee_entry = {"name": key, "amount": amount}
                         # Default: < $200 → monthly, >= $200 → one-time
                         if amount < 200:
                             monthly_fees.append(fee_entry)
@@ -587,6 +592,7 @@ class ApifyService(BaseScraper):
         parking_fee = None
         amenity_fee = None
         application_fee = None
+        admin_fee = None
         security_deposit = None
 
         # Try structured fee fields — handle both flat dict and nested list
@@ -614,7 +620,7 @@ class ApifyService(BaseScraper):
                     if not amount:
                         continue
                     if "pet" in name or "dog" in name or "cat" in name:
-                        pet_rent = amount
+                        pet_rent = max(pet_rent or 0, amount)
                     elif "parking" in name or "garage" in name:
                         parking_fee = amount
                     elif "amenity" in name or "community" in name or "trash" in name or "valet" in name:
@@ -633,10 +639,17 @@ class ApifyService(BaseScraper):
                 if isinstance(fee, dict):
                     name = (fee.get("name") or fee.get("label") or "").lower()
                     amount = self._parse_fee_amount(fee.get("amount") or fee.get("value"))
-                    if amount and ("application" in name or "admin" in name):
-                        if not application_fee:
-                            application_fee = amount
-                    elif amount and ("deposit" in name or "security" in name):
+                    if not amount:
+                        continue
+                    if "application" in name:
+                        application_fee = (application_fee or 0) + amount
+                    elif "admin" in name:
+                        admin_fee = (admin_fee or 0) + amount
+                    elif "security" in name:
+                        # "Security Deposit" — always prefer over pet deposits
+                        security_deposit = amount
+                    elif "deposit" in name:
+                        # Pet/other deposits — only use if no security deposit yet
                         if not security_deposit:
                             security_deposit = amount
 
@@ -739,6 +752,7 @@ class ApifyService(BaseScraper):
             parking_fee=parking_fee,
             amenity_fee=amenity_fee,
             application_fee=application_fee,
+            admin_fee=admin_fee,
             security_deposit=security_deposit,
             other_monthly_fees=other_monthly or None,
             contact_phone=contact_phone,

@@ -153,6 +153,7 @@ def test_fees_as_nested_list_extracts_application_fee(scraper):
     result = scraper._normalize_apartments_com_listing(raw)
     assert result is not None
     assert result.application_fee == 50
+    assert result.admin_fee == 150
 
 
 def test_fees_as_nested_list_extracts_monthly_fees(scraper):

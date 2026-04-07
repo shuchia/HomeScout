@@ -47,6 +47,7 @@ export interface CostBreakdown {
   est_renters_insurance: number;
   est_laundry: number;
   application_fee: number;
+  admin_fee: number;
   security_deposit: number;
   sources: CostSources;
 }
