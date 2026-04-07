@@ -585,3 +585,113 @@ async def trigger_market_scrape(market_id: str):
     task = scrape_city_task.apply_async(kwargs={"market_id": market_id}, queue="scraping")
 
     return {"status": "dispatched", "market_id": market_id, "task_id": task.id}
+
+
+@router.post("/backfill-fees")
+async def backfill_fees():
+    """Recompute fees from raw_data for all active listings."""
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    import json as _json
+    from sqlalchemy import text
+    from app.database import get_session_context
+    from app.services.scrapers.apify_service import ApifyService
+    from app.services.cost_estimator import CostEstimator
+
+    svc = ApifyService()
+    estimator = CostEstimator()
+    updated = 0
+    errors = 0
+
+    async with get_session_context() as session:
+        r = await session.execute(text(
+            "SELECT id, address, rent, bedrooms, zip_code, raw_data, amenities, source "
+            "FROM apartments WHERE is_active = 1 AND raw_data IS NOT NULL"
+        ))
+        rows = r.fetchall()
+
+        for row in rows:
+            apt_id, address, rent, bedrooms, zip_code, raw_data, amenities, source = row
+            try:
+                raw = raw_data if isinstance(raw_data, dict) else _json.loads(raw_data)
+                if source != "apartments_com":
+                    continue
+                listing = svc._normalize_apartments_com_listing(raw)
+                if not listing:
+                    continue
+
+                scraped_fees = {
+                    "pet_rent": listing.pet_rent,
+                    "parking_fee": listing.parking_fee,
+                    "amenity_fee": listing.amenity_fee,
+                    "application_fee": listing.application_fee,
+                    "admin_fee": listing.admin_fee,
+                    "security_deposit": listing.security_deposit,
+                    "other_monthly_fees": listing.other_monthly_fees,
+                }
+                cost = estimator.compute_true_cost(
+                    rent=rent, zip_code=zip_code, bedrooms=bedrooms,
+                    amenities=listing.amenities or amenities or [],
+                    scraped_fees=scraped_fees,
+                )
+                utilities_included = {
+                    "heat": cost["est_gas"] == 0,
+                    "water": cost["est_water"] == 0,
+                    "electric": cost["est_electric"] == 0,
+                }
+
+                await session.execute(text("""
+                    UPDATE apartments SET
+                        pet_rent = :pet_rent, parking_fee = :parking_fee,
+                        amenity_fee = :amenity_fee, application_fee = :application_fee,
+                        admin_fee = :admin_fee, security_deposit = :security_deposit,
+                        other_monthly_fees = :other_monthly_fees,
+                        est_electric = :est_electric, est_gas = :est_gas,
+                        est_water = :est_water, est_internet = :est_internet,
+                        est_renters_insurance = :est_renters_insurance,
+                        est_laundry = :est_laundry,
+                        utilities_included = :utilities_included,
+                        true_cost_monthly = :true_cost_monthly,
+                        true_cost_move_in = :true_cost_move_in
+                    WHERE id = :id
+                """), {
+                    "id": apt_id,
+                    "pet_rent": listing.pet_rent, "parking_fee": listing.parking_fee,
+                    "amenity_fee": listing.amenity_fee, "application_fee": listing.application_fee,
+                    "admin_fee": listing.admin_fee, "security_deposit": listing.security_deposit,
+                    "other_monthly_fees": listing.other_monthly_fees,
+                    "est_electric": cost["est_electric"], "est_gas": cost["est_gas"],
+                    "est_water": cost["est_water"], "est_internet": cost["est_internet"],
+                    "est_renters_insurance": cost["est_renters_insurance"],
+                    "est_laundry": cost["est_laundry"],
+                    "utilities_included": _json.dumps(utilities_included),
+                    "true_cost_monthly": cost["true_cost_monthly"],
+                    "true_cost_move_in": cost["true_cost_move_in"],
+                })
+                updated += 1
+            except Exception as e:
+                errors += 1
+                logger.warning(f"Backfill error for {address}: {e}")
+
+        await session.commit()
+
+    return {"status": "completed", "updated": updated, "errors": errors, "total": len(rows)}
+
+
+@router.delete("/listings")
+async def delete_all_listings():
+    """Delete all apartment listings. Use with caution — dev/testing only."""
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from sqlalchemy import text
+    from app.database import get_session_context
+
+    async with get_session_context() as session:
+        r = await session.execute(text("SELECT COUNT(*) FROM apartments"))
+        count = r.scalar()
+        await session.execute(text("DELETE FROM apartments"))
+        await session.commit()
+
+    return {"status": "deleted", "count": count}
