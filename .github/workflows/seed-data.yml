@@ -1,0 +1,75 @@
+name: Seed Data (On-Demand Scrape)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to seed"
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+      city:
+        description: "City to scrape (blank = all enabled markets)"
+        required: false
+        type: string
+      max_listings:
+        description: "Max listings per market"
+        required: false
+        default: "100"
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  seed:
+    name: Seed ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Trigger scrape
+        run: |
+          ENV="${{ inputs.environment }}"
+          CITY="${{ inputs.city }}"
+
+          if [ -n "$CITY" ]; then
+            echo "Scraping city: $CITY (max ${{ inputs.max_listings }} listings)"
+            CMD="from app.tasks.scrape_tasks import scrape_city_task; scrape_city_task.delay('${CITY}', max_listings=${{ inputs.max_listings }})"
+          else
+            echo "Dispatching scrapes for all enabled markets"
+            CMD="from app.tasks.dispatcher import dispatch_scrapes; dispatch_scrapes()"
+          fi
+
+          SUBNETS='${{ secrets[format('{0}_PRIVATE_SUBNETS', inputs.environment)] }}'
+          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
+          SG='${{ secrets[format('{0}_ECS_SG', inputs.environment)] }}'
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "snugd-${ENV}" \
+            --task-definition "snugd-${ENV}-worker" \
+            --launch-type FARGATE \
+            --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${SG}\"],\"assignPublicIp\":\"DISABLED\"}}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"worker\",\"command\":[\"python\",\"-c\",\"${CMD}\"]}]}" \
+            --query 'tasks[0].taskArn' --output text)
+
+          echo "### Scrape Dispatched" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Environment:** ${ENV}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **City:** ${CITY:-all enabled markets}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Task ARN:** \`${TASK_ARN}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Data should appear in ~5-10 minutes. Check:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "curl https://api-${ENV}.snugd.ai/api/apartments/stats" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
