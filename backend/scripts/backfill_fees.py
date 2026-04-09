@@ -19,6 +19,7 @@ load_dotenv()
 from app.database import _get_session_maker
 from app.services.scrapers.apify_service import ApifyService
 from app.services.normalization.normalizer import NormalizationService
+from app.services.pricing_model_detector import detect_pricing_model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -85,6 +86,14 @@ async def backfill():
                     "electric": cost["est_electric"] == 0,
                 }
 
+                detection = detect_pricing_model(
+                    description=listing.description or "",
+                    bedrooms=bedrooms,
+                    bathrooms=float(listing.bathrooms),
+                    rent=rent,
+                    city=listing.city or "",
+                )
+
                 await session.execute(text("""
                     UPDATE apartments SET
                         pet_rent = :pet_rent,
@@ -102,7 +111,9 @@ async def backfill():
                         est_laundry = :est_laundry,
                         utilities_included = :utilities_included,
                         true_cost_monthly = :true_cost_monthly,
-                        true_cost_move_in = :true_cost_move_in
+                        true_cost_move_in = :true_cost_move_in,
+                        pricing_model = :pricing_model,
+                        pricing_model_confidence = :pricing_model_confidence
                     WHERE id = :id
                 """), {
                     "id": apt_id,
@@ -122,6 +133,8 @@ async def backfill():
                     "utilities_included": json.dumps(utilities_included),
                     "true_cost_monthly": cost["true_cost_monthly"],
                     "true_cost_move_in": cost["true_cost_move_in"],
+                    "pricing_model": detection["pricing_model"],
+                    "pricing_model_confidence": detection["confidence"],
                 })
                 updated += 1
 

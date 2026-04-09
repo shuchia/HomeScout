@@ -75,6 +75,7 @@ export interface Apartment {
   true_cost_monthly?: number | null;
   true_cost_move_in?: number | null;
   cost_breakdown?: CostBreakdown | null;
+  pricing_model?: 'per_unit' | 'per_person' | null;
   freshness_confidence?: number;
   first_seen_at?: string;
   times_seen?: number;

@@ -85,10 +85,15 @@ def backfill_fees_task(self):
     """
     import asyncio
     import json as _json
-    from app.database import get_session_context
+    import app.database as db_module
     from app.services.scrapers.apify_service import ApifyService
     from app.services.cost_estimator import CostEstimator
+    from app.services.pricing_model_detector import detect_pricing_model
     from sqlalchemy import text
+
+    # Reset cached engine/session to avoid event loop mismatch in forked worker
+    db_module._engine = None
+    db_module._async_session_maker = None
 
     svc = ApifyService()
     estimator = CostEstimator()
@@ -100,6 +105,7 @@ def backfill_fees_task(self):
     async def _backfill():
         nonlocal updated, errors
         offset = 0
+        from app.database import get_session_context
 
         while True:
             async with get_session_context() as session:
@@ -144,6 +150,14 @@ def backfill_fees_task(self):
                             "electric": cost["est_electric"] == 0,
                         }
 
+                        detection = detect_pricing_model(
+                            description=listing.description or "",
+                            bedrooms=bedrooms,
+                            bathrooms=float(listing.bathrooms),
+                            rent=rent,
+                            city=listing.city or "",
+                        )
+
                         await session.execute(text("""
                             UPDATE apartments SET
                                 pet_rent = :pet_rent, parking_fee = :parking_fee,
@@ -156,7 +170,9 @@ def backfill_fees_task(self):
                                 est_laundry = :est_laundry,
                                 utilities_included = :utilities_included,
                                 true_cost_monthly = :true_cost_monthly,
-                                true_cost_move_in = :true_cost_move_in
+                                true_cost_move_in = :true_cost_move_in,
+                                pricing_model = :pricing_model,
+                                pricing_model_confidence = :pricing_model_confidence
                             WHERE id = :id
                         """), {
                             "id": apt_id,
@@ -171,6 +187,8 @@ def backfill_fees_task(self):
                             "utilities_included": _json.dumps(utilities_included),
                             "true_cost_monthly": cost["true_cost_monthly"],
                             "true_cost_move_in": cost["true_cost_move_in"],
+                            "pricing_model": detection["pricing_model"],
+                            "pricing_model_confidence": detection["confidence"],
                         })
                         updated += 1
                     except Exception as e:
@@ -181,6 +199,7 @@ def backfill_fees_task(self):
                 offset += BATCH_SIZE
 
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(_backfill())
     finally:

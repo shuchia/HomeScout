@@ -87,6 +87,7 @@ class Apartment(BaseModel):
     true_cost_move_in: Optional[int] = None
     # Full breakdown (Pro only — populated by API layer)
     cost_breakdown: Optional[CostBreakdown] = None
+    pricing_model: Optional[str] = None
     # Proximity (populated when near_lat/near_lng provided in search)
     distance_miles: Optional[float] = None
 

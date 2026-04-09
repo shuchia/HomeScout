@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { CostBreakdown } from '@/types/apartment';
 
 interface CostBreakdownPanelProps {
   breakdown: CostBreakdown;
+  pricingModel?: 'per_unit' | 'per_person' | null;
+  bedrooms?: number;
 }
 
 const formatCost = (amount: number): string => {
@@ -46,26 +49,41 @@ function LineItem({ label, amount, source }: LineItemProps) {
   );
 }
 
-export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProps) {
+export default function CostBreakdownPanel({ breakdown, pricingModel, bedrooms }: CostBreakdownPanelProps) {
   const { sources } = breakdown;
   const isScraped = (field: string) => sources.scraped.includes(field);
   const isIncluded = (utility: string) => sources.included.includes(utility);
 
-  const monthlyTotal =
-    breakdown.base_rent +
-    breakdown.pet_rent +
-    breakdown.parking_fee +
-    breakdown.amenity_fee +
-    (breakdown.other_monthly_fees || 0) +
-    breakdown.est_electric +
-    breakdown.est_gas +
-    breakdown.est_water +
-    breakdown.est_internet +
-    breakdown.est_renters_insurance +
-    breakdown.est_laundry;
+  const isPerPerson = pricingModel === 'per_person';
+  const defaultOccupancy = isPerPerson ? (bedrooms || 1) : 1;
+  const [occupancy, setOccupancy] = useState(defaultOccupancy);
+  const showOccupancy = occupancy > 1 || isPerPerson;
 
-  const moveInTotal =
-    breakdown.application_fee + (breakdown.admin_fee || 0) + breakdown.security_deposit + monthlyTotal;
+  // Shared costs: divided by occupancy (but NOT for per-person rent)
+  const splitShared = (amount: number) =>
+    occupancy > 1 ? Math.round(amount / occupancy) : amount;
+
+  const perPersonSuffix = showOccupancy ? ' /person' : '';
+
+  // Calculate per-person amounts
+  const myRent = isPerPerson ? breakdown.base_rent : splitShared(breakdown.base_rent);
+  const myPetRent = breakdown.pet_rent; // personal, never divided
+  const myParking = breakdown.parking_fee; // personal, never divided
+  const myAmenity = splitShared(breakdown.amenity_fee);
+  const myOtherMonthly = splitShared(breakdown.other_monthly_fees || 0);
+  const myElectric = splitShared(breakdown.est_electric);
+  const myGas = splitShared(breakdown.est_gas);
+  const myWater = splitShared(breakdown.est_water);
+  const myInternet = breakdown.est_internet; // personal (one connection)
+  const myInsurance = breakdown.est_renters_insurance; // personal (per-person policy)
+  const myLaundry = splitShared(breakdown.est_laundry);
+
+  const monthlyTotal = myRent + myPetRent + myParking + myAmenity + myOtherMonthly
+    + myElectric + myGas + myWater + myInternet + myInsurance + myLaundry;
+
+  const myAdminFee = splitShared(breakdown.admin_fee || 0);
+  const myDeposit = splitShared(breakdown.security_deposit);
+  const moveInTotal = breakdown.application_fee + myAdminFee + myDeposit + monthlyTotal;
 
   const hasScrapedOneTimeFees =
     breakdown.application_fee > 0 || (breakdown.admin_fee || 0) > 0 || breakdown.security_deposit > 0;
@@ -74,19 +92,37 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
     <div className="space-y-3 pt-2">
       {/* Monthly Costs */}
       <div className="space-y-0.5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Monthly Costs</p>
-        <LineItem label="Base Rent" amount={breakdown.base_rent} source="scraped" />
-        {breakdown.pet_rent > 0 && (
-          <LineItem label="Pet Rent" amount={breakdown.pet_rent} source={isScraped('pet_rent') ? 'scraped' : 'estimated'} />
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Monthly Costs</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">People:</span>
+            <button
+              onClick={() => setOccupancy(Math.max(1, occupancy - 1))}
+              className="w-6 h-6 rounded-full border border-gray-300 text-gray-500 text-sm flex items-center justify-center hover:bg-gray-50"
+            >
+              -
+            </button>
+            <span className="text-sm font-medium w-4 text-center">{occupancy}</span>
+            <button
+              onClick={() => setOccupancy(Math.min(6, occupancy + 1))}
+              className="w-6 h-6 rounded-full border border-gray-300 text-gray-500 text-sm flex items-center justify-center hover:bg-gray-50"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <LineItem label={`Base Rent${perPersonSuffix}`} amount={myRent} source="scraped" />
+        {myPetRent > 0 && (
+          <LineItem label="Pet Rent" amount={myPetRent} source={isScraped('pet_rent') ? 'scraped' : 'estimated'} />
         )}
-        {breakdown.parking_fee > 0 && (
-          <LineItem label="Parking" amount={breakdown.parking_fee} source={isScraped('parking_fee') ? 'scraped' : 'estimated'} />
+        {myParking > 0 && (
+          <LineItem label="Parking" amount={myParking} source={isScraped('parking_fee') ? 'scraped' : 'estimated'} />
         )}
-        {breakdown.amenity_fee > 0 && (
-          <LineItem label="Amenity Fee" amount={breakdown.amenity_fee} source={isScraped('amenity_fee') ? 'scraped' : 'estimated'} />
+        {myAmenity > 0 && (
+          <LineItem label={`Amenity Fee${perPersonSuffix}`} amount={myAmenity} source={isScraped('amenity_fee') ? 'scraped' : 'estimated'} />
         )}
-        {(breakdown.other_monthly_fees || 0) > 0 && (
-          <LineItem label="Other Fees" amount={breakdown.other_monthly_fees} source={isScraped('other_monthly_fees') ? 'scraped' : 'estimated'} />
+        {myOtherMonthly > 0 && (
+          <LineItem label={`Other Fees${perPersonSuffix}`} amount={myOtherMonthly} source={isScraped('other_monthly_fees') ? 'scraped' : 'estimated'} />
         )}
 
         <div className="border-t border-gray-100 my-1" />
@@ -94,37 +130,37 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
         {isIncluded('electric') ? (
           <LineItem label="Electric" amount={0} source="included" />
         ) : (
-          <LineItem label="Electric" amount={breakdown.est_electric} source="estimated" />
+          <LineItem label={`Electric${perPersonSuffix}`} amount={myElectric} source="estimated" />
         )}
         {isIncluded('heat') ? (
           <LineItem label="Heat/Gas" amount={0} source="included" />
         ) : (
-          <LineItem label="Heat/Gas" amount={breakdown.est_gas} source="estimated" />
+          <LineItem label={`Heat/Gas${perPersonSuffix}`} amount={myGas} source="estimated" />
         )}
         {isIncluded('water') ? (
           <LineItem label="Water" amount={0} source="included" />
         ) : (
-          <LineItem label="Water" amount={breakdown.est_water} source="estimated" />
+          <LineItem label={`Water${perPersonSuffix}`} amount={myWater} source="estimated" />
         )}
         {isIncluded('internet') ? (
           <LineItem label="Internet" amount={0} source="included" />
         ) : (
-          <LineItem label="Internet" amount={breakdown.est_internet} source="estimated" />
+          <LineItem label="Internet" amount={myInternet} source="estimated" />
         )}
         {isIncluded('renters_insurance') ? (
           <LineItem label="Renter&apos;s Insurance" amount={0} source="included" />
         ) : (
-          <LineItem label="Renter&apos;s Insurance" amount={breakdown.est_renters_insurance} source="estimated" />
+          <LineItem label="Renter&apos;s Insurance" amount={myInsurance} source="estimated" />
         )}
         {isIncluded('laundry') ? (
           <LineItem label="Laundry" amount={0} source="included" />
         ) : (
-          <LineItem label="Laundry" amount={breakdown.est_laundry} source="estimated" />
+          <LineItem label={`Laundry${perPersonSuffix}`} amount={myLaundry} source="estimated" />
         )}
       </div>
 
       <div className="flex justify-between items-center border-t border-gray-200 pt-2">
-        <span className="font-semibold text-gray-900 text-sm">Est. Monthly Total</span>
+        <span className="font-semibold text-gray-900 text-sm">Est. Monthly Total{perPersonSuffix}</span>
         <span className="font-bold text-gray-900">{formatCost(monthlyTotal)}</span>
       </div>
 
@@ -134,18 +170,18 @@ export default function CostBreakdownPanel({ breakdown }: CostBreakdownPanelProp
         {breakdown.application_fee > 0 && (
           <LineItem label="Application Fee" amount={breakdown.application_fee} source={isScraped('application_fee') ? 'scraped' : 'estimated'} />
         )}
-        {(breakdown.admin_fee || 0) > 0 && (
-          <LineItem label="Admin Fee" amount={breakdown.admin_fee} source={isScraped('admin_fee') ? 'scraped' : 'estimated'} />
+        {myAdminFee > 0 && (
+          <LineItem label={`Admin Fee${perPersonSuffix}`} amount={myAdminFee} source={isScraped('admin_fee') ? 'scraped' : 'estimated'} />
         )}
-        {breakdown.security_deposit > 0 && (
-          <LineItem label="Security Deposit" amount={breakdown.security_deposit} source={isScraped('security_deposit') ? 'scraped' : 'estimated'} />
+        {myDeposit > 0 && (
+          <LineItem label={`Security Deposit${perPersonSuffix}`} amount={myDeposit} source={isScraped('security_deposit') ? 'scraped' : 'estimated'} />
         )}
         {!hasScrapedOneTimeFees && (
           <p className="text-xs text-gray-400 italic py-1">No fees listed — check with property</p>
         )}
-        <LineItem label="First Month" amount={monthlyTotal} source="estimated" />
+        <LineItem label={`First Month${perPersonSuffix}`} amount={monthlyTotal} source="estimated" />
         <div className="flex justify-between items-center border-t border-gray-200 pt-2">
-          <span className="font-semibold text-gray-900 text-sm">Est. Move-in Total</span>
+          <span className="font-semibold text-gray-900 text-sm">Est. Move-in Total{perPersonSuffix}</span>
           <span className="font-bold text-gray-900">{formatCost(moveInTotal)}</span>
         </div>
       </div>

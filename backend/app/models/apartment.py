@@ -63,6 +63,10 @@ class ApartmentModel(Base):
     security_deposit = Column(Integer, nullable=True)
     other_monthly_fees = Column(Integer, nullable=True)  # Catch-all for unmatched monthly fees
 
+    # Pricing model detection
+    pricing_model = Column(String(20), default="per_unit")  # "per_unit" or "per_person"
+    pricing_model_confidence = Column(Float, nullable=True)  # 0.0-1.0
+
     # True cost fields (estimated)
     est_electric = Column(Integer, nullable=True)
     est_gas = Column(Integer, nullable=True)
@@ -151,6 +155,7 @@ class ApartmentModel(Base):
             "admin_fee": self.admin_fee,
             "security_deposit": self.security_deposit,
             "other_monthly_fees": self.other_monthly_fees,
+            "pricing_model": self.pricing_model,
             "est_electric": self.est_electric,
             "est_gas": self.est_gas,
             "est_water": self.est_water,
@@ -200,6 +205,7 @@ class ApartmentModel(Base):
             "admin_fee": self.admin_fee,
             "security_deposit": self.security_deposit,
             "other_monthly_fees": self.other_monthly_fees,
+            "pricing_model": self.pricing_model,
             "est_electric": self.est_electric,
             "est_gas": self.est_gas,
             "est_water": self.est_water,

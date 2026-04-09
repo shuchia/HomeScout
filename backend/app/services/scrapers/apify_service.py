@@ -499,8 +499,8 @@ class ApifyService(BaseScraper):
                     elif is_pet_section:
                         if any(w in key_lower for w in ("rent", "monthly")):
                             monthly_fees.append({"name": f"pet {key}", "amount": amount})
-                        elif any(w in key_lower for w in ("deposit", "fee")):
-                            one_time_fees.append({"name": key, "amount": amount})
+                        elif any(w in key_lower for w in ("deposit", "fee", "one time")):
+                            one_time_fees.append({"name": f"pet {key}", "amount": amount})
                         # Skip unrecognized pet fields (e.g. "Pet Limit")
                     elif any(w in key_lower for w in ("deposit", "application", "admin", "one time")):
                         one_time_fees.append({"name": key, "amount": amount})
@@ -659,6 +659,13 @@ class ApifyService(BaseScraper):
                         # Pet-related one-time fees (pet deposit/fee) — skip,
                         # already captured pet_rent from monthly fees
                         pass
+                    elif "one time" in name:
+                        # Generic "One time Fee" without context — skip
+                        pass
+                    else:
+                        # Unmatched one-time fee (e.g. "Other Fee") — roll into admin
+                        admin_fee = (admin_fee or 0) + amount
+                        logger.debug(f"Unmatched one-time fee captured as admin: '{name}' = ${amount}")
 
         # Also check petPolicy for pet rent
         pet_policy = raw.get("petPolicy") or raw.get("pets") or {}

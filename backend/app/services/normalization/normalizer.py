@@ -185,6 +185,18 @@ class NormalizationService:
         except Exception as e:
             logger.warning(f"Failed to compute true cost: {e}")
 
+        # Step 10b: Detect pricing model
+        from app.services.pricing_model_detector import detect_pricing_model
+        detection = detect_pricing_model(
+            description=data.get("description") or "",
+            bedrooms=data["bedrooms"],
+            bathrooms=data["bathrooms"],
+            rent=data["rent"],
+            city=data.get("city") or "",
+        )
+        data["pricing_model"] = detection["pricing_model"]
+        data["pricing_model_confidence"] = detection["confidence"]
+
         # Step 11: Calculate quality score
         quality_score = self._calculate_quality_score(data)
 

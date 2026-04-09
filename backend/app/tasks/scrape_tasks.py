@@ -313,6 +313,9 @@ async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
                     admin_fee=listing_data.get("admin_fee"),
                     security_deposit=listing_data.get("security_deposit"),
                     other_monthly_fees=listing_data.get("other_monthly_fees"),
+                    # Pricing model
+                    pricing_model=listing_data.get("pricing_model"),
+                    pricing_model_confidence=listing_data.get("pricing_model_confidence"),
                     # Estimated utility costs
                     est_electric=listing_data.get("est_electric"),
                     est_gas=listing_data.get("est_gas"),

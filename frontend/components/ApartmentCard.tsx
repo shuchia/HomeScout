@@ -125,6 +125,13 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
           </div>
         </div>
 
+        {/* Per Person Pricing Badge */}
+        {apartment.pricing_model === 'per_person' && (
+          <span className="inline-block bg-purple-100 text-purple-700 text-xs font-medium px-2 py-0.5 rounded">
+            Per Person Pricing
+          </span>
+        )}
+
         {/* True Cost Estimate */}
         {apartment.true_cost_monthly != null && apartment.true_cost_monthly > rent && (
           <div className="space-y-1">
@@ -135,18 +142,18 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
               <p className="text-sm text-gray-500">
                 Est. True Cost:{' '}
                 <span className="font-semibold text-gray-700">
-                  {formatRent(apartment.true_cost_monthly)}/mo
+                  {formatRent(apartment.true_cost_monthly)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'}
                 </span>
               </p>
               <p className="text-xs text-amber-600 group-hover:text-amber-700 transition">
-                +{formatRent(apartment.true_cost_monthly - rent)}/mo in fees &amp; utilities
+                +{formatRent(apartment.true_cost_monthly - rent)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'} in fees &amp; utilities
                 <span className="ml-1">{showBreakdown ? '\u25B2' : '\u25BC'}</span>
               </p>
             </button>
 
             {showBreakdown && (
               apartment.cost_breakdown ? (
-                <CostBreakdownPanel breakdown={apartment.cost_breakdown} />
+                <CostBreakdownPanel breakdown={apartment.cost_breakdown} pricingModel={apartment.pricing_model} bedrooms={apartment.bedrooms} />
               ) : (
                 <UpgradePrompt
                   feature="full cost breakdown"

@@ -81,6 +81,13 @@ class ClaudeService:
                 "est_renters_insurance": apt.get("est_renters_insurance") or 0,
                 "est_laundry": apt.get("est_laundry") or 0,
             }
+        # Include per-person pricing info if applicable
+        if apt.get("pricing_model") == "per_person":
+            data["pricing_model"] = "per_person"
+            data["pricing_note"] = (
+                f"Rent ${apt.get('rent', 0)} is per person, not for the whole unit."
+            )
+
         # Include distance if available
         if apt.get("distance_miles") is not None:
             data["distance_miles"] = apt["distance_miles"]
@@ -194,6 +201,8 @@ For each apartment, provide:
 - A match score (0-100%)
 - A brief explanation (1-2 sentences) of why this score was assigned
 - Key highlights that align with user preferences
+
+When a listing has pricing_model "per_person", the rent shown is per-occupant, not per-unit. For budget comparison, compare the per-person cost against the user's budget. Flag per-person pricing prominently in highlights: "Per-person pricing — $X is per bed, not for the whole unit."
 
 Be honest and practical in your scoring. A perfect 100% match is rare. Most good matches will be in the 70-90% range."""
 
@@ -318,7 +327,7 @@ Return a JSON object with this exact structure:
 
 Return valid JSON only, no additional text."""
 
-        system_prompt = """You are an expert apartment comparison analyst for Snugd. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
+        system_prompt = """You are an expert apartment comparison analyst for Snugd. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. When comparing per-person and per-unit listings, normalize to per-person cost for fair comparison. A 3BR at $1,030/person (total $3,090/unit) should NOT appear cheaper than a 1BR at $1,500/unit. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
 
         try:
             message = self.client.messages.create(

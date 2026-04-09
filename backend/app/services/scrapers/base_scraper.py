@@ -58,6 +58,10 @@ class ScrapedListing:
     security_deposit: Optional[int] = None
     other_monthly_fees: Optional[int] = None  # Catch-all for unmatched monthly fees
 
+    # Pricing model
+    pricing_model: Optional[str] = None  # "per_unit" or "per_person"
+    pricing_model_confidence: Optional[float] = None
+
     # Contact info (extracted from listing)
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None
@@ -97,6 +101,8 @@ class ScrapedListing:
             "admin_fee": self.admin_fee,
             "security_deposit": self.security_deposit,
             "other_monthly_fees": self.other_monthly_fees,
+            "pricing_model": self.pricing_model,
+            "pricing_model_confidence": self.pricing_model_confidence,
             "contact_phone": self.contact_phone,
             "contact_email": self.contact_email,
             "raw_data": self.raw_data,
