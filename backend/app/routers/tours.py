@@ -308,21 +308,74 @@ async def generate_decision_brief(
                 {"tag": tg["tag"], "sentiment": tg["sentiment"]}
             )
 
-        # Build data for Claude
+        # Fetch user's saved searches for preference context
+        user_preferences = None
+        try:
+            prefs_result = (
+                supabase_admin.table("saved_searches")
+                .select("criteria")
+                .eq("user_id", user.user_id)
+                .eq("is_active", True)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if prefs_result.data:
+                criteria = prefs_result.data[0].get("criteria", {})
+                parts = []
+                if criteria.get("city"):
+                    parts.append(f"City: {criteria['city']}")
+                if criteria.get("budget"):
+                    parts.append(f"Budget: ${criteria['budget']}/mo")
+                if criteria.get("bedrooms"):
+                    parts.append(f"Bedrooms: {criteria['bedrooms']}")
+                if criteria.get("other_preferences"):
+                    parts.append(f"Priorities: {criteria['other_preferences']}")
+                if parts:
+                    user_preferences = "\n".join(parts)
+        except Exception as e:
+            logger.debug(f"Could not fetch saved search preferences: {e}")
+
+        # Build enriched data for Claude
         toured_apartments = []
         for t in tours:
             apt = apartments_by_id.get(t["apartment_id"], {})
-            toured_apartments.append({
+            apt_data = {
                 "apartment_id": t["apartment_id"],
                 "address": apt.get("address", "Unknown"),
                 "rent": apt.get("rent"),
                 "bedrooms": apt.get("bedrooms"),
                 "bathrooms": apt.get("bathrooms"),
+                "sqft": apt.get("sqft"),
+                "property_type": apt.get("property_type"),
+                "available_date": apt.get("available_date"),
                 "amenities": apt.get("amenities", []),
+                # True cost data
+                "true_cost_monthly": apt.get("true_cost_monthly"),
+                "true_cost_move_in": apt.get("true_cost_move_in"),
+                # Fee breakdown
+                "pet_rent": apt.get("pet_rent"),
+                "parking_fee": apt.get("parking_fee"),
+                "amenity_fee": apt.get("amenity_fee"),
+                "application_fee": apt.get("application_fee"),
+                "admin_fee": apt.get("admin_fee"),
+                "security_deposit": apt.get("security_deposit"),
+                # Pricing model
+                "pricing_model": apt.get("pricing_model"),
+                # Tour data
                 "tour_rating": t.get("tour_rating"),
+                "tour_decision": t.get("decision"),
                 "tags": tags_by_tour.get(t["id"], []),
                 "notes": notes_by_tour.get(t["id"], []),
-            })
+            }
+            # Add pricing context for per-person listings
+            if apt.get("pricing_model") == "per_person":
+                beds = apt.get("bedrooms") or 1
+                apt_data["pricing_note"] = (
+                    f"Per-person pricing: ${apt.get('rent')}/person "
+                    f"(est. ${apt.get('rent', 0) * beds}/unit total)"
+                )
+            toured_apartments.append(apt_data)
 
         from app.services.claude_service import ClaudeService
 
@@ -330,6 +383,7 @@ async def generate_decision_brief(
         brief = await asyncio.to_thread(
             claude.generate_decision_brief,
             toured_apartments=toured_apartments,
+            user_preferences=user_preferences,
         )
 
         return brief

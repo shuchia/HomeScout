@@ -576,11 +576,18 @@ Return valid JSON only, no additional text."""
 
         system_prompt = (
             "You are helping a renter make a final decision. They've toured "
-            "multiple apartments and captured ratings, notes, and pro/con "
-            "tags. Synthesize everything into a clear, actionable "
+            "multiple apartments and captured star ratings, notes, photos, and "
+            "pro/con tags. Synthesize everything into a clear, actionable "
             "recommendation. Write as if speaking directly to the renter using "
-            "\"you\" and \"your\". Respect their own ratings — don't override "
-            "their impressions, but add context."
+            "\"you\" and \"your\". Respect their star ratings and notes — these "
+            "reflect firsthand impressions from the tour.\n\n"
+            "When analyzing costs, use true_cost_monthly (not just rent) for "
+            "budget comparisons — this includes utilities, fees, and insurance. "
+            "Highlight move-in cost differences (application fee, admin fee, "
+            "security deposit). When pricing_model is 'per_person', note that "
+            "the rent is per bed, not per unit.\n\n"
+            "Consider all available data: square footage, property type, "
+            "available date, amenities, and any search preferences provided."
         )
 
         preferences_section = ""
@@ -594,9 +601,12 @@ Return valid JSON only, no additional text."""
 
 Instructions:
 - For each apartment, provide an AI take (1-2 sentence summary), strengths, and concerns.
-- Weight the renter's star ratings and tags heavily — these reflect firsthand impressions from the tour.
-- Pick a recommended apartment with clear reasoning.
-- Be practical and actionable.
+- Weight star ratings and tour notes/tags heavily — these reflect firsthand impressions.
+- Compare true monthly costs (true_cost_monthly) not just advertised rent. Highlight hidden fees.
+- Consider move-in costs (application fee, admin fee, security deposit) as a practical factor.
+- Factor in the search preferences if provided — does this apartment match what matters most?
+- Pick a recommended apartment with clear reasoning covering cost, space, amenities, and tour impressions.
+- Be practical, specific, and actionable.
 
 Return ONLY a JSON object with this structure:
 {{

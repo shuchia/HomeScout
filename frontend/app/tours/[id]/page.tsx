@@ -387,8 +387,8 @@ export default function TourDetailPage() {
 
       {/* ---- Decision bar ---- */}
       {showDecisionBar && (
-        <div className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 z-20">
-          <div className="max-w-2xl mx-auto px-4 py-3 flex gap-2">
+        <div className="fixed bottom-14 md:bottom-0 inset-x-0 bg-white border-t border-gray-200 z-40">
+          <div className="max-w-2xl mx-auto px-3 py-2 md:px-4 md:py-3 flex gap-2">
             <button
               type="button"
               onClick={() => handleDecision(tour.decision === 'applied' ? null : 'applied')}
