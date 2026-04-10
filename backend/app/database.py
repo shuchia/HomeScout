@@ -31,14 +31,21 @@ def _get_engine() -> AsyncEngine:
     """Get or create the database engine (lazy initialization)."""
     global _engine
     if _engine is None:
+        # Pool sizing for RDS t4g.micro (~85 max_connections total).
+        # With API + worker + beat running simultaneously + rolling deploys
+        # briefly doubling container count, we need to keep per-container
+        # usage low to leave headroom for alembic migrations.
+        # Override via DB_POOL_SIZE / DB_MAX_OVERFLOW for larger instances.
+        pool_size = int(os.getenv("DB_POOL_SIZE", "2"))
+        max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "3"))
         _engine = create_async_engine(
             DATABASE_URL,
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
             poolclass=AsyncAdaptedQueuePool,
-            pool_size=5,          # Keep 5 connections ready
-            max_overflow=10,      # Allow up to 15 total under burst
-            pool_recycle=1800,    # Recycle connections every 30 min
-            pool_pre_ping=True,   # Verify connections before use
+            pool_size=pool_size,     # Default 2 persistent connections
+            max_overflow=max_overflow,  # Default +3 burst = 5 max per container
+            pool_recycle=1800,       # Recycle connections every 30 min
+            pool_pre_ping=True,      # Verify connections before use
             future=True
         )
     return _engine
