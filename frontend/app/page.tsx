@@ -171,7 +171,7 @@ export default function Home() {
         <div className={`grid gap-8 ${hasSearched ? 'lg:grid-cols-3' : 'max-w-md mx-auto'}`}>
           {/* Search Form */}
           <div className={`${hasSearched ? 'lg:col-span-1' : ''}`}>
-            <div className="bg-white rounded-lg shadow-md p-6 sticky top-8">
+            <div className="bg-white rounded-lg shadow-md p-6 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Search Apartments
               </h3>

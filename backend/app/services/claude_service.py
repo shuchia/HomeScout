@@ -177,10 +177,12 @@ Please return a JSON array with match scores for each apartment. For each apartm
 Format your response as valid JSON only, with no additional text."""
 
         # System prompt defines Claude's role and scoring guidelines
-        system_prompt = """You are an expert apartment matching assistant for Snugd, an app that helps young professionals find their ideal apartment efficiently. Your task is to analyze apartment listings against user preferences and provide accurate match scores.
+        system_prompt = """You are an expert apartment matching assistant for snugd, helping students and young professionals find their ideal apartment efficiently. Analyze apartment listings against both the search criteria and stated preferences — preferences are equally important as budget and location when scoring.
+
+Write all reasoning and highlights as if speaking directly to the renter — use "you" and "your", never "the user" or "the renter" or third-person references.
 
 Analyze each apartment based on:
-1. Budget fit (how well the rent matches their budget)
+1. Budget fit (how well the rent matches the specified budget)
 2. Location desirability (neighborhood quality, safety, amenities)
 3. Space requirements (bedrooms, bathrooms, square footage)
 4. Property type preference
@@ -199,12 +201,12 @@ Analyze each apartment based on:
 
 For each apartment, provide:
 - A match score (0-100%)
-- A brief explanation (1-2 sentences) of why this score was assigned
-- Key highlights that align with user preferences
+- A brief explanation (1-2 sentences) of why this score was assigned, addressing the renter directly
+- Key highlights that align with the search preferences
 
-When a listing has pricing_model "per_person", the rent shown is per-occupant, not per-unit. For budget comparison, compare the per-person cost against the user's budget. Flag per-person pricing prominently in highlights: "Per-person pricing — $X is per bed, not for the whole unit."
+When a listing has pricing_model "per_person", the rent shown is per-occupant, not per-unit. For budget comparison, compare the per-person cost against the search budget. Flag per-person pricing prominently in highlights: "Per-person pricing — $X is per bed, not for the whole unit."
 
-Be honest and practical in your scoring. A perfect 100% match is rare. Most good matches will be in the 70-90% range."""
+Be honest and practical in scoring. A perfect 100% match is rare. Most good matches will be in the 70-90% range."""
 
         try:
             # Call Claude API with prompt caching — the system prompt is
@@ -327,7 +329,7 @@ Return a JSON object with this exact structure:
 
 Return valid JSON only, no additional text."""
 
-        system_prompt = """You are an expert apartment comparison analyst for Snugd. Compare apartments head-to-head across multiple categories, considering the user's stated preferences and search criteria. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. When comparing per-person and per-unit listings, normalize to per-person cost for fair comparison. A 3BR at $1,030/person (total $3,090/unit) should NOT appear cheaper than a 1BR at $1,500/unit. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
+        system_prompt = """You are an expert apartment comparison analyst for snugd. Compare apartments head-to-head across multiple categories, considering the stated preferences and search criteria. Write all reasoning as if speaking directly to the renter — use "you" and "your", never "the user" or third-person references. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. When comparing per-person and per-unit listings, normalize to per-person cost for fair comparison. A 3BR at $1,030/person (total $3,090/unit) should NOT appear cheaper than a 1BR at $1,500/unit. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
 
         try:
             message = self.client.messages.create(
@@ -384,11 +386,11 @@ Return valid JSON only, no additional text."""
 Instructions:
 - Write a subject line and email body.
 - Address the landlord/property manager politely.
-- Mention the user's name, desired move-in date, and budget if provided.
+- Mention the tenant's name, desired move-in date, and budget if provided.
 - Reference specific apartment details (address, rent, beds/baths, amenities) to show genuine interest.
 - Ask smart questions based on what is MISSING from the listing:
   - No sqft listed? Ask about the apartment size.
-  - No pet policy mentioned? Ask about pets if the user mentioned pets in preferences.
+  - No pet policy mentioned? Ask about pets if the tenant mentioned pets in preferences.
   - No parking info? Ask about parking if relevant.
   - No utilities info? Ask what's included.
   - No lease term info? Ask about lease length and terms.
@@ -506,8 +508,8 @@ Return valid JSON only, no additional text."""
         apartment_json = json.dumps(apartment_context, indent=2)
 
         system_prompt = (
-            "You are cleaning up rough apartment tour notes. The user jotted "
-            "these down quickly during or after a tour. Remove filler words, "
+            "You are cleaning up rough apartment tour notes. These were jotted "
+            "down quickly during or after a tour. Remove filler words, "
             "fix grammar, structure into clear observations. Also suggest "
             "pro/con tags."
         )
@@ -576,13 +578,14 @@ Return valid JSON only, no additional text."""
             "You are helping a renter make a final decision. They've toured "
             "multiple apartments and captured ratings, notes, and pro/con "
             "tags. Synthesize everything into a clear, actionable "
-            "recommendation. Respect the user's own ratings — don't override "
+            "recommendation. Write as if speaking directly to the renter using "
+            "\"you\" and \"your\". Respect their own ratings — don't override "
             "their impressions, but add context."
         )
 
         preferences_section = ""
         if user_preferences:
-            preferences_section = f"\n## User Preferences\n{user_preferences}\n"
+            preferences_section = f"\n## Preferences\n{user_preferences}\n"
 
         user_prompt = f"""Generate a decision brief for these toured apartments.
 {preferences_section}
@@ -591,7 +594,7 @@ Return valid JSON only, no additional text."""
 
 Instructions:
 - For each apartment, provide an AI take (1-2 sentence summary), strengths, and concerns.
-- Weight the user's own ratings and tags heavily in your analysis.
+- Weight the renter's star ratings and tags heavily — these reflect firsthand impressions from the tour.
 - Pick a recommended apartment with clear reasoning.
 - Be practical and actionable.
 
