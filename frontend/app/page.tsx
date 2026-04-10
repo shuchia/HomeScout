@@ -80,10 +80,18 @@ export default function Home() {
       other_preferences: lastSearchParams.other_preferences,
     }).then(({ scores }) => {
       if (scores.length > 0) {
-        setResults(prev => prev.map(apt => {
-          const score = scores.find(s => s.apartment_id === apt.id);
-          return score ? { ...apt, match_score: score.match_score, reasoning: score.reasoning, highlights: score.highlights } : apt;
-        }));
+        setResults(prev => {
+          const merged = prev.map(apt => {
+            const score = scores.find(s => s.apartment_id === apt.id);
+            return score ? { ...apt, match_score: score.match_score, reasoning: score.reasoning, highlights: score.highlights } : apt;
+          });
+          // Re-sort by AI match_score (highest first); apartments without scores fall to bottom
+          return merged.sort((a, b) => {
+            const scoreA = a.match_score ?? -1;
+            const scoreB = b.match_score ?? -1;
+            return scoreB - scoreA;
+          });
+        });
       }
       setAiLoadingIds(new Set());
     });
