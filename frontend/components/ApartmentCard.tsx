@@ -31,10 +31,8 @@ const formatSqft = (sqft: number): string => {
 
 // Get freshness badge based on confidence score
 const getFreshnessBadge = (confidence?: number): { text: string; color: string } | null => {
-  if (confidence === undefined || confidence >= 80) return null;
-  if (confidence >= 50) return { text: 'Listed recently', color: 'bg-yellow-100 text-yellow-800' };
-  if (confidence >= 40) return { text: 'May no longer be available', color: 'bg-orange-100 text-orange-800' };
-  return null;
+  if (confidence === undefined || confidence >= 40) return null;
+  return { text: 'May no longer be available', color: 'bg-orange-100 text-orange-800' };
 };
 
 // Get color class based on match score
