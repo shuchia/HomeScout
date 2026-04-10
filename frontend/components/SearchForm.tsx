@@ -36,7 +36,10 @@ const AVAILABLE_CITIES = [
 ];
 
 // Property type options
-const PROPERTY_TYPES = ['Apartment', 'Condo', 'Townhouse', 'Studio'];
+// Property type filter removed — all scraped listings are "Apartment" since
+// we only source from apartments.com. Kept "Apartment" as the hardcoded
+// default sent to the backend so the API contract is unchanged.
+const DEFAULT_PROPERTY_TYPE = 'Apartment';
 
 // Bedroom options
 const BEDROOM_OPTIONS = [
@@ -70,9 +73,6 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
   const [budget, setBudget] = useState(searchContext?.budget || 2000);
   const [bedrooms, setBedrooms] = useState(searchContext?.bedrooms ?? 1);
   const [bathrooms, setBathrooms] = useState(searchContext?.bathrooms ?? 1);
-  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState<string[]>(
-    searchContext?.property_type ? searchContext.property_type.split(', ') : ['Apartment']
-  );
   const [moveInDate, setMoveInDate] = useState(searchContext?.move_in_date || '2026-03-01');
   const [otherPreferences, setOtherPreferences] = useState(searchContext?.other_preferences || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,15 +83,6 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
   );
   const [maxDistance, setMaxDistance] = useState(searchContext?.max_distance_miles || 5);
 
-  // Handle property type checkbox toggle
-  const handlePropertyTypeChange = (type: string) => {
-    setSelectedPropertyTypes((prev) =>
-      prev.includes(type)
-        ? prev.filter((t) => t !== type)
-        : [...prev, type]
-    );
-  };
-
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,11 +90,6 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
     // Validation
     if (!city.trim()) {
       onError('Please enter a city');
-      return;
-    }
-
-    if (selectedPropertyTypes.length === 0) {
-      onError('Please select at least one property type');
       return;
     }
 
@@ -117,7 +103,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         budget,
         bedrooms,
         bathrooms,
-        property_type: selectedPropertyTypes.join(', '),
+        property_type: DEFAULT_PROPERTY_TYPE,
         move_in_date: moveInDate,
         other_preferences: otherPreferences.trim() || undefined,
         near_lat: nearLocation?.lat,
@@ -137,7 +123,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         budget,
         bedrooms,
         bathrooms,
-        property_type: selectedPropertyTypes.join(', '),
+        property_type: DEFAULT_PROPERTY_TYPE,
         move_in_date: moveInDate,
         other_preferences: otherPreferences.trim(),
         near_lat: nearLocation?.lat,
@@ -243,33 +229,6 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
               </option>
             ))}
           </select>
-        </div>
-      </div>
-
-      {/* Property Type Checkboxes */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Property Type
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {PROPERTY_TYPES.map((type) => (
-            <label
-              key={type}
-              className={`flex items-center p-3 border rounded-lg cursor-pointer transition ${
-                selectedPropertyTypes.includes(type)
-                  ? 'border-[var(--color-primary)] bg-[#2D6A4F10]'
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={selectedPropertyTypes.includes(type)}
-                onChange={() => handlePropertyTypeChange(type)}
-                className="h-4 w-4 text-[var(--color-primary)] rounded focus:ring-[var(--color-primary)]"
-              />
-              <span className="ml-2 text-sm">{type}</span>
-            </label>
-          ))}
         </div>
       </div>
 
