@@ -98,6 +98,18 @@ module "ecs" {
   worker_cpu            = var.worker_cpu
   worker_memory         = var.worker_memory
   worker_desired_count  = var.worker_desired_count
+  beat_desired_count    = var.beat_desired_count
   frontend_url          = var.frontend_url
   log_level             = var.log_level
+}
+
+module "monitoring" {
+  source                  = "./modules/monitoring"
+  environment             = var.environment
+  ecs_cluster_name        = module.ecs.cluster_name
+  ecs_api_service_name    = module.ecs.api_service_name
+  alb_arn_suffix          = module.alb.alb_arn_suffix
+  target_group_arn_suffix = module.alb.target_group_arn_suffix
+  rds_instance_id         = module.rds.instance_id
+  alert_email             = var.alert_email
 }

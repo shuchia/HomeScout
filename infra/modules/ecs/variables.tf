@@ -63,6 +63,12 @@ variable "worker_desired_count" {
   default = 1
 }
 
+variable "beat_desired_count" {
+  description = "Desired count for beat service (0 to disable scheduled tasks in dev/qa)"
+  type        = number
+  default     = 1
+}
+
 variable "frontend_url" {
   type = string
 }

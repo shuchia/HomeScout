@@ -170,11 +170,11 @@ jobs:
             --cluster snugd-dev \
             --services api
 
-      - name: Smoke test
+      - name: Smoke tests
         run: |
           sleep 10
-          curl -sf https://api-dev.snugd.ai/health || exit 1
-          echo "Smoke test passed"
+          chmod +x scripts/smoke-test.sh
+          ./scripts/smoke-test.sh dev
 
   deploy-qa:
     name: Deploy to QA
@@ -196,11 +196,19 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Verify dev image exists
+        run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=dev-${SHA} || {
+            echo "::error::No dev image for SHA ${SHA}. Deploy to dev first."
+            exit 1
+          }
+
       - name: Retag image for QA
         run: |
           REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
           SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          # Pull the dev image and retag as qa
           docker pull ${REGISTRY}:dev-${SHA}
           docker tag ${REGISTRY}:dev-${SHA} ${REGISTRY}:qa-${SHA}
           docker push ${REGISTRY}:qa-${SHA}
@@ -284,10 +292,23 @@ jobs:
       - name: Wait for stability
         run: aws ecs wait services-stable --cluster snugd-qa --services api
 
-      - name: Smoke test
+      - name: Smoke tests
         run: |
           sleep 10
-          curl -sf https://api-qa.snugd.ai/health || exit 1
+          chmod +x scripts/smoke-test.sh
+          ./scripts/smoke-test.sh qa
+
+      - name: Run E2E tests against QA
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test --project=chromium
+        env:
+          NEXT_PUBLIC_API_URL: https://api-qa.snugd.ai
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.QA_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.QA_SUPABASE_ANON_KEY }}
+          BASE_URL: https://qa.snugd.ai
 
   deploy-prod:
     name: Deploy to Prod
@@ -310,6 +331,15 @@ jobs:
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verify QA image exists
+        run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=qa-${SHA} || {
+            echo "::error::No QA image for SHA ${SHA}. Deploy to QA first."
+            exit 1
+          }
 
       - name: Retag image for Prod
         run: |
@@ -398,7 +428,8 @@ jobs:
       - name: Wait for stability
         run: aws ecs wait services-stable --cluster snugd-prod --services api
 
-      - name: Smoke test
+      - name: Smoke tests
         run: |
           sleep 10
-          curl -sf https://api.snugd.ai/health || exit 1
+          chmod +x scripts/smoke-test.sh
+          ./scripts/smoke-test.sh prod

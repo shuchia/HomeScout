@@ -19,8 +19,9 @@ usage() {
   echo "  migrate <env>  Run Alembic migrations on environment"
   echo "  status <env>   Check ECS service status"
   echo "  logs <env>     Tail CloudWatch logs for API service"
-  echo "  tf-plan <env>  Run terraform plan for environment"
-  echo "  tf-apply <env> Run terraform apply for environment"
+  echo "  scrape <env> [city]  Trigger on-demand scrape (all markets or specific city)"
+  echo "  tf-plan <env>       Run terraform plan for environment"
+  echo "  tf-apply <env>      Run terraform apply for environment"
   echo ""
   echo "Environments: dev, qa, prod"
 }
@@ -90,6 +91,30 @@ case "$COMMAND" in
   logs)
     echo "Tailing logs for snugd-${ENV}/api..."
     aws logs tail /ecs/snugd-${ENV}/api --follow --since 5m
+    ;;
+
+  scrape)
+    CITY=${3:-}
+    if [ -n "$CITY" ]; then
+      echo "Triggering scrape for '${CITY}' on ${ENV}..."
+      OVERRIDE_CMD="from app.tasks.scrape_tasks import scrape_city_task; scrape_city_task.delay('${CITY}')"
+    else
+      echo "Triggering full scrape dispatch on ${ENV}..."
+      OVERRIDE_CMD="from app.tasks.dispatcher import dispatch_scrapes; dispatch_scrapes()"
+    fi
+    SUBNETS=$(aws ec2 describe-subnets \
+      --filters "Name=tag:Name,Values=snugd-${ENV}-private-*" \
+      --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')
+    TASK_ARN=$(aws ecs run-task \
+      --cluster snugd-${ENV} \
+      --task-definition snugd-${ENV}-worker \
+      --launch-type FARGATE \
+      --network-configuration "awsvpcConfiguration={subnets=${SUBNETS},assignPublicIp=DISABLED}" \
+      --overrides "{\"containerOverrides\":[{\"name\":\"worker\",\"command\":[\"python\",\"-c\",\"${OVERRIDE_CMD}\"]}]}" \
+      --query 'tasks[0].taskArn' \
+      --output text)
+    echo "Scrape task: ${TASK_ARN}"
+    echo "Monitor logs: ./scripts/deploy.sh logs ${ENV}"
     ;;
 
   tf-plan)

@@ -206,7 +206,7 @@ resource "aws_ecs_service" "beat" {
   name            = "beat"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.beat.arn
-  desired_count   = 1
+  desired_count   = var.beat_desired_count
   launch_type     = "FARGATE"
 
   deployment_circuit_breaker {
