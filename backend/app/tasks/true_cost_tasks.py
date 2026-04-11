@@ -172,7 +172,8 @@ def backfill_fees_task(self):
                                 true_cost_monthly = :true_cost_monthly,
                                 true_cost_move_in = :true_cost_move_in,
                                 pricing_model = :pricing_model,
-                                pricing_model_confidence = :pricing_model_confidence
+                                pricing_model_confidence = :pricing_model_confidence,
+                                available_date = :available_date
                             WHERE id = :id
                         """), {
                             "id": apt_id,
@@ -189,6 +190,7 @@ def backfill_fees_task(self):
                             "true_cost_move_in": cost["true_cost_move_in"],
                             "pricing_model": detection["pricing_model"],
                             "pricing_model_confidence": detection["confidence"],
+                            "available_date": listing.available_date,
                         })
                         updated += 1
                     except Exception as e:

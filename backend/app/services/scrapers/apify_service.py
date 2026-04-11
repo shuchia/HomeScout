@@ -713,7 +713,16 @@ class ApifyService(BaseScraper):
                         except (TypeError, IndexError):
                             pass
             if dates:
-                available_date = min(dates)  # earliest date
+                # Filter out past dates — Apify rental records retain original
+                # lease start dates that are often years stale. Pick the earliest
+                # upcoming date; if all are in the past, treat as "Now".
+                from datetime import date as _date
+                today_str = _date.today().isoformat()
+                upcoming = [d for d in dates if d >= today_str]
+                if upcoming:
+                    available_date = min(upcoming)
+                else:
+                    available_date = "Now"
             else:
                 # Models have available units but no specific dates
                 available_date = "Now"

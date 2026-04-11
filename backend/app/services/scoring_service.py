@@ -20,6 +20,11 @@ PREFERENCE_KEYWORDS: dict[str, list[str]] = {
     "security": ["doorman", "concierge", "gated", "security"],
     "storage": ["storage", "closet space"],
     "utilities": ["utilities included", "wifi included", "water included"],
+    "furnished": ["furnished"],
+    "ac": ["air conditioning", "central ac", "a/c", "air conditioner"],
+    "dishwasher": ["dishwasher"],
+    "elevator": ["elevator"],
+    "hardwood": ["hardwood floors", "hardwood"],
 }
 
 

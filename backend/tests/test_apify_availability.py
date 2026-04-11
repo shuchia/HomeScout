@@ -155,12 +155,13 @@ def test_timezone_offset_parsed(scraper):
             {"modelId": "m1", "availability": "1 Available units"},
         ],
         rentals=[
-            {"modelId": "m1", "availableDate": "2026-04-10T00:00:00Z"},
-            {"modelId": "m1", "availableDate": "2026-04-05T00:00:00-05:00"},
+            {"modelId": "m1", "availableDate": "2099-10-10T00:00:00Z"},
+            {"modelId": "m1", "availableDate": "2099-10-05T00:00:00-05:00"},
         ],
     )
     listing = scraper._normalize_apartments_com_listing(raw)
-    assert listing.available_date == "2026-04-05"
+    # Earliest upcoming date wins (both are in the future)
+    assert listing.available_date == "2099-10-05"
 
 
 # --- Test 16: Model has units but zero matching rentals → "Now" ---
@@ -176,7 +177,9 @@ def test_model_with_units_no_matching_rentals(scraper):
 
 
 # --- Test 17: All rentals have past dates → returns earliest ---
-def test_past_dates_returned(scraper):
+def test_past_dates_collapse_to_now(scraper):
+    """All-past availableDates collapse to 'Now' — Apify rental records
+    retain original lease start dates that can be years stale."""
     raw = _make_raw(
         models=[
             {"modelId": "m1", "availability": "1 Available units"},
@@ -187,5 +190,4 @@ def test_past_dates_returned(scraper):
         ],
     )
     listing = scraper._normalize_apartments_com_listing(raw)
-    # Past dates still returned — frontend displays as "Available now"
-    assert listing.available_date == "2025-01-01"
+    assert listing.available_date == "Now"
