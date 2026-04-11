@@ -544,15 +544,27 @@ export async function enhanceNote(
  * Generate an AI decision brief for all toured apartments
  * Calls POST /api/tours/decision-brief endpoint
  *
+ * @param context Optional search context to personalize the recommendation
  * @returns Promise with apartment analyses and recommendation
  * @throws ApiError if request fails
  */
-export async function generateDecisionBrief(): Promise<{
+export async function generateDecisionBrief(
+  context?: {
+    city?: string;
+    budget?: number;
+    bedrooms?: number;
+    bathrooms?: number;
+    other_preferences?: string;
+    near_label?: string;
+  }
+): Promise<{
   apartments: Array<{ apartment_id: string; ai_take: string; strengths: string[]; concerns: string[] }>
   recommendation: { apartment_id: string; reasoning: string }
 }> {
   const response = await fetchWithAuth(`${API_URL}/api/tours/decision-brief`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(context || {}),
   })
   if (!response.ok) throw new ApiError('Failed to generate decision brief', response.status)
   return response.json()

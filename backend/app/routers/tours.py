@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from pydantic import BaseModel
 
 from app.auth import get_current_user, UserContext
 from app.services.tier_service import supabase_admin, TierService
@@ -228,11 +229,27 @@ async def generate_day_plan(
 # ── AI decision brief endpoint (must be before /{tour_id}) ───────────
 
 
+class DecisionBriefRequest(BaseModel):
+    """Optional search context to pass to the decision brief."""
+    city: Optional[str] = None
+    budget: Optional[int] = None
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    other_preferences: Optional[str] = None
+    near_label: Optional[str] = None
+
+
 @router.post("/api/tours/decision-brief")
 async def generate_decision_brief(
+    body: Optional[DecisionBriefRequest] = None,
     user: UserContext = Depends(get_current_user),
 ):
-    """Generate a decision brief for all toured apartments."""
+    """Generate a decision brief for all toured apartments.
+
+    Optional request body can include the user's current search context
+    (city, budget, preferences) for more personalized recommendations.
+    Falls back to the most recent saved_search if no context provided.
+    """
     _ensure_supabase()
 
     tier = await TierService.get_user_tier(user.user_id)
@@ -308,33 +325,51 @@ async def generate_decision_brief(
                 {"tag": tg["tag"], "sentiment": tg["sentiment"]}
             )
 
-        # Fetch user's saved searches for preference context
+        # Build user preferences string — prefer request body (current search
+        # context from frontend), fall back to most recent saved search
         user_preferences = None
-        try:
-            prefs_result = (
-                supabase_admin.table("saved_searches")
-                .select("criteria")
-                .eq("user_id", user.user_id)
-                .eq("is_active", True)
-                .order("created_at", desc=True)
-                .limit(1)
-                .execute()
-            )
-            if prefs_result.data:
-                criteria = prefs_result.data[0].get("criteria", {})
-                parts = []
-                if criteria.get("city"):
-                    parts.append(f"City: {criteria['city']}")
-                if criteria.get("budget"):
-                    parts.append(f"Budget: ${criteria['budget']}/mo")
-                if criteria.get("bedrooms"):
-                    parts.append(f"Bedrooms: {criteria['bedrooms']}")
-                if criteria.get("other_preferences"):
-                    parts.append(f"Priorities: {criteria['other_preferences']}")
-                if parts:
-                    user_preferences = "\n".join(parts)
-        except Exception as e:
-            logger.debug(f"Could not fetch saved search preferences: {e}")
+        context = {}
+        if body:
+            context = {
+                "city": body.city,
+                "budget": body.budget,
+                "bedrooms": body.bedrooms,
+                "bathrooms": body.bathrooms,
+                "preferences": body.other_preferences,
+                "near_label": body.near_label,
+            }
+
+        if not any(context.values()):
+            try:
+                prefs_result = (
+                    supabase_admin.table("saved_searches")
+                    .select("city, budget, bedrooms, bathrooms, preferences")
+                    .eq("user_id", user.user_id)
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                if prefs_result.data:
+                    context = prefs_result.data[0]
+            except Exception as e:
+                logger.debug(f"Could not fetch saved search preferences: {e}")
+
+        parts = []
+        if context.get("city"):
+            parts.append(f"Searched in: {context['city']}")
+        if context.get("budget"):
+            parts.append(f"Budget: ${context['budget']}/mo")
+        if context.get("bedrooms") is not None:
+            parts.append(f"Bedrooms: {context['bedrooms']}")
+        if context.get("bathrooms") is not None:
+            parts.append(f"Bathrooms: {context['bathrooms']}")
+        if context.get("near_label"):
+            parts.append(f"Near: {context['near_label']}")
+        prefs_text = context.get("preferences") or context.get("other_preferences")
+        if prefs_text:
+            parts.append(f"Priorities: {prefs_text}")
+        if parts:
+            user_preferences = "\n".join(parts)
 
         # Build enriched data for Claude
         toured_apartments = []

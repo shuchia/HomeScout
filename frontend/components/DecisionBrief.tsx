@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { generateDecisionBrief } from '@/lib/api'
+import { useComparison } from '@/hooks/useComparison'
 import UpgradePrompt from '@/components/UpgradePrompt'
 import { Tour } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
@@ -26,6 +27,7 @@ interface BriefResult {
 }
 
 export default function DecisionBrief({ isPro, profileLoading, touredTours = [], apartments = {} }: DecisionBriefProps) {
+  const searchContext = useComparison((state) => state.searchContext)
   const [brief, setBrief] = useState<BriefResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,7 +36,15 @@ export default function DecisionBrief({ isPro, profileLoading, touredTours = [],
     try {
       setLoading(true)
       setError(null)
-      const result = await generateDecisionBrief()
+      const context = searchContext ? {
+        city: searchContext.city,
+        budget: searchContext.budget,
+        bedrooms: searchContext.bedrooms,
+        bathrooms: searchContext.bathrooms,
+        other_preferences: searchContext.other_preferences,
+        near_label: searchContext.near_label,
+      } : undefined
+      const result = await generateDecisionBrief(context)
       setBrief(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate decision brief')
