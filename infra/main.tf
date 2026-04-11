@@ -39,9 +39,16 @@ resource "aws_secretsmanager_secret" "app_secrets" {
 }
 
 # --- Modules ---
+# ECR repo is shared across environments — only dev manages it via Terraform.
+# QA/prod read it as a data source to avoid state conflicts.
 module "ecr" {
+  count           = var.environment == "dev" ? 1 : 0
   source          = "./modules/ecr"
   repository_name = "snugd-backend"
+}
+
+data "aws_ecr_repository" "backend" {
+  name = "snugd-backend"
 }
 
 module "networking" {
@@ -86,7 +93,7 @@ module "ecs" {
   source                = "./modules/ecs"
   environment           = var.environment
   aws_region            = var.aws_region
-  ecr_repository_url    = module.ecr.repository_url
+  ecr_repository_url    = data.aws_ecr_repository.backend.repository_url
   image_tag             = var.image_tag
   private_subnet_ids    = module.networking.private_subnet_ids
   ecs_security_group_id = module.networking.ecs_security_group_id

@@ -24,5 +24,5 @@ worker_memory        = 512
 worker_desired_count = 1
 beat_desired_count   = 0 # No scheduled scraping in dev — use on-demand
 
-# ACM — use wildcard cert *.snugd.ai or environment-specific cert
-# certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT:certificate/CERT-ID"
+# ACM — wildcard cert *.snugd.ai (shared across dev/qa/prod)
+certificate_arn = "arn:aws:acm:us-east-1:453636587892:certificate/7025b517-dbe4-4294-8d90-aaa3170d74de"

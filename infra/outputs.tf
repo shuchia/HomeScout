@@ -9,7 +9,7 @@ output "alb_zone_id" {
 }
 
 output "ecr_repository_url" {
-  value       = module.ecr.repository_url
+  value       = data.aws_ecr_repository.backend.repository_url
   description = "ECR repository URL for docker push"
 }
 
