@@ -57,6 +57,8 @@ export default function CostBreakdownPanel({ breakdown, pricingModel, bedrooms }
   const isPerPerson = pricingModel === 'per_person';
   const defaultOccupancy = isPerPerson ? (bedrooms || 1) : 1;
   const [occupancy, setOccupancy] = useState(defaultOccupancy);
+  const [includePet, setIncludePet] = useState(false);
+  const [includeParking, setIncludeParking] = useState(false);
   const showOccupancy = occupancy > 1 || isPerPerson;
 
   // Shared costs: divided by occupancy (but NOT for per-person rent)
@@ -67,8 +69,9 @@ export default function CostBreakdownPanel({ breakdown, pricingModel, bedrooms }
 
   // Calculate per-person amounts
   const myRent = isPerPerson ? breakdown.base_rent : splitShared(breakdown.base_rent);
-  const myPetRent = breakdown.pet_rent; // personal, never divided
-  const myParking = breakdown.parking_fee; // personal, never divided
+  // Pet rent and parking are optional — user must opt in
+  const myPetRent = includePet ? breakdown.pet_rent : 0;
+  const myParking = includeParking ? breakdown.parking_fee : 0;
   const myAmenity = splitShared(breakdown.amenity_fee);
   const myOtherMonthly = splitShared(breakdown.other_monthly_fees || 0);
   const myElectric = splitShared(breakdown.est_electric);
@@ -112,11 +115,41 @@ export default function CostBreakdownPanel({ breakdown, pricingModel, bedrooms }
           </div>
         </div>
         <LineItem label={`Base Rent${perPersonSuffix}`} amount={myRent} source="scraped" />
-        {myPetRent > 0 && (
-          <LineItem label="Pet Rent" amount={myPetRent} source={isScraped('pet_rent') ? 'scraped' : 'estimated'} />
+        {breakdown.pet_rent > 0 && (
+          <label className="flex justify-between items-center text-sm py-1 cursor-pointer">
+            <span className="text-gray-600 flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={includePet}
+                onChange={(e) => setIncludePet(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              Pet Rent
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full ${isScraped('pet_rent') ? 'bg-blue-500' : 'bg-gray-400'}`}
+                title={isScraped('pet_rent') ? 'From listing' : 'Regional estimate'}
+              />
+            </span>
+            <span className={includePet ? 'text-gray-900' : 'text-gray-400'}>{formatCost(breakdown.pet_rent)}</span>
+          </label>
         )}
-        {myParking > 0 && (
-          <LineItem label="Parking" amount={myParking} source={isScraped('parking_fee') ? 'scraped' : 'estimated'} />
+        {breakdown.parking_fee > 0 && (
+          <label className="flex justify-between items-center text-sm py-1 cursor-pointer">
+            <span className="text-gray-600 flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={includeParking}
+                onChange={(e) => setIncludeParking(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              Parking
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full ${isScraped('parking_fee') ? 'bg-blue-500' : 'bg-gray-400'}`}
+                title={isScraped('parking_fee') ? 'From listing' : 'Regional estimate'}
+              />
+            </span>
+            <span className={includeParking ? 'text-gray-900' : 'text-gray-400'}>{formatCost(breakdown.parking_fee)}</span>
+          </label>
         )}
         {myAmenity > 0 && (
           <LineItem label={`Amenity Fee${perPersonSuffix}`} amount={myAmenity} source={isScraped('amenity_fee') ? 'scraped' : 'estimated'} />

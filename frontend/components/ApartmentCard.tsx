@@ -130,8 +130,16 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
           </span>
         )}
 
-        {/* True Cost Estimate */}
-        {apartment.true_cost_monthly != null && apartment.true_cost_monthly > rent && (
+        {/* True Cost Estimate — excludes optional pet & parking (opt-in in panel) */}
+        {(() => {
+          if (apartment.true_cost_monthly == null) return null;
+          // Exclude pet rent and parking from the headline — they're opt-in
+          const petRent = apartment.cost_breakdown?.pet_rent || 0;
+          const parkingFee = apartment.cost_breakdown?.parking_fee || 0;
+          const optional = petRent + parkingFee;
+          const headlineCost = apartment.true_cost_monthly - optional;
+          if (headlineCost <= rent) return null;
+          return (
           <div className="space-y-1">
             <button
               onClick={() => setShowBreakdown(!showBreakdown)}
@@ -140,11 +148,11 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
               <p className="text-sm text-gray-500">
                 Est. True Cost:{' '}
                 <span className="font-semibold text-gray-700">
-                  {formatRent(apartment.true_cost_monthly)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'}
+                  {formatRent(headlineCost)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'}
                 </span>
               </p>
               <p className="text-xs text-amber-600 group-hover:text-amber-700 transition">
-                +{formatRent(apartment.true_cost_monthly - rent)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'} in fees &amp; utilities
+                +{formatRent(headlineCost - rent)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'} in fees &amp; utilities
                 <span className="ml-1">{showBreakdown ? '\u25B2' : '\u25BC'}</span>
               </p>
             </button>
@@ -160,7 +168,8 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
               )
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* Address and Neighborhood */}
         <div>
