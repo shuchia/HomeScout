@@ -42,21 +42,24 @@ import sys,json; d=json.load(sys.stdin); assert d.get('total_apartments',0)>=0, 
 "
 
 # 3. Apartments list endpoint
-LIST=$(curl -sf "${BASE_URL}/api/apartments/list?limit=1" || echo '{}')
-check "Apartments list" bash -c "
-  echo '${LIST}' | python3 -c \"import sys,json; d=json.load(sys.stdin); assert 'apartments' in d\"
+LIST_FILE=$(mktemp)
+curl -sf "${BASE_URL}/api/apartments/list?limit=1" > "$LIST_FILE" 2>/dev/null || echo '{}' > "$LIST_FILE"
+check "Apartments list" python3 -c "
+import json
+d = json.load(open('${LIST_FILE}'))
+assert 'apartments' in d
 "
 
 # 4. True cost data present (if DB has data)
-check "True cost field" bash -c "
-  echo '${LIST}' | python3 -c \"
-import sys, json
-apts = json.load(sys.stdin).get('apartments', [])
+check "True cost field" python3 -c "
+import json
+apts = json.load(open('${LIST_FILE}')).get('apartments', [])
 if not apts:
     print('SKIP (no apartments)', end='')
 else:
-    assert 'true_cost_monthly' in apts[0], 'true_cost_monthly missing'\"
+    assert 'true_cost_monthly' in apts[0], 'true_cost_monthly missing'
 "
+rm -f "$LIST_FILE"
 
 echo ""
 if [ "$FAILED" -eq 0 ]; then
