@@ -28,6 +28,20 @@ _IN_UNIT_LAUNDRY = {
 _INSURANCE_REQUIRED = {"renters insurance required", "renters insurance program", "insurance required"}
 _INTERNET_INCLUDED = {"internet included", "wifi included", "wi-fi included", "high-speed internet included"}
 
+# Description patterns that indicate all utilities included
+import re
+_DESC_ALL_UTILITIES_PATTERNS = [
+    r"all\s+utilities\s+included",
+    r"utilities\s+included",
+    r"utilities\s+are\s+included",
+    r"includes?\s+(?:all\s+)?utilities",
+]
+
+
+def _desc_has_all_utilities(desc_lower: str) -> bool:
+    """Check if description text indicates all utilities are included."""
+    return any(re.search(p, desc_lower) for p in _DESC_ALL_UTILITIES_PATTERNS)
+
 
 class CostEstimator:
     """Estimates true monthly apartment cost using scraped fees + regional averages."""
@@ -65,6 +79,7 @@ class CostEstimator:
         bedrooms: int,
         amenities: List[str],
         scraped_fees: Dict[str, Any],
+        description: str = "",
     ) -> Dict[str, Any]:
         """Compute full cost breakdown for a listing.
 
@@ -76,15 +91,17 @@ class CostEstimator:
             scraped_fees: Dict of fees extracted from scraping. Keys:
                 pet_rent, parking_fee, amenity_fee (monthly),
                 application_fee, security_deposit (one-time).
+            description: Listing description text (used for utility detection).
 
         Returns:
             Dict with all cost line items, totals, and source tracking.
         """
         estimates = self.get_estimates(zip_code, bedrooms)
         amenity_set = {a.lower().strip() for a in amenities}
+        desc_lower = (description or "").lower()
 
-        # Determine which utilities are included
-        all_included = bool(amenity_set & _ALL_UTILITIES)
+        # Determine which utilities are included — check both amenities and description
+        all_included = bool(amenity_set & _ALL_UTILITIES) or _desc_has_all_utilities(desc_lower)
         heat_included = all_included or bool(amenity_set & _HEAT_INCLUDED)
         water_included = all_included or bool(amenity_set & _WATER_INCLUDED)
         electric_included = all_included or bool(amenity_set & _ELECTRIC_INCLUDED)

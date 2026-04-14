@@ -52,6 +52,7 @@ def _add_cost_breakdown(apartment: dict, include_breakdown: bool) -> dict:
                 "security_deposit": apartment.get("security_deposit"),
                 "other_monthly_fees": apartment.get("other_monthly_fees"),
             },
+            description=apartment.get("description", ""),
         )
         apartment["true_cost_monthly"] = breakdown["true_cost_monthly"]
         apartment["true_cost_move_in"] = breakdown["true_cost_move_in"]

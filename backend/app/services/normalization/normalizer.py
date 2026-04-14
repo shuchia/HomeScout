@@ -168,6 +168,7 @@ class NormalizationService:
                 bedrooms=data["bedrooms"],
                 amenities=data.get("amenities", []),
                 scraped_fees=scraped_fees,
+                description=data.get("description", ""),
             )
             data["true_cost_monthly"] = cost_breakdown["true_cost_monthly"]
             data["true_cost_move_in"] = cost_breakdown["true_cost_move_in"]
