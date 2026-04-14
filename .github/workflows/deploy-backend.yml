@@ -2,7 +2,7 @@ name: Deploy Backend
 
 on:
   push:
-    branches: [main]
+    branches: [main, release/qa, release/prod]
     paths:
       - "backend/**"
       - ".github/workflows/deploy-backend.yml"
@@ -17,19 +17,38 @@ on:
           - qa
           - prod
 
-concurrency:
-  group: deploy-backend-${{ github.event.inputs.environment || 'dev' }}
-
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: snugd-backend
 
 jobs:
+  # Determine which environment to deploy based on branch or manual input
+  resolve-env:
+    name: Resolve Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.resolve.outputs.environment }}
+    steps:
+      - name: Resolve environment from branch or input
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref }}" = "refs/heads/release/prod" ]; then
+            echo "environment=prod" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref }}" = "refs/heads/release/qa" ]; then
+            echo "environment=qa" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=dev" >> "$GITHUB_OUTPUT"
+          fi
+
   build-and-push:
     name: Build & Push Docker Image
+    needs: resolve-env
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
+      environment: ${{ needs.resolve-env.outputs.environment }}
 
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +67,7 @@ jobs:
       - name: Set image tag
         id: meta
         run: |
-          ENV=${{ github.event.inputs.environment || 'dev' }}
+          ENV=${{ needs.resolve-env.outputs.environment }}
           SHA=$(echo ${{ github.sha }} | cut -c1-7)
           echo "image_tag=${ENV}-${SHA}" >> "$GITHUB_OUTPUT"
 
@@ -58,12 +77,17 @@ jobs:
           docker build -t $IMAGE ./backend
           docker push $IMAGE
 
-  deploy-dev:
-    name: Deploy to Dev
-    needs: build-and-push
-    if: github.event.inputs.environment == 'dev' || github.event.inputs.environment == '' || github.event_name == 'push'
+  deploy:
+    name: Deploy to ${{ needs.resolve-env.outputs.environment }}
+    needs: [resolve-env, build-and-push]
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ needs.resolve-env.outputs.environment }}
+    concurrency:
+      group: deploy-backend-${{ needs.resolve-env.outputs.environment }}
+
+    env:
+      ENV: ${{ needs.resolve-env.outputs.environment }}
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
 
     steps:
       - uses: actions/checkout@v4
@@ -79,147 +103,12 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Update task definitions with new image
-        env:
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         run: |
           REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
           NEW_IMAGE="${REGISTRY}:${IMAGE_TAG}"
           echo "Updating task definitions to use image: $NEW_IMAGE"
 
-          for TASK_DEF in snugd-dev-api snugd-dev-worker snugd-dev-beat; do
-            # Get current task definition
-            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
-
-            # Update the container image in the definition
-            UPDATED=$(echo "$CURRENT" | python3 -c "
-          import sys, json
-          td = json.load(sys.stdin)
-          for c in td['containerDefinitions']:
-              c['image'] = '$NEW_IMAGE'
-          # Keep only fields needed for register-task-definition
-          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
-          out = {k: td[k] for k in keep if k in td}
-          print(json.dumps(out))
-          ")
-
-            # Register new revision
-            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
-            echo "Updated $TASK_DEF"
-          done
-
-      - name: Run Alembic migrations
-        run: |
-          SUBNETS='${{ secrets.DEV_PRIVATE_SUBNETS }}'
-          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
-
-          MAX_RETRIES=3
-          for ATTEMPT in $(seq 1 $MAX_RETRIES); do
-            echo "Migration attempt $ATTEMPT/$MAX_RETRIES"
-            TASK_ARN=$(aws ecs run-task \
-              --cluster snugd-dev \
-              --task-definition snugd-dev-api \
-              --launch-type FARGATE \
-              --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${{ secrets.DEV_ECS_SG }}\"],\"assignPublicIp\":\"DISABLED\"}}" \
-              --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
-              --query 'tasks[0].taskArn' \
-              --output text)
-            echo "Migration task ARN: $TASK_ARN"
-
-            aws ecs wait tasks-stopped --cluster snugd-dev --tasks "$TASK_ARN"
-
-            # Check task exit code and stop reason
-            TASK_INFO=$(aws ecs describe-tasks --cluster snugd-dev --tasks "$TASK_ARN" \
-              --query 'tasks[0].{exit:containers[0].exitCode,reason:stoppedReason,status:containers[0].lastStatus}' \
-              --output json)
-            echo "Task result: $TASK_INFO"
-
-            EXIT_CODE=$(echo "$TASK_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('exit','null'))")
-            STOP_REASON=$(echo "$TASK_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('reason','') or '')")
-
-            if [ "$EXIT_CODE" = "0" ]; then
-              echo "Migration completed successfully"
-              break
-            fi
-
-            echo "Migration failed (exit=$EXIT_CODE, reason=$STOP_REASON)"
-            if [ "$ATTEMPT" -lt "$MAX_RETRIES" ]; then
-              echo "Retrying in 15 seconds..."
-              sleep 15
-            else
-              echo "::error::Migration failed after $MAX_RETRIES attempts"
-              exit 1
-            fi
-          done
-
-      - name: Deploy ECS services
-        run: |
-          declare -A SERVICE_TASK_MAP=(["api"]="snugd-dev-api" ["worker"]="snugd-dev-worker" ["beat"]="snugd-dev-beat")
-          for SERVICE in api worker beat; do
-            TASK_DEF="${SERVICE_TASK_MAP[$SERVICE]}"
-            aws ecs update-service \
-              --cluster snugd-dev \
-              --service $SERVICE \
-              --task-definition $TASK_DEF \
-              --force-new-deployment \
-              --no-cli-pager
-          done
-
-      - name: Wait for API service stability
-        run: |
-          aws ecs wait services-stable \
-            --cluster snugd-dev \
-            --services api
-
-      - name: Smoke tests
-        run: |
-          sleep 10
-          chmod +x scripts/smoke-test.sh
-          ./scripts/smoke-test.sh dev
-
-  deploy-qa:
-    name: Deploy to QA
-    needs: build-and-push
-    if: github.event.inputs.environment == 'qa'
-    runs-on: ubuntu-latest
-    environment: qa
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Verify dev image exists
-        run: |
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} \
-            --image-ids imageTag=dev-${SHA} || {
-            echo "::error::No dev image for SHA ${SHA}. Deploy to dev first."
-            exit 1
-          }
-
-      - name: Retag image for QA
-        run: |
-          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          docker pull ${REGISTRY}:dev-${SHA}
-          docker tag ${REGISTRY}:dev-${SHA} ${REGISTRY}:qa-${SHA}
-          docker push ${REGISTRY}:qa-${SHA}
-
-      - name: Update task definitions with new image
-        run: |
-          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          NEW_IMAGE="${REGISTRY}:qa-${SHA}"
-
-          for TASK_DEF in snugd-qa-api snugd-qa-worker snugd-qa-beat; do
+          for TASK_DEF in snugd-${ENV}-api snugd-${ENV}-worker snugd-${ENV}-beat; do
             CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
             UPDATED=$(echo "$CURRENT" | python3 -c "
           import sys, json
@@ -236,25 +125,30 @@ jobs:
 
       - name: Run Alembic migrations
         run: |
-          SUBNETS='${{ secrets.QA_PRIVATE_SUBNETS }}'
+          # Select secrets based on environment
+          case "$ENV" in
+            dev)  SUBNETS='${{ secrets.DEV_PRIVATE_SUBNETS }}'; SG='${{ secrets.DEV_ECS_SG }}' ;;
+            qa)   SUBNETS='${{ secrets.QA_PRIVATE_SUBNETS }}'; SG='${{ secrets.QA_ECS_SG }}' ;;
+            prod) SUBNETS='${{ secrets.PROD_PRIVATE_SUBNETS }}'; SG='${{ secrets.PROD_ECS_SG }}' ;;
+          esac
           SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
 
           MAX_RETRIES=3
           for ATTEMPT in $(seq 1 $MAX_RETRIES); do
             echo "Migration attempt $ATTEMPT/$MAX_RETRIES"
             TASK_ARN=$(aws ecs run-task \
-              --cluster snugd-qa \
-              --task-definition snugd-qa-api \
+              --cluster snugd-${ENV} \
+              --task-definition snugd-${ENV}-api \
               --launch-type FARGATE \
-              --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${{ secrets.QA_ECS_SG }}\"],\"assignPublicIp\":\"DISABLED\"}}" \
+              --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${SG}\"],\"assignPublicIp\":\"DISABLED\"}}" \
               --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
               --query 'tasks[0].taskArn' \
               --output text)
             echo "Migration task ARN: $TASK_ARN"
 
-            aws ecs wait tasks-stopped --cluster snugd-qa --tasks "$TASK_ARN"
+            aws ecs wait tasks-stopped --cluster snugd-${ENV} --tasks "$TASK_ARN"
 
-            TASK_INFO=$(aws ecs describe-tasks --cluster snugd-qa --tasks "$TASK_ARN" \
+            TASK_INFO=$(aws ecs describe-tasks --cluster snugd-${ENV} --tasks "$TASK_ARN" \
               --query 'tasks[0].{exit:containers[0].exitCode,reason:stoppedReason,status:containers[0].lastStatus}' \
               --output json)
             echo "Task result: $TASK_INFO"
@@ -278,27 +172,26 @@ jobs:
 
       - name: Deploy ECS services
         run: |
-          declare -A SERVICE_TASK_MAP=(["api"]="snugd-qa-api" ["worker"]="snugd-qa-worker" ["beat"]="snugd-qa-beat")
           for SERVICE in api worker beat; do
-            TASK_DEF="${SERVICE_TASK_MAP[$SERVICE]}"
             aws ecs update-service \
-              --cluster snugd-qa \
+              --cluster snugd-${ENV} \
               --service $SERVICE \
-              --task-definition $TASK_DEF \
+              --task-definition snugd-${ENV}-${SERVICE} \
               --force-new-deployment \
               --no-cli-pager
           done
 
-      - name: Wait for stability
-        run: aws ecs wait services-stable --cluster snugd-qa --services api
+      - name: Wait for API service stability
+        run: aws ecs wait services-stable --cluster snugd-${ENV} --services api
 
       - name: Smoke tests
         run: |
           sleep 10
           chmod +x scripts/smoke-test.sh
-          ./scripts/smoke-test.sh qa
+          ./scripts/smoke-test.sh $ENV
 
       - name: Run E2E tests against QA
+        if: env.ENV == 'qa'
         working-directory: frontend
         run: |
           npm ci
@@ -309,127 +202,3 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.QA_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.QA_SUPABASE_ANON_KEY }}
           BASE_URL: https://qa.snugd.ai
-
-  deploy-prod:
-    name: Deploy to Prod
-    needs: build-and-push
-    if: github.event.inputs.environment == 'prod'
-    runs-on: ubuntu-latest
-    environment:
-      name: prod
-      # GitHub Environment protection rules enforce manual approval
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Verify QA image exists
-        run: |
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} \
-            --image-ids imageTag=qa-${SHA} || {
-            echo "::error::No QA image for SHA ${SHA}. Deploy to QA first."
-            exit 1
-          }
-
-      - name: Retag image for Prod
-        run: |
-          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          docker pull ${REGISTRY}:qa-${SHA}
-          docker tag ${REGISTRY}:qa-${SHA} ${REGISTRY}:prod-${SHA}
-          docker push ${REGISTRY}:prod-${SHA}
-
-      - name: Update task definitions with new image
-        run: |
-          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --query 'repositories[0].repositoryUri' --output text)
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          NEW_IMAGE="${REGISTRY}:prod-${SHA}"
-
-          for TASK_DEF in snugd-prod-api snugd-prod-worker snugd-prod-beat; do
-            CURRENT=$(aws ecs describe-task-definition --task-definition $TASK_DEF --query 'taskDefinition' --output json)
-            UPDATED=$(echo "$CURRENT" | python3 -c "
-          import sys, json
-          td = json.load(sys.stdin)
-          for c in td['containerDefinitions']:
-              c['image'] = '$NEW_IMAGE'
-          keep = ['family','containerDefinitions','taskRoleArn','executionRoleArn','networkMode','volumes','placementConstraints','requiresCompatibilities','cpu','memory','runtimePlatform']
-          out = {k: td[k] for k in keep if k in td}
-          print(json.dumps(out))
-          ")
-            aws ecs register-task-definition --cli-input-json "$UPDATED" --no-cli-pager > /dev/null
-            echo "Updated $TASK_DEF"
-          done
-
-      - name: Run Alembic migrations
-        run: |
-          SUBNETS='${{ secrets.PROD_PRIVATE_SUBNETS }}'
-          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
-
-          MAX_RETRIES=3
-          for ATTEMPT in $(seq 1 $MAX_RETRIES); do
-            echo "Migration attempt $ATTEMPT/$MAX_RETRIES"
-            TASK_ARN=$(aws ecs run-task \
-              --cluster snugd-prod \
-              --task-definition snugd-prod-api \
-              --launch-type FARGATE \
-              --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${{ secrets.PROD_ECS_SG }}\"],\"assignPublicIp\":\"DISABLED\"}}" \
-              --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
-              --query 'tasks[0].taskArn' \
-              --output text)
-            echo "Migration task ARN: $TASK_ARN"
-
-            aws ecs wait tasks-stopped --cluster snugd-prod --tasks "$TASK_ARN"
-
-            TASK_INFO=$(aws ecs describe-tasks --cluster snugd-prod --tasks "$TASK_ARN" \
-              --query 'tasks[0].{exit:containers[0].exitCode,reason:stoppedReason,status:containers[0].lastStatus}' \
-              --output json)
-            echo "Task result: $TASK_INFO"
-
-            EXIT_CODE=$(echo "$TASK_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('exit','null'))")
-
-            if [ "$EXIT_CODE" = "0" ]; then
-              echo "Migration completed successfully"
-              break
-            fi
-
-            echo "Migration failed (exit=$EXIT_CODE)"
-            if [ "$ATTEMPT" -lt "$MAX_RETRIES" ]; then
-              echo "Retrying in 15 seconds..."
-              sleep 15
-            else
-              echo "::error::Migration failed after $MAX_RETRIES attempts"
-              exit 1
-            fi
-          done
-
-      - name: Deploy ECS services
-        run: |
-          declare -A SERVICE_TASK_MAP=(["api"]="snugd-prod-api" ["worker"]="snugd-prod-worker" ["beat"]="snugd-prod-beat")
-          for SERVICE in api worker beat; do
-            TASK_DEF="${SERVICE_TASK_MAP[$SERVICE]}"
-            aws ecs update-service \
-              --cluster snugd-prod \
-              --service $SERVICE \
-              --task-definition $TASK_DEF \
-              --force-new-deployment \
-              --no-cli-pager
-          done
-
-      - name: Wait for stability
-        run: aws ecs wait services-stable --cluster snugd-prod --services api
-
-      - name: Smoke tests
-        run: |
-          sleep 10
-          chmod +x scripts/smoke-test.sh
-          ./scripts/smoke-test.sh prod
