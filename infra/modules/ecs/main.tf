@@ -42,6 +42,7 @@ locals {
     "APIFY_API_TOKEN",
     "RESEND_API_KEY",
     "SCRAPINGBEE_API_KEY",
+    "OPENAI_API_KEY",
   ]
 
   secrets = [
