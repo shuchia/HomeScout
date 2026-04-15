@@ -65,12 +65,12 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
     sqft,
     property_type,
     available_date,
-    amenities,
+    amenities = [],
     neighborhood,
-    images,
+    images = [],
     match_score,
     reasoning,
-    highlights,
+    highlights = [],
   } = apartment;
 
   return (

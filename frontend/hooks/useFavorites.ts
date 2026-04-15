@@ -59,7 +59,10 @@ export function useFavorites() {
         }
       }
 
-      const apartmentMap = new Map(apartments.map(a => [a.id, a]))
+      // Filter out stubs (apartments deleted from DB return {id, is_available: false} with no address)
+      const apartmentMap = new Map(
+        apartments.filter(a => 'address' in a).map(a => [a.id, a])
+      )
 
       // Use functional update to preserve existing apartment data for IDs the batch call missed
       setFavorites(prev => {
