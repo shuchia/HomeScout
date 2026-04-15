@@ -250,13 +250,13 @@ async def get_apartment(apartment_id: str) -> Dict[str, Any]:
             )
             apt = result.scalar_one_or_none()
             if apt:
-                return apt.to_dict()
+                return _add_cost_breakdown(apt.to_dict(), include_breakdown=True)
             raise HTTPException(status_code=404, detail=f"Apartment {apartment_id} not found")
 
     apartments = _get_apartments_data()
     for apt in apartments:
         if apt.get("id") == apartment_id:
-            return apt
+            return _add_cost_breakdown(apt, include_breakdown=True)
     raise HTTPException(status_code=404, detail=f"Apartment {apartment_id} not found")
 
 
@@ -281,7 +281,7 @@ async def get_apartments_batch(apartment_ids: List[str] = Body(..., max_length=5
         async with get_session_context() as session:
             stmt = select(ApartmentModel).where(ApartmentModel.id.in_(apartment_ids))
             db_result = await session.execute(stmt)
-            apt_map = {apt.id: apt.to_dict() for apt in db_result.scalars()}
+            apt_map = {apt.id: _add_cost_breakdown(apt.to_dict(), include_breakdown=True) for apt in db_result.scalars()}
             result = []
             for aid in apartment_ids:
                 if aid in apt_map:
@@ -291,7 +291,7 @@ async def get_apartments_batch(apartment_ids: List[str] = Body(..., max_length=5
             return result
 
     apartments = _get_apartments_data()
-    apt_map = {apt.get("id"): apt for apt in apartments}
+    apt_map = {apt.get("id"): _add_cost_breakdown(apt, include_breakdown=True) for apt in apartments}
     result = []
     for aid in apartment_ids:
         if aid in apt_map:
