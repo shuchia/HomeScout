@@ -32,6 +32,16 @@ variable "secrets_arn" {
   type        = string
 }
 
+variable "tours_bucket_name" {
+  description = "S3 bucket name for tour assets (voice notes, photos)"
+  type        = string
+}
+
+variable "tours_bucket_arn" {
+  description = "S3 bucket ARN for tour assets"
+  type        = string
+}
+
 # Service sizing
 variable "api_cpu" {
   type    = number
