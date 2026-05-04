@@ -2,7 +2,7 @@
 
 > Last verified: 2026-05-04 | Source of truth: this doc + the code it references
 
-Backend runs on AWS (ECS Fargate behind ALB, RDS Postgres, ElastiCache Redis, S3 for tour media, ECR for images, CloudWatch monitoring). Frontend deploys to Vercel. Three Terraform-managed environments: dev, qa, prod.
+Backend runs on AWS (ECS Fargate behind ALB, RDS Postgres, ElastiCache Redis, S3 for tour media, ECR for images, CloudWatch monitoring). Frontend deploys to Vercel. Active hosted environments: **qa** (full stack) and **prod** (RDS provisioned, rest pending launch). **Dev runs locally on your laptop** — there's no hosted dev env.
 
 ## Quick Commands
 
@@ -22,8 +22,7 @@ docker run -p 8000:8000 --env-file .env snugd-api
 ./scripts/deploy.sh <env> tf-plan
 ./scripts/deploy.sh <env> tf-apply
 
-# Promote a tested image up the pipeline
-./scripts/promote.sh dev qa
+# Promote a tested image up the pipeline (qa → prod via release branches)
 ./scripts/promote.sh qa prod
 
 # Smoke test deployed env
@@ -65,7 +64,7 @@ docker run -p 8000:8000 --env-file .env snugd-api
 |--------|-----------|
 | `networking` | VPC, public/private subnets across 2 AZs, NAT, route tables |
 | `alb` | Application Load Balancer, listeners (80→443 redirect, 443 HTTPS), target groups, ACM cert binding |
-| `ecr` | Docker image repository (data-source — **shared across envs** per `10daee3`) |
+| `ecr` | Docker image repository — **owned by qa state** (count = qa); prod reads via `data "aws_ecr_repository"` |
 | `ecs` | Fargate cluster, services (`api`, `worker`, `beat`), task definitions, IAM (`infra/modules/ecs/iam.tf`) |
 | `rds` | Postgres instance, parameter group, subnet group |
 | `elasticache` | Redis (cluster mode disabled), subnet group |
@@ -77,13 +76,15 @@ S3 bucket `aws_s3_bucket.tours` (`snugd-tours-<env>`) is declared **inline in `i
 
 ## Environments
 
-| Env | tfvars | VPC CIDR | Beat | RDS | Log level | Branch trigger |
-|-----|--------|----------|------|-----|-----------|----------------|
-| dev | `infra/environments/dev.tfvars` | 10.0.0.0/16 | 0 | small | DEBUG | `main` (auto) |
-| qa | `infra/environments/qa.tfvars` | 10.1.0.0/16 | 1 (scheduled scrapes run here) | medium | INFO | `release/qa` |
-| prod | `infra/environments/prod.tfvars` | 10.2.0.0/16 | 0 (until launch) | 50 GB | INFO | `release/prod` |
+| Env | tfvars | VPC CIDR | Status | Beat | RDS | Log level | Branch trigger |
+|-----|--------|----------|--------|------|-----|-----------|----------------|
+| dev | `infra/environments/dev.tfvars` | 10.0.0.0/16 | **decommissioned 2026-05-04** — runs locally now | n/a | n/a | n/a | none |
+| qa | `infra/environments/qa.tfvars` | 10.1.0.0/16 | active | 1 (scheduled scrapes run here) | db.t4g.micro / 20 GB | INFO | `release/qa` |
+| prod | `infra/environments/prod.tfvars` | 10.2.0.0/16 | RDS-only (full stack pending launch) | 0 (until launch) | db.t4g.micro / 50 GB | INFO | `release/prod` |
 
-Wildcard ACM cert is shared across envs and bound on the ALB.
+The `dev.tfvars` file is preserved in repo for reproducibility — re-applying it would recreate the dev stack, but day-to-day development now uses the local backend (`uvicorn` + `brew services start postgresql@16 redis`).
+
+Wildcard ACM cert (`*.snugd.ai`) is shared across envs and bound on the ALB.
 
 ## Backend Deploy Flow
 
@@ -102,11 +103,11 @@ GitHub Actions (.github/workflows/deploy-backend.yml)
    └─ qa-only: run frontend Playwright suite against the deployed API
 ```
 
-The branch-based trigger map (per `41ce352`):
+The branch-based trigger map:
 
-- `main` → dev
 - `release/qa` → qa
 - `release/prod` → prod
+- `main` → no automatic deploy (CI runs only); push to a `release/*` branch to deploy
 
 Per-PR CI gates run via `.github/workflows/ci.yml` (lint + tests, no deploy).
 
@@ -182,10 +183,10 @@ ACM wildcard cert is bound on the ALB listener. The Snugd apex/wildcard DNS reco
 
 | Issue | Cause / Fix |
 |-------|-------------|
-| ECR access denied across envs | ECR repo is shared via data source (`10daee3`); ensure each env's task role has `ecr:GetDownloadUrlForLayer` on the shared repo ARN |
+| ECR access denied across envs | ECR repo is owned by qa state, read by prod via data source; ensure each env's task role has `ecr:GetDownloadUrlForLayer` on the shared repo ARN |
 | RDS pool exhausted | Pool size capped (`d17fe8d`); avoid spawning extra async sessions per task |
 | Smoke test fails on apostrophes | Single-quote escaping fix `2033579` — re-run latest |
-| Beat not running in dev/prod | Intentional — only qa runs scheduled scrapes (`6134bb4`); prod beat enabled only at launch |
+| Beat not running in prod | Intentional — only qa runs scheduled scrapes (`6134bb4`); prod beat enabled only at launch |
 | Migrations fail mid-deploy | Workflow retries 3× with backoff; on persistent failure, run `./scripts/deploy.sh <env> migrate` manually |
 | OPENAI_API_KEY missing in ECS | Older deploys lacked it; current task definition includes it (`afad790`) |
 | Image not updating after deploy | ECS service may be cached on a previous revision — `aws ecs update-service --force-new-deployment` |

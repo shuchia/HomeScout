@@ -2,7 +2,7 @@ name: Deploy Backend
 
 on:
   push:
-    branches: [main, release/qa, release/prod]
+    branches: [release/qa, release/prod]
     paths:
       - "backend/**"
       - ".github/workflows/deploy-backend.yml"
@@ -13,7 +13,6 @@ on:
         required: true
         type: choice
         options:
-          - dev
           - qa
           - prod
 
@@ -39,7 +38,8 @@ jobs:
           elif [ "${{ github.ref }}" = "refs/heads/release/qa" ]; then
             echo "environment=qa" >> "$GITHUB_OUTPUT"
           else
-            echo "environment=dev" >> "$GITHUB_OUTPUT"
+            echo "ERROR: deploy workflow triggered on unexpected branch ${{ github.ref }}" >&2
+            exit 1
           fi
 
   build-and-push:
@@ -127,7 +127,6 @@ jobs:
         run: |
           # Select secrets based on environment
           case "$ENV" in
-            dev)  SUBNETS='${{ secrets.DEV_PRIVATE_SUBNETS }}'; SG='${{ secrets.DEV_ECS_SG }}' ;;
             qa)   SUBNETS='${{ secrets.QA_PRIVATE_SUBNETS }}'; SG='${{ secrets.QA_ECS_SG }}' ;;
             prod) SUBNETS='${{ secrets.PROD_PRIVATE_SUBNETS }}'; SG='${{ secrets.PROD_ECS_SG }}' ;;
           esac
