@@ -2,7 +2,7 @@
 
 > Last verified: 2026-05-04 | Source of truth: this doc + the code it references
 
-Backend runs on AWS (ECS Fargate behind ALB, RDS Postgres, ElastiCache Redis, S3 for tour media, ECR for images, CloudWatch monitoring). Frontend deploys to Vercel. Active hosted environments: **qa** (full stack) and **prod** (RDS provisioned, rest pending launch). **Dev runs locally on your laptop** — there's no hosted dev env.
+Backend runs on AWS (ECS Fargate behind ALB, RDS Postgres, ElastiCache Redis, S3 for tour media, ECR for images, CloudWatch monitoring). Frontend deploys to Vercel. Active hosted environment: **qa only**. **Dev runs locally on your laptop**. **Prod is dormant** — it was torn down on 2026-05-04 to save spend; a final RDS snapshot `snugd-prod-final` is retained, and re-provisioning is `terraform apply -var-file=environments/prod.tfvars`.
 
 ## Quick Commands
 
@@ -80,9 +80,11 @@ S3 bucket `aws_s3_bucket.tours` (`snugd-tours-<env>`) is declared **inline in `i
 |-----|--------|----------|--------|------|-----|-----------|----------------|
 | dev | `infra/environments/dev.tfvars` | 10.0.0.0/16 | **decommissioned 2026-05-04** — runs locally now | n/a | n/a | n/a | none |
 | qa | `infra/environments/qa.tfvars` | 10.1.0.0/16 | active | 1 (scheduled scrapes run here) | db.t4g.micro / 20 GB | INFO | `release/qa` |
-| prod | `infra/environments/prod.tfvars` | 10.2.0.0/16 | RDS-only (full stack pending launch) | 0 (until launch) | db.t4g.micro / 50 GB | INFO | `release/prod` |
+| prod | `infra/environments/prod.tfvars` | 10.2.0.0/16 | **dormant** — torn down 2026-05-04, snapshot retained | 0 (until launch) | (re-provision; was db.t4g.micro / 50 GB) | INFO | `release/prod` |
 
-The `dev.tfvars` file is preserved in repo for reproducibility — re-applying it would recreate the dev stack, but day-to-day development now uses the local backend (`uvicorn` + `brew services start postgresql@16 redis`).
+The `dev.tfvars` and `prod.tfvars` files are preserved in repo for reproducibility — re-applying them would recreate the respective stacks. Day-to-day development uses the local backend (`uvicorn` + `brew services start postgresql@16 redis`).
+
+To bring prod back: restore from the final snapshot via the RDS module (`snapshot_identifier = "snugd-prod-final"`) or apply fresh, then push to `release/prod`.
 
 Wildcard ACM cert (`*.snugd.ai`) is shared across envs and bound on the ALB.
 
