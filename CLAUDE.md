@@ -1,95 +1,86 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
+**Snugd** ([snugd.ai](https://snugd.ai)) — AI-powered rental apartment hunting platform for students and young professionals.
 
-## Build & Development Commands
+> The codebase still uses "HomeScout" internally for module/path names. Product name is **Snugd**.
 
-### Frontend (Next.js)
+This file is a router. Read it first, then load only the subsystem doc(s) relevant to your task.
+
+## Quick Start
+
 ```bash
-cd frontend
-npm install              # Install dependencies
-npm run dev              # Start dev server (port 3000)
-npm run build            # Production build
-npm run lint             # Run ESLint
-```
+# Frontend
+cd frontend && npm install && npm run dev          # → :3000
 
-### Backend (FastAPI)
-```bash
-cd backend
-source .venv/bin/activate
-pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-# API docs: http://localhost:8000/docs
-```
-
-### Celery Worker (for scraping/async tasks)
-```bash
+# Backend (NEVER use --reload)
 cd backend && source .venv/bin/activate
+.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000   # → :8000
+
+# Celery worker + beat (scraping, tours, alerts)
 celery -A app.celery_app worker --loglevel=info -Q celery,scraping,maintenance
-celery -A app.celery_app beat --loglevel=info  # optional: scheduled tasks
-```
+celery -A app.celery_app beat --loglevel=info
 
-### Prerequisites
-```bash
-brew services start postgresql@16   # Required for DB mode
-brew services start redis           # Required for Celery + rate limiting
-```
+# Prerequisites
+brew services start postgresql@16   # DB mode
+brew services start redis           # Celery + rate limiting
 
-### Testing
-```bash
-# Backend (259 tests)
-cd backend && ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
-
-# Frontend E2E
-cd frontend && npx playwright test
-```
-
-### Quick Verification
-```bash
+# Verify
 curl http://localhost:8000/health
 curl http://localhost:8000/api/apartments/stats
-curl "http://localhost:8000/api/apartments/list?limit=5"
 ```
 
-## Architecture Overview
+Architecture: Next.js (frontend) + FastAPI (backend) + PostgreSQL + Redis + Supabase (auth) + Stripe (billing) + Anthropic Claude (AI) + OpenAI Whisper (transcription). Backend on AWS ECS Fargate; frontend on Vercel.
 
-Full-stack apartment finder: **Next.js** (frontend) + **FastAPI** (backend) + **PostgreSQL** + **Redis** + **Supabase** (auth) + **Stripe** (billing) + **Claude AI** (scoring/analysis).
+## Documentation Index
 
-Key flows: Search → Claude AI scoring (Pro) or heuristic scoring (free) → Results. Compare → Claude analysis (Pro). Tours → lifecycle with notes/photos/voice/AI features. Upgrade → Stripe Checkout → webhook → tier update.
-
-**Dual Data Mode** (`USE_DATABASE` env var): JSON mode (default, static file) or Database mode (PostgreSQL with scraped data).
+| Working on... | Read |
+|---------------|------|
+| Frontend UI, components, pages, routes | [docs/frontend.md](docs/frontend.md) |
+| Backend API, routers, services, DB | [docs/backend.md](docs/backend.md) |
+| AI features (scoring, comparison, emails, briefs, Whisper) | [docs/ai-features.md](docs/ai-features.md) |
+| Scraping, normalization, true-cost calculation | [docs/data-pipeline.md](docs/data-pipeline.md) |
+| Auth, tiers, Stripe, invite codes, rate limiting | [docs/auth-and-billing.md](docs/auth-and-billing.md) |
+| Infrastructure, Terraform, deploys, CI/CD | [docs/deployment.md](docs/deployment.md) |
+| Touring pipeline (core feature) | [docs/touring-pipeline.md](docs/touring-pipeline.md) |
+| What's next / planned features | [docs/roadmap.md](docs/roadmap.md) |
+| Auth flow deeper diagrams | [docs/auth-flow.md](docs/auth-flow.md) |
+| Live scraping config (cities + frequencies) | [docs/scraping-frequency.md](docs/scraping-frequency.md) |
+| Old plans / superseded docs | [docs/archive/](docs/archive/) |
 
 ## Critical Conventions
 
-- **Never use `--reload`** with uvicorn (causes venv file watching issues)
-- **Type sync required**: Frontend `types/apartment.ts` and `types/tour.ts` must match backend `schemas.py`
-- **Budget filtering is strict** — no flexibility in `apartment_service.py`
-- **Bedrooms = exact match**, bathrooms = "at least"
-- **All apartment endpoints** support both DB and JSON modes via `is_database_enabled()`
-- **Claude models**: Haiku for search scoring/emails/notes, Sonnet for comparison/decision briefs
-- **Claude calls**: 15s timeout, heuristic fallback, max 5 concurrent via semaphore, prompt caching enabled
-- **Rate limiting**: Redis sliding window (auth=120/min, anon=30/min, expensive=20/min), fail-open
-- **Tests**: `TESTING=1` env var disables rate limiting; E2E mocks auth via `localStorage.__test_auth_user`
-- **Auth**: 5-second timeout to prevent infinite loading; fail-open for Redis/Supabase
-- **Analytics**: fire-and-forget, never blocks or raises
-- **True cost**: precomputed at ingestion; `_add_cost_breakdown()` fills gaps for JSON mode
+- **Never use `--reload`** with uvicorn — it watches `.venv/` and breaks.
+- **Type sync required**: `frontend/types/apartment.ts` and `frontend/types/tour.ts` must match `backend/app/schemas.py`.
+- **Budget filtering is strict** — no flexibility (`apartment_service.py`).
+- **Bedrooms = exact match**, **bathrooms = at-least**.
+- **Dual data mode**: `USE_DATABASE` env var. Every apartment endpoint checks `is_database_enabled()` and routes to JSON or Postgres accordingly.
+- **Claude models**: Haiku for search/emails/notes/day-plan; Sonnet for comparison and decision brief.
+- **Claude calls**: 15 s timeout (search), 45 s (compare); heuristic fallback on any exception; max 5 concurrent via `asyncio.Semaphore(5)`; system-prompt caching enabled.
+- **Rate limiting** (`middleware/rate_limit.py`): authed 120/min, anonymous 30/min, expensive paths (`/api/search`, `/api/apartments/compare`) 20/min. Fail-open on Redis errors.
+- **Tests**: `TESTING=1` disables rate limiting; E2E mocks auth via `localStorage.__test_auth_user` (only when `NODE_ENV !== 'production'`).
+- **Auth**: 5-second timeout in `AuthContext` to avoid infinite loading; fail-open for Redis/Supabase outages.
+- **Analytics**: fire-and-forget — never blocks or raises.
+- **True cost**: precomputed at ingestion in DB mode; `_add_cost_breakdown()` fills gaps in JSON mode.
 
 ## Tier System (Quick Reference)
 
 | Feature | Free | Pro ($12/mo) |
-|---------|------|-------------|
-| Search | 3/day, heuristic only | Unlimited + Claude AI |
-| Compare | Basic table | Claude analysis |
+|---------|------|--------------|
+| Search | 20/day, heuristic only | Unlimited + Claude AI |
+| Compare | Basic table | Claude head-to-head analysis |
 | Favorites | 5 max | Unlimited |
-| Tours AI | No | Yes (emails, planner, briefs) |
+| Tours | Full pipeline (manual) | Full pipeline + AI emails, day plan, decision brief, note enhancement |
+| Saved searches | No | Unlimited + daily email alerts |
 | Cost breakdown | Headline only | Full with sources |
+
+Anonymous users get filtered search results with no AI and no daily metering. Free users get 20 searches/day (`FREE_DAILY_SEARCH_LIMIT` in `tier_service.py`).
 
 ## Common Issues
 
-| Issue | Solution |
-|-------|----------|
+| Issue | Fix |
+|-------|-----|
 | `Event loop is closed` | Restart Celery worker |
-| Server hangs at startup | Check PostgreSQL: `lsof -i :5432` |
+| Server hangs at startup | Check Postgres: `lsof -i :5432` |
 | Celery tasks not running | Check Redis: `redis-cli ping` |
-| `--reload` causes issues | Don't use `--reload` flag |
+| `--reload` causes issues | Don't use it |
 | Port 8000 in use | `pkill -f "uvicorn app.main"` |
