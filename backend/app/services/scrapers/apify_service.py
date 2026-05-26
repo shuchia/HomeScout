@@ -526,8 +526,10 @@ class ApifyService(BaseScraper):
         if not address:
             return None
 
-        # Handle rent object with min/max
-        rent_data = raw.get("rent", {})
+        # Handle rent object with min/max. epctex schema returns `baseRent` and
+        # `totalRent` (both {min, max}); older/legacy responses used `rent`.
+        # Prefer baseRent so true-cost can layer fees on top without double-counting.
+        rent_data = raw.get("baseRent") or raw.get("totalRent") or raw.get("rent", {})
         if isinstance(rent_data, dict):
             # Use min rent as the primary rent value
             rent = rent_data.get("min") or rent_data.get("max")

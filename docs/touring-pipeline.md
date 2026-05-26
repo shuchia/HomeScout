@@ -1,0 +1,201 @@
+# Touring Pipeline
+
+> Last verified: 2026-05-04 | Source of truth: this doc + the code it references
+
+Snugd's core post-favorite flow: the touring pipeline tracks an apartment from "interested" through "decided," capturing notes, ratings, photos, and voice transcriptions along the way, with Pro AI synthesis layered on top.
+
+## Overview
+
+A user favorites apartments → "Start Touring" creates a `tour_pipeline` row in stage **interested** → user moves through outreach/scheduling/touring → captures observations → 2+ tours triggers Decision Brief → user marks Apply / Pass / Undecided.
+
+## Quick Commands
+
+```bash
+# Backend (tour endpoints registered via routers/tours.py)
+cd backend && source .venv/bin/activate
+.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Celery worker — required for voice transcription + reminders
+celery -A app.celery_app worker --loglevel=info -Q celery,scraping,maintenance
+
+# Celery beat — required for 30-min post-tour reminders
+celery -A app.celery_app beat --loglevel=info
+
+# Trigger a reminder check manually (Python REPL)
+python -c "from app.tasks.tour_reminder_tasks import check_tour_reminders; check_tour_reminders()"
+```
+
+## Stages
+
+`VALID_TOUR_STAGES = ["interested", "outreach_sent", "scheduled", "toured", "deciding"]`. Stages are skippable.
+
+| Stage | How entered | Allowed transitions | UI surfaces | AI features (Pro) |
+|-------|-------------|---------------------|-------------|-------------------|
+| `interested` | "Start Touring" on a favorite | → `outreach_sent`, `scheduled` | Email tab CTA, scheduler | Generate inquiry email |
+| `outreach_sent` | User marks email sent | → `scheduled` | Awaiting-reply badge | — |
+| `scheduled` | `scheduled_at` set | → `toured` (auto on rating) | TourScheduler, day-grouping in dashboard | Day Planner (2+ same day) |
+| `toured` | Star rating set OR manual | → `deciding` (rare) | Capture tab (notes/tags/photos), decision bar | Note enhancement, Decision Brief (2+) |
+| `deciding` | Rarely set explicitly; banner shows when 2+ tours in `toured` | (terminal) | Decision Brief modal | Decision Brief synthesis |
+
+## Tour Data Model
+
+Tour data lives in **Supabase** (no SQLAlchemy `TourModel`). Backend reads/writes via the `supabase_admin` service-role client. Schema is defined in `supabase/migrations/005_tour_pipeline.sql` and `008_tour_contact_info.sql`.
+
+### `tour_pipeline`
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | uuid | PK |
+| `user_id` | uuid | FK → auth.users |
+| `apartment_id` | text | snapshot ID at time of favorite |
+| `stage` | text | one of `VALID_TOUR_STAGES` |
+| `scheduled_at` | timestamptz | when the tour is/was |
+| `inquiry_email_draft` | text | Claude-generated draft, persisted across regenerations |
+| `landlord_email`, `landlord_phone`, `landlord_name` | text | from `008_tour_contact_info.sql` |
+| `decision` | text | `applied` / `pass` / `undecided` / null |
+| `created_at`, `updated_at` | timestamptz | |
+
+### `tour_notes`
+| Field | Notes |
+|-------|-------|
+| `id`, `tour_id`, `user_id` | |
+| `content` | typed text or transcribed voice text |
+| `kind` | `typed` / `voice` |
+| `status` | `final` / `transcribing` / `transcribed` / `enhanced` |
+| `audio_url` | S3 path for voice notes |
+| `created_at` | |
+
+### `tour_photos`
+`id`, `tour_id`, `user_id`, `image_url` (S3), `caption`, `created_at`.
+
+### `tour_tags`
+`id`, `tour_id`, `user_id`, `label`, `sentiment` (`pro` / `con`), `created_at`.
+
+The frontend mirror in `frontend/types/tour.ts` must stay in sync.
+
+## API Endpoints
+
+`backend/app/routers/tours.py` — 21 endpoints, all auth-required:
+
+| Method | Path | Tier | Purpose |
+|--------|------|------|---------|
+| GET | `/api/tours/tags/suggestions` | any | Suggested pro/con tags |
+| POST | `/api/tours/day-plan` | Pro | Generate route plan for tours on a date |
+| POST | `/api/tours/decision-brief` | Pro | Synthesize toured tours into a recommendation |
+| GET | `/api/tours` | any | List user's tours |
+| POST | `/api/tours` | any | Create (Start Touring) |
+| GET | `/api/tours/{tour_id}` | any | Tour detail |
+| PATCH | `/api/tours/{tour_id}` | any | Update stage / scheduled_at / decision / contact |
+| DELETE | `/api/tours/{tour_id}` | any | Remove tour |
+| POST | `/api/tours/{tour_id}/inquiry-email` | Pro | Generate landlord email draft |
+| POST | `/api/tours/{tour_id}/enhance-note` | Pro | Clean + structure a note, suggest tags |
+| POST | `/api/tours/{tour_id}/notes/voice` | any | Upload voice note (returns 202, transcribes async) |
+| POST | `/api/tours/{tour_id}/notes` | any | Create typed note |
+| GET | `/api/tours/{tour_id}/notes` | any | List notes for tour |
+| DELETE | `/api/tours/{tour_id}/notes/{note_id}` | any | Delete note |
+| POST | `/api/tours/{tour_id}/photos` | any | Upload photo |
+| GET | `/api/tours/{tour_id}/photos` | any | List photos |
+| PATCH | `/api/tours/{tour_id}/photos/{photo_id}` | any | Update caption |
+| DELETE | `/api/tours/{tour_id}/photos/{photo_id}` | any | Delete photo |
+| POST | `/api/tours/{tour_id}/tags` | any | Add tag |
+| DELETE | `/api/tours/{tour_id}/tags/{tag_id}` | any | Remove tag |
+| POST | `/api/tours/{tour_id}/star` | any | Set 1–5 star rating (auto-advances stage) |
+
+## Frontend Components
+
+| Component | Where used | Purpose |
+|-----------|-----------|---------|
+| `TourPrompt` | Favorites cards | "Start Touring" / "In Tours" toggle |
+| `TourCard` | `/tours` dashboard | Compact tour summary with stage badge |
+| `TourScheduler` | tour detail | Date + time picker for `scheduled_at` |
+| `VoiceCapture` | tour detail (Capture tab) | Hold-to-record mic, uploads on release |
+| `StarRating` | tour detail | 1–5 stars; setting any rating auto-advances stage |
+| `TagPicker` | tour detail | Pro (green) / con (red) tags + custom |
+| `DayPlanner` | tour dashboard banner | AI route optimization for 2+ same-day tours |
+| `DecisionBrief` | tour dashboard banner | AI synthesis when 2+ tours in `toured` |
+
+## Voice Capture Flow
+
+1. User holds `VoiceCapture` button — `MediaRecorder` starts recording.
+2. Release → audio blob POSTed to `/api/tours/{tour_id}/notes/voice` (≤ 5 MB).
+3. Backend uploads blob to S3 at `tours/{user_id}/{tour_id}/voice/{uuid}.{ext}`, creates a `tour_notes` row with `status=transcribing` and `kind=voice`, returns 202.
+4. Celery task `transcribe_voice_note` (max 2 retries, 30 s delay) pulls audio.
+5. `WhisperService.transcribe_from_s3` calls Whisper (`whisper-1`, `response_format="text"`).
+6. Updates `tour_notes.content` and sets `status=transcribed`.
+7. **Pro tier only**: chains to `enhance_voice_note` → `ClaudeService.enhance_note` → cleans filler words, structures observations, returns suggested tags. Status becomes `enhanced`.
+8. Frontend polls (or subscribes via Supabase realtime) and replaces the placeholder.
+
+Voice notes display with a microphone icon; typed notes with a pencil.
+
+## Star Ratings, Tags, Notes
+
+- **StarRating**: setting a rating from `null` to 1–5 auto-advances the stage from `scheduled` to `toured` (server-side in tours.py).
+- **TagPicker**: suggested pros/cons (green/red), plus "+ Custom" entry with explicit sentiment.
+- **Typed notes**: separate `kind=typed` rows with `status=final`. Submit via Add button or Shift+Enter.
+
+## TourScheduler
+
+Sets `tour_pipeline.scheduled_at` (date + time). The `/tours` dashboard groups by `today` / `upcoming` / `all`. When 2+ tours fall on the same date, the **Day Planner** banner appears.
+
+## DayPlanner (Pro)
+
+`POST /api/tours/day-plan` accepts a date and returns:
+- `ordered_tour_ids` — optimal visiting order
+- `travel_estimates` — minutes between consecutive stops
+- `tips` — short prose hints (e.g. "These two are 3 blocks apart — book back-to-back")
+
+Backed by `ClaudeService.generate_day_plan` (Haiku). Requires 2+ tours on the date.
+
+## DecisionBrief (Pro)
+
+`POST /api/tours/decision-brief` accepts the user's current search context (passed in per recent fix `d92640f`) plus the toured tours. Returns:
+
+- Per-apartment cards: `strengths`, `concerns`, `top_pick` flag.
+- Final recommendation paragraph weighing the user's own ratings/tags against the listing data.
+
+Backed by `ClaudeService.generate_decision_brief` (Sonnet). Banner appears when 2+ tours are in stage `toured`. The `deciding` stage is rarely set explicitly — the banner alone signals "make your call."
+
+## AI Inquiry Email (Pro)
+
+`POST /api/tours/{tour_id}/inquiry-email` generates a landlord email draft referencing the listing and the user's move-in/preferences, asking smart questions about info missing from the listing. Persisted to `tour_pipeline.inquiry_email_draft` so the user can regenerate without losing prior versions until they accept.
+
+## Decision Bar
+
+Sticky bar on toured-apartment detail page. **PATCHes `decision` only** — does not advance the stage. Mobile-visible per recent fix `3bf5222`.
+
+| Button | Sets `decision` |
+|--------|-----------------|
+| Applied | `applied` |
+| Pass | `pass` |
+| Undecided | `undecided` |
+
+Tap again to clear. The decision shows as a badge on the dashboard `TourCard`.
+
+## Stage Transitions
+
+| Trigger | From | To |
+|---------|------|----|
+| `POST /api/tours` | (none) | `interested` |
+| Mark outreach sent (PATCH stage) | `interested` | `outreach_sent` |
+| Set `scheduled_at` (PATCH) | any | `scheduled` |
+| Set star rating | `scheduled` | `toured` |
+| 2+ rows in `toured` | (banner only) | (`deciding` rarely set) |
+
+## Reminders
+
+`backend/app/tasks/tour_reminder_tasks.py::check_tour_reminders` runs every 10 minutes (Celery beat). For tours with `scheduled_at` in the **25–35 min ago** window (UTC), it inserts a `notifications` row: "How was your tour? Tap to rate and capture your impressions." Timezone caveat: `scheduled_at` is stored in UTC; UI converts to the user's local zone for display.
+
+## Common Issues
+
+| Issue | Cause / Fix |
+|-------|-------------|
+| Voice note stuck "Transcribing..." | Celery worker not running, or S3 creds missing — check `whisper` task in worker logs |
+| 5 MB upload limit hit | Compress on the client, or split the recording |
+| S3 access denied | IAM policy (`infra/modules/ecs/iam.tf`) needs read/write on `snugd-tours-<env>` |
+| Decision brief blank | User hasn't searched yet — no search context to pass; trigger a search first |
+| DayPlanner missing | Need 2+ tours on the same date; verify `scheduled_at` dates match |
+| Reminder fired late or early | The 10-min beat tick + 25–35 min window means real fire time can vary by ~10 min |
+| Stage not advancing on rating | Confirm `tour_pipeline.stage` was previously `scheduled` — already-toured tours don't re-advance |
+
+## Next: Email Response Tracking
+
+Planned next feature: **email response tracking and auto-stage-advancement**. Detect inbound landlord replies (Resend webhook or IMAP), use Claude Haiku to extract proposed times, surface a one-click confirmation that advances `outreach_sent` → `scheduled`, and send N-day reminder nudges if no response. Reuses existing Resend + tours infra. Pro-tier feature. See `docs/roadmap.md`.

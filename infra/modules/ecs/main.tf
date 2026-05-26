@@ -42,6 +42,7 @@ locals {
     "APIFY_API_TOKEN",
     "RESEND_API_KEY",
     "SCRAPINGBEE_API_KEY",
+    "OPENAI_API_KEY",
   ]
 
   secrets = [
@@ -56,6 +57,7 @@ locals {
     { name = "FRONTEND_URL", value = var.frontend_url },
     { name = "LOG_LEVEL", value = var.log_level },
     { name = "PYTHONUNBUFFERED", value = "1" },
+    { name = "S3_BUCKET_NAME", value = var.tours_bucket_name },
   ]
 }
 

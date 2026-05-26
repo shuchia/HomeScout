@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: ./scripts/deploy.sh <command> [environment]
 
 COMMAND=${1:-help}
-ENV=${2:-dev}
+ENV=${2:-qa}
 AWS_REGION=${AWS_REGION:-us-east-1}
 ECR_REPO="snugd-backend"
 
@@ -23,7 +23,7 @@ usage() {
   echo "  tf-plan <env>       Run terraform plan for environment"
   echo "  tf-apply <env>      Run terraform apply for environment"
   echo ""
-  echo "Environments: dev, qa, prod"
+  echo "Environments: qa, prod (default: qa). Dev runs locally — no hosted dev env."
 }
 
 get_ecr_url() {

@@ -1,0 +1,1 @@
+These files are historical artifacts from the initial build phase (Feb–Apr 2026). They are not maintained and should not be used as source of truth. Read the docs/ directory for current documentation.

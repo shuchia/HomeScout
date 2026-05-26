@@ -39,10 +39,10 @@ resource "aws_secretsmanager_secret" "app_secrets" {
 }
 
 # --- Modules ---
-# ECR repo is shared across environments — only dev manages it via Terraform.
-# QA/prod read it as a data source to avoid state conflicts.
+# ECR repo is shared across environments — qa is the owner of record.
+# dev/prod read it as a data source to avoid state conflicts.
 module "ecr" {
-  count           = var.environment == "dev" ? 1 : 0
+  count           = var.environment == "qa" ? 1 : 0
   source          = "./modules/ecr"
   repository_name = "snugd-backend"
 }
@@ -89,6 +89,48 @@ module "alb" {
   certificate_arn   = var.certificate_arn
 }
 
+# --- S3 bucket for tour assets (voice notes, photos) ---
+resource "aws_s3_bucket" "tours" {
+  bucket = "snugd-tours-${var.environment}"
+}
+
+resource "aws_s3_bucket_public_access_block" "tours" {
+  bucket = aws_s3_bucket.tours.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "tours" {
+  bucket = aws_s3_bucket.tours.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "tours" {
+  count  = var.environment != "prod" ? 1 : 0
+  bucket = aws_s3_bucket.tours.id
+
+  rule {
+    id     = "expire-old-assets"
+    status = "Enabled"
+
+    filter {
+      prefix = "tours/"
+    }
+
+    expiration {
+      days = 365
+    }
+  }
+}
+
 module "ecs" {
   source                = "./modules/ecs"
   environment           = var.environment
@@ -99,6 +141,8 @@ module "ecs" {
   ecs_security_group_id = module.networking.ecs_security_group_id
   target_group_arn      = module.alb.target_group_arn
   secrets_arn           = aws_secretsmanager_secret.app_secrets.arn
+  tours_bucket_name     = aws_s3_bucket.tours.id
+  tours_bucket_arn      = aws_s3_bucket.tours.arn
   api_cpu               = var.api_cpu
   api_memory            = var.api_memory
   api_desired_count     = var.api_desired_count
