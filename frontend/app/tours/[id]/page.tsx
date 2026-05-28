@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -17,6 +17,7 @@ import {
   getTagSuggestions,
   getApartmentsBatch,
   generateInquiryEmail,
+  uploadTourPhoto,
   ApiError,
 } from '@/lib/api'
 import VoiceCapture from '@/components/VoiceCapture'
@@ -87,6 +88,42 @@ export default function TourDetailPage() {
   const [updatingRating, setUpdatingRating] = useState(false)
   const [updatingDecision, setUpdatingDecision] = useState(false)
   const [tagLoading, setTagLoading] = useState(false)
+
+  // Photo upload
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+
+  const handlePhotoSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      // Reset input so selecting the same file twice re-fires onChange
+      if (e.target) e.target.value = ''
+      if (!file) return
+
+      if (!file.type.startsWith('image/')) {
+        setPhotoError('Please choose an image file.')
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setPhotoError('Image too large (max 10 MB).')
+        return
+      }
+
+      setPhotoError(null)
+      setUploadingPhoto(true)
+      try {
+        await uploadTourPhoto(tourId, file)
+        const { tour: updated } = await getTour(tourId)
+        setTour(updated)
+      } catch {
+        setPhotoError('Upload failed. Please try again.')
+      } finally {
+        setUploadingPhoto(false)
+      }
+    },
+    [tourId],
+  )
 
   // ------------------------------------------
   // Data fetching
@@ -752,7 +789,24 @@ function CaptureTab({
 
       {/* Photos */}
       <section>
-        <h3 className="text-sm font-semibold text-gray-900 mb-2">Photos</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold text-gray-900">Photos</h3>
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            className="text-xs font-medium text-[var(--color-primary)] disabled:text-gray-400 disabled:cursor-not-allowed"
+          >
+            {uploadingPhoto ? 'Uploading…' : '+ Add Photo'}
+          </button>
+        </div>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handlePhotoSelected}
+        />
         {tour.photos.length > 0 ? (
           <div className="grid grid-cols-3 gap-2">
             {tour.photos.map((photo) => (
@@ -776,14 +830,23 @@ function CaptureTab({
             ))}
           </div>
         ) : (
-          <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:cursor-not-allowed"
+          >
             <svg className="h-8 w-8 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <p className="text-sm text-gray-400">No photos yet</p>
-            <p className="text-xs text-gray-300 mt-1">Photo upload coming soon</p>
-          </div>
+            <p className="text-sm text-gray-500">
+              {uploadingPhoto ? 'Uploading…' : 'No photos yet — tap to add one'}
+            </p>
+          </button>
+        )}
+        {photoError && (
+          <p className="text-xs text-red-500 mt-2">{photoError}</p>
         )}
       </section>
     </div>

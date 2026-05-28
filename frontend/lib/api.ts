@@ -497,6 +497,26 @@ export async function uploadVoiceNote(tourId: string, audioBlob: Blob): Promise<
 }
 
 /**
+ * Upload a photo for a tour
+ * Calls POST /api/tours/:id/photos endpoint
+ */
+export async function uploadTourPhoto(
+  tourId: string,
+  file: File,
+  caption?: string,
+): Promise<{ photo: { id: string; thumbnail_url: string | null; caption: string | null; created_at: string } }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (caption) formData.append('caption', caption)
+  const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}/photos`, {
+    method: 'POST',
+    body: formData,
+  })
+  if (!response.ok) throw new ApiError('Failed to upload photo', response.status)
+  return response.json()
+}
+
+/**
  * Generate an AI-optimized day plan for multiple tours
  * Calls POST /api/tours/day-plan endpoint
  *
