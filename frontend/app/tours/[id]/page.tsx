@@ -89,42 +89,6 @@ export default function TourDetailPage() {
   const [updatingDecision, setUpdatingDecision] = useState(false)
   const [tagLoading, setTagLoading] = useState(false)
 
-  // Photo upload
-  const photoInputRef = useRef<HTMLInputElement | null>(null)
-  const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [photoError, setPhotoError] = useState<string | null>(null)
-
-  const handlePhotoSelected = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      // Reset input so selecting the same file twice re-fires onChange
-      if (e.target) e.target.value = ''
-      if (!file) return
-
-      if (!file.type.startsWith('image/')) {
-        setPhotoError('Please choose an image file.')
-        return
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        setPhotoError('Image too large (max 10 MB).')
-        return
-      }
-
-      setPhotoError(null)
-      setUploadingPhoto(true)
-      try {
-        await uploadTourPhoto(tourId, file)
-        const { tour: updated } = await getTour(tourId)
-        setTour(updated)
-      } catch {
-        setPhotoError('Upload failed. Please try again.')
-      } finally {
-        setUploadingPhoto(false)
-      }
-    },
-    [tourId],
-  )
-
   // ------------------------------------------
   // Data fetching
   // ------------------------------------------
@@ -709,6 +673,42 @@ function CaptureTab({
   onAddTag,
   onRemoveTag,
 }: CaptureTabProps) {
+  // Photo upload — local to this tab. Reuses onVoiceNoteCreated as a generic
+  // "refetch the tour" trigger after a successful upload.
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+
+  const handlePhotoSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      // Reset input so selecting the same file twice re-fires onChange
+      if (e.target) e.target.value = ''
+      if (!file) return
+
+      if (!file.type.startsWith('image/')) {
+        setPhotoError('Please choose an image file.')
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setPhotoError('Image too large (max 10 MB).')
+        return
+      }
+
+      setPhotoError(null)
+      setUploadingPhoto(true)
+      try {
+        await uploadTourPhoto(tourId, file)
+        onVoiceNoteCreated()
+      } catch {
+        setPhotoError('Upload failed. Please try again.')
+      } finally {
+        setUploadingPhoto(false)
+      }
+    },
+    [tourId, onVoiceNoteCreated],
+  )
+
   return (
     <div className="space-y-6">
       {/* Rating */}
