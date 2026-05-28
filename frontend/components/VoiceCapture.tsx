@@ -11,7 +11,10 @@ interface VoiceCaptureProps {
 type CaptureState = 'idle' | 'recording' | 'uploading'
 
 const MAX_DURATION_SECONDS = 120
-const MIN_DURATION_SECONDS = 0.5
+// Bumped from 0.5s — MediaRecorder collects chunks every 250ms, and very
+// short recordings sometimes flush zero chunks, producing an empty blob that
+// the backend rejects with "Empty audio data".
+const MIN_DURATION_SECONDS = 1.0
 
 export default function VoiceCapture({ tourId, onNoteCreated }: VoiceCaptureProps) {
   const [state, setState] = useState<CaptureState>('idle')
@@ -86,6 +89,16 @@ export default function VoiceCapture({ tourId, onNoteCreated }: VoiceCaptureProp
         }
 
         const blob = new Blob(chunksRef.current, { type: mimeType })
+
+        // Belt-and-suspenders: even if duration passed, the blob can still be
+        // empty if no chunks ever arrived (browser quirk on quick taps).
+        if (blob.size === 0) {
+          setErrorMsg('Recording empty. Hold longer to record.')
+          setState('idle')
+          setDuration(0)
+          return
+        }
+
         setState('uploading')
         setDuration(0)
 

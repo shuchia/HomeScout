@@ -894,9 +894,13 @@ async def create_voice_note(
         if base_content_type not in ALLOWED_AUDIO_TYPES:
             raise HTTPException(status_code=400, detail=f"Unsupported audio type: {content_type}")
 
-        # Upload to S3
+        # Upload to S3. Use the codec-stripped base type so the S3 key has a
+        # plain extension (e.g. "webm"). Chrome's MediaRecorder emits
+        # "audio/webm;codecs=opus"; including the codec produces a filename
+        # like "uuid.webm;codecs=opus" that Whisper rejects with
+        # "Invalid file format" since it reads the extension after the last dot.
         import uuid
-        ext = content_type.split("/")[-1]
+        ext = base_content_type.split("/")[-1]
         file_id = str(uuid.uuid4())
         s3_key = f"tours/{user.user_id}/{tour_id}/voice/{file_id}.{ext}"
 
