@@ -43,6 +43,7 @@ locals {
     "RESEND_API_KEY",
     "SCRAPINGBEE_API_KEY",
     "OPENAI_API_KEY",
+    "ADMIN_API_KEY",
   ]
 
   secrets = [

@@ -1,19 +1,36 @@
 """
 Admin API endpoints for data collection management.
 """
+import os
 import uuid
 import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends, Body
+from fastapi import APIRouter, HTTPException, Query, Depends, Body, Header
 from pydantic import BaseModel, Field
 
 from app.database import get_async_session, is_database_enabled, AsyncSession
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/admin/data-collection", tags=["Data Collection"])
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "homescout-dev-admin-key")
+
+
+async def verify_admin_key(x_admin_key: str = Header(...)):
+    """Require a valid X-Admin-Key header. Mirrors routers/invite.py so the
+    same operator credential gates every admin surface. ADMIN_API_KEY is set
+    per-env in AWS Secrets Manager (snugd/{env}/secrets)."""
+    if x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin API key")
+    return x_admin_key
+
+
+router = APIRouter(
+    prefix="/api/admin/data-collection",
+    tags=["Data Collection"],
+    dependencies=[Depends(verify_admin_key)],
+)
 
 
 # Request/Response Models
