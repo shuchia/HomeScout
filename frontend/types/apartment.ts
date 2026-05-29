@@ -62,6 +62,11 @@ export interface Apartment {
   rent: number;
   bedrooms: number;
   bathrooms: number;
+  /** Human-friendly range label like "Studio–1 BR" when the listing covers
+   * multiple floor plans; null when the listing has a single value (use bedrooms). */
+  beds_label?: string | null;
+  /** Same for bathrooms, e.g. "1–2 BA". Null = use bathrooms field. */
+  baths_label?: string | null;
   sqft: number;
   property_type: string;
   available_date: string;

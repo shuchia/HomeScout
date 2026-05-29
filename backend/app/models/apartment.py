@@ -116,6 +116,38 @@ class ApartmentModel(Base):
         Index('idx_apartments_market', 'market_id'),
     )
 
+    @staticmethod
+    def _format_range_label(raw_value: Optional[str], unit_short: str) -> Optional[str]:
+        """Format a raw Apify range string (e.g. "Studio - 1 bd", "1 - 2 ba") into a
+        display label like "Studio–1 BR" or "1–2 BA". Returns None when there's no
+        range to surface (single value or unparseable input) so the frontend can
+        fall back to the integer field.
+        """
+        if not raw_value or not isinstance(raw_value, str):
+            return None
+        import re
+        # Strip the unit suffix (bd/ba/etc.) and split on the range separator
+        cleaned = re.sub(r"\b(?:bd|ba|bedrooms?|bathrooms?|bed|bath)s?\b", "", raw_value, flags=re.IGNORECASE).strip()
+        parts = [p.strip() for p in re.split(r"\s*[-–—]\s*", cleaned) if p.strip()]
+        if len(parts) < 2:
+            return None  # single value — caller uses the integer field
+        # Title-case "studio", strip trailing punctuation
+        def tidy(p: str) -> str:
+            p = p.strip(" ,.")
+            return "Studio" if p.lower() == "studio" else p
+        lo, hi = tidy(parts[0]), tidy(parts[-1])
+        if lo == hi:
+            return None
+        return f"{lo}–{hi} {unit_short}"
+
+    def _beds_label(self) -> Optional[str]:
+        raw = (self.raw_data or {}).get("beds") if isinstance(self.raw_data, dict) else None
+        return self._format_range_label(raw, "BR")
+
+    def _baths_label(self) -> Optional[str]:
+        raw = (self.raw_data or {}).get("baths") if isinstance(self.raw_data, dict) else None
+        return self._format_range_label(raw, "BA")
+
     def to_dict(self) -> dict:
         """Convert model to dictionary for API responses."""
         return {
@@ -124,6 +156,8 @@ class ApartmentModel(Base):
             "rent": self.rent,
             "bedrooms": self.bedrooms,
             "bathrooms": int(self.bathrooms) if self.bathrooms == int(self.bathrooms) else self.bathrooms,
+            "beds_label": self._beds_label(),
+            "baths_label": self._baths_label(),
             "sqft": self.sqft or 0,
             "property_type": self.property_type,
             "available_date": self.available_date or "",
@@ -180,6 +214,8 @@ class ApartmentModel(Base):
             "rent": self.rent,
             "bedrooms": self.bedrooms,
             "bathrooms": int(self.bathrooms) if self.bathrooms == int(self.bathrooms) else self.bathrooms,
+            "beds_label": self._beds_label(),
+            "baths_label": self._baths_label(),
             "sqft": self.sqft or 0,
             "property_type": self.property_type,
             "available_date": self.available_date or "",
