@@ -496,44 +496,70 @@ Return valid JSON only, no additional text."""
         raw_note: str,
         apartment_context: dict,
     ) -> dict:
-        """Clean up a tour note — remove filler, structure it, suggest tags.
+        """Clean up a tour note — grammar/clarity only, derive tags from user words.
+
+        Strictly faithful to the raw note: enhanced_text and suggested_tags
+        must come ONLY from what the user wrote. apartment_context is
+        narrowed to the address + basic stats and serves as an identifier
+        so Claude can write naturally ("this unit") — never as a source of
+        facts to merge into the user's observations.
 
         Args:
             raw_note: The raw note text entered by the user.
-            apartment_context: Apartment details for context.
+            apartment_context: Apartment details (narrowed before prompting).
 
         Returns:
             {"enhanced_text": "...", "suggested_tags": [{"tag": "...", "sentiment": "pro"|"con"}]}
         """
-        apartment_json = json.dumps(apartment_context, indent=2)
+        # Narrow to a minimal identifier — Claude does NOT see amenities /
+        # description / transit / pet policy / fees, so it can't merge
+        # listing data into "user observations."
+        minimal_context = {
+            "address": apartment_context.get("address", ""),
+            "rent": apartment_context.get("rent"),
+            "bedrooms": apartment_context.get("bedrooms"),
+            "bathrooms": apartment_context.get("bathrooms"),
+        }
+        apartment_json = json.dumps(minimal_context, indent=2)
 
         system_prompt = (
-            "You are cleaning up rough apartment tour notes. These were jotted "
-            "down quickly during or after a tour. Remove filler words, "
-            "fix grammar, structure into clear observations. Also suggest "
-            "pro/con tags."
+            "You clean up rough apartment tour notes that users jot down "
+            "during or after a visit. Your job is GRAMMAR AND CLARITY ONLY: "
+            "fix spelling, remove filler words, split run-on sentences. "
+            "CRITICAL: do not add facts, observations, amenities, or details "
+            "that are NOT explicitly present in the user's raw note. If the "
+            "raw note is short, the enhanced text must also be short. Never "
+            "invent observations the user did not write. Tags must come only "
+            "from words the user actually used."
         )
 
-        user_prompt = f"""Clean up and enhance the following tour note.
+        user_prompt = f"""Clean up this tour note. The apartment identifier
+is provided ONLY so you can write naturally (e.g. "this unit") — do NOT
+include any detail from the identifier that is not also in the raw note.
 
-## Raw Note
+## Raw Note (user's actual observations)
 {raw_note}
 
-## Apartment Context
+## Apartment Identifier (reference only — do not merge into output)
 {apartment_json}
 
-Instructions:
-- Remove filler words and fix grammar.
-- Structure into clear, concise observations.
-- Suggest pro/con tags based on the content.
-- Keep the enhanced text faithful to the original observations.
+Rules:
+- Output enhanced_text must paraphrase ONLY what the user wrote. No new facts.
+- If the user did not mention a feature (laundry, parking, transit, kitchen,
+  closets, etc.), do NOT add it. Length of enhanced_text should be similar
+  to the raw note. A one-sentence note becomes a one-sentence note.
+- Each suggested_tag must correspond to a word or phrase the user wrote.
+  Do NOT suggest tags inferred from address, neighborhood, or amenities
+  you might guess about — only from the raw note text.
+- Example: if the user wrote "Spacious 1BR with good natural light. Heat
+  included.", the enhanced_text should be a similar one-or-two sentence
+  cleanup — NOT a paragraph about ceiling fans, laundry, or bus stops.
 
-Return ONLY a JSON object with this structure:
+Return ONLY a JSON object:
 {{
-  "enhanced_text": "Cleaned up and structured note text...",
+  "enhanced_text": "Cleaned-up version of the user's note. Similar length to raw note.",
   "suggested_tags": [
-    {{"tag": "Tag name", "sentiment": "pro"}},
-    {{"tag": "Tag name", "sentiment": "con"}}
+    {{"tag": "Tag from user's words", "sentiment": "pro"}}
   ]
 }}
 
