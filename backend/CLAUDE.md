@@ -61,10 +61,13 @@ curl http://localhost:8000/api/apartments/stats
 # List apartments by city
 curl "http://localhost:8000/api/apartments/list?city=Pittsburgh"
 
-# Trigger manual scrape
-curl -X POST http://localhost:8000/api/admin/data-collection/jobs \
-  -H "Content-Type: application/json" \
-  -d '{"source": "apartments_com", "max_listings": 30}'
+# Trigger manual scrape for a specific market (note: /jobs is broken,
+# see launch-readiness #9). Body for /markets/{id}/scrape is empty.
+# Both admin endpoints require X-Admin-Key — pull from AWS Secrets Manager.
+ADMIN_API_KEY=$(aws secretsmanager get-secret-value --secret-id snugd/qa/secrets \
+  --query SecretString --output text | jq -r .ADMIN_API_KEY)
+curl -X POST http://localhost:8000/api/admin/data-collection/markets/pittsburgh/scrape \
+  -H "X-Admin-Key: $ADMIN_API_KEY"
 ```
 
 ## Architecture Overview
@@ -80,7 +83,7 @@ Set `USE_DATABASE=true` in `.env` to enable database mode.
 
 ### Tier-Gated Endpoints
 The search and compare endpoints are tier-gated:
-- **`/api/search`**: Pro gets Claude AI scoring; free gets filtered results (3 searches/day via Redis counter); anonymous gets filtered results with no limit tracking
+- **`/api/search`**: Pro gets heuristic_score immediately + Claude AI scoring via separate `/api/search/score-batch` call (lazy AI); free gets filtered results (20 searches/day via Redis counter, `FREE_DAILY_SEARCH_LIMIT` in tier_service.py); anonymous gets filtered results with no limit tracking
 - **`/api/apartments/compare`**: Pro gets Claude head-to-head analysis; free/anonymous get basic comparison table without AI analysis
 - Auth is via Supabase JWT (`auth.py` → `get_optional_user`), tier checked via `TierService.get_user_tier()`
 
@@ -332,12 +335,12 @@ Stripe webhook events handled:
 
 ### Admin API Endpoints
 
-Router: `routers/data_collection.py`
+Router: `routers/data_collection.py` — **all endpoints require `X-Admin-Key` header** (router-level dependency, mirrors `routers/invite.py`).
 
 ```bash
-# Trigger manual scrape
-POST /api/admin/data-collection/jobs
-{"source": "zillow", "city": "San Francisco", "state": "CA"}
+# Trigger manual scrape — prefer /markets/{id}/scrape; the /jobs route below
+# has a signature bug, see docs/launch-readiness.md #9.
+POST /api/admin/data-collection/markets/{market_id}/scrape
 
 # List jobs
 GET /api/admin/data-collection/jobs
@@ -348,6 +351,10 @@ GET /api/admin/data-collection/jobs/{job_id}
 # Data sources
 GET /api/admin/data-collection/sources
 PUT /api/admin/data-collection/sources/{source_id}
+
+# Markets (the only enable/disable lever for scheduled scraping)
+GET /api/admin/data-collection/markets
+PUT /api/admin/data-collection/markets/{market_id}    # body: {is_enabled, tier, scrape_frequency_hours, max_listings_per_scrape}
 
 # Metrics
 GET /api/admin/data-collection/metrics
