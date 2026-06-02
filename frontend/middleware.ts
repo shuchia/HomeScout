@@ -9,12 +9,16 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Beta testers reach the actual app via qa.snugd.ai, which keeps its root
  * pointed at the search UI (no rewrite applied).
  */
-export function middleware(request: NextRequest) {
-  const host = request.headers.get('host') ?? '';
-  const isProdHost = host === 'snugd.ai' || host === 'www.snugd.ai';
-  const pathname = request.nextUrl.pathname;
+const PROD_HOSTS = new Set(['snugd.ai', 'www.snugd.ai']);
 
-  if (isProdHost && pathname === '/') {
+export function middleware(request: NextRequest) {
+  // On Vercel, the public host may land in `x-forwarded-host` instead of the
+  // `host` header. Check both. Strip any port suffix just in case.
+  const forwardedHost = request.headers.get('x-forwarded-host') ?? '';
+  const host = request.headers.get('host') ?? '';
+  const publicHost = (forwardedHost || host).split(':')[0].toLowerCase();
+
+  if (PROD_HOSTS.has(publicHost) && request.nextUrl.pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = '/landing';
     return NextResponse.rewrite(url);
@@ -23,8 +27,6 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Only run the middleware on the root path; everything else (assets, _next,
-// API routes, sub-routes) skips it for free.
 export const config = {
   matcher: '/',
 };
