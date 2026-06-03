@@ -1,0 +1,32 @@
+{
+  "name": "Snugd — Find Your Perfect Apartment",
+  "short_name": "Snugd",
+  "description": "AI-powered apartment matching. Search, compare, tour, and decide — all in one place.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FAFAF8",
+  "theme_color": "#2D6A4F",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["lifestyle", "productivity", "utilities"]
+}
