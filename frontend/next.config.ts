@@ -11,18 +11,26 @@ const nextConfig: NextConfig = {
   // qa.snugd.ai and local dev are not matched, so they keep serving the
   // search app at `/` for beta testers.
   async rewrites() {
-    return [
-      {
-        source: "/",
-        has: [
-          {
-            type: "host",
-            value: "(www\\.)?snugd\\.ai",
-          },
-        ],
-        destination: "/landing",
-      },
-    ];
+    // Return the object form so the rewrite runs in `beforeFiles` — BEFORE
+    // Next.js's filesystem routing. The plain-array form runs in `afterFiles`,
+    // which is too late: `app/page.tsx` exists and would already have matched
+    // `/`, so the rewrite would never fire.
+    return {
+      beforeFiles: [
+        {
+          source: "/",
+          has: [
+            {
+              type: "host",
+              value: "(www\\.)?snugd\\.ai",
+            },
+          ],
+          destination: "/landing",
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
   },
 };
 
