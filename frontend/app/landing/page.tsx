@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 
 /* ──────────────────────────── constants ──────────────────────────── */
 
@@ -106,10 +107,6 @@ const PRO_FEATURES = [
 
 const TECH_STACK = ['Claude AI', 'Next.js', 'FastAPI', 'Supabase', 'Whisper', 'Stripe'];
 
-/* ──────────────────────────── helpers ──────────────────────────── */
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 /* ──────────────────────── Waitlist Form ──────────────────────── */
 
 function WaitlistForm({ compact = false }: { compact?: boolean }) {
@@ -118,24 +115,31 @@ function WaitlistForm({ compact = false }: { compact?: boolean }) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
+  // Posts directly to the Supabase `waitlist` table using the anon key.
+  // This decouples the landing page from the backend so snugd.ai can serve
+  // waitlist signups even when api.snugd.ai is dormant.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
     setStatus('loading');
-    try {
-      const res = await fetch(`${API_URL}/api/waitlist`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name: name || null, referral_source: 'landing_page' }),
-      });
-      const data = await res.json();
-      if (!res.ok && res.status !== 200 && res.status !== 201) throw new Error(data.detail || 'Failed');
-      setStatus('success');
-      setMessage(data.message || "You're in! We'll reach out soon.");
-    } catch {
+    const { error } = await supabase
+      .from('waitlist')
+      .insert({ email: email.trim().toLowerCase(), name: name.trim() || null, referral_source: 'landing_page' });
+    if (error) {
       setStatus('error');
+      // Duplicate-email errors look like unique-constraint violations — treat
+      // those as success ("you're already on the list") so we don't surface
+      // confusing copy.
+      if (error.code === '23505' || error.message?.toLowerCase().includes('duplicate')) {
+        setStatus('success');
+        setMessage("You're already on the list. We'll reach out soon.");
+        return;
+      }
       setMessage('Something went wrong. Please try again.');
+      return;
     }
+    setStatus('success');
+    setMessage("You're in! We'll reach out soon.");
   };
 
   if (status === 'success') {

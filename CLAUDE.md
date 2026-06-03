@@ -61,6 +61,8 @@ Architecture: Next.js (frontend) + FastAPI (backend) + PostgreSQL + Redis + Supa
 - **Auth**: 5-second timeout in `AuthContext` to avoid infinite loading; fail-open for Redis/Supabase outages.
 - **Analytics**: fire-and-forget — never blocks or raises.
 - **True cost**: precomputed at ingestion in DB mode; `_add_cost_breakdown()` fills gaps in JSON mode.
+- **Admin endpoints**: `/api/admin/data-collection/*` and `/api/admin/invite-codes` require `X-Admin-Key` header. Value is per-env in AWS Secrets Manager (`snugd/{env}/secrets:ADMIN_API_KEY`). Calling without it returns 422 (missing header) or 401 (wrong key).
+- **Freshness filter**: `/api/apartments/list` and `/api/search` only return rows with `freshness_confidence >= 40` (apartments.py:147). `decay_and_verify` reduces scores hourly, so listings drop out unless a market is re-scraped. Stats endpoint counts all `is_active=1` rows so the two diverge.
 
 ## Tier System (Quick Reference)
 
