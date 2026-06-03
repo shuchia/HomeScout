@@ -35,6 +35,14 @@ export const metadata: Metadata = {
       { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
   },
+  // Next.js's appleWebApp.capable setting no longer emits the legacy
+  // <meta name="apple-mobile-web-app-capable"> tag that iOS Safari still
+  // checks for fullscreen launch from home screen. Add it explicitly via
+  // `other` plus the W3C-standard `mobile-web-app-capable` for parity.
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 // Per Next.js 14+, themeColor + viewport live in a separate `viewport` export.
