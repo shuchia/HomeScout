@@ -29,6 +29,7 @@ const AVAILABLE_CITIES = [
   { value: 'Providence, RI', label: 'Providence, RI' },
   { value: 'Raleigh, NC', label: 'Raleigh, NC' },
   { value: 'Richmond, VA', label: 'Richmond, VA' },
+  { value: 'San Francisco, CA', label: 'San Francisco, CA' },
   { value: 'Stamford, CT', label: 'Stamford, CT' },
   { value: 'State College, PA', label: 'State College, PA' },
   { value: 'Towson, MD', label: 'Towson, MD' },
