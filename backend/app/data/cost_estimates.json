@@ -11,6 +11,14 @@
     "3": {"electric": 120, "gas": 55, "water": 45, "internet": 60, "renters_insurance": 25, "laundry": 50},
     "4": {"electric": 140, "gas": 60, "water": 50, "internet": 60, "renters_insurance": 28, "laundry": 50}
   },
+  "941": {
+    "_region": "San Francisco, CA",
+    "0": {"electric": 100, "gas": 40, "water": 30, "internet": 75, "renters_insurance": 18, "laundry": 55},
+    "1": {"electric": 120, "gas": 50, "water": 35, "internet": 75, "renters_insurance": 22, "laundry": 65},
+    "2": {"electric": 145, "gas": 60, "water": 40, "internet": 75, "renters_insurance": 26, "laundry": 65},
+    "3": {"electric": 175, "gas": 70, "water": 45, "internet": 75, "renters_insurance": 30, "laundry": 65},
+    "4": {"electric": 205, "gas": 80, "water": 50, "internet": 75, "renters_insurance": 34, "laundry": 65}
+  },
   "191": {
     "_region": "Philadelphia, PA",
     "0": {"electric": 75, "gas": 40, "water": 35, "internet": 60, "renters_insurance": 16, "laundry": 55},
