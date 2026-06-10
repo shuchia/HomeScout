@@ -20,13 +20,15 @@ def send_daily_alerts():
         logger.error("Supabase admin client not configured")
         return {"sent": 0}
 
-    # Get all active saved searches for pro users
+    # Fetch active saved searches without a Supabase relationship join —
+    # saved_searches.user_id FKs to auth.users, not public.profiles, so
+    # PostgREST cannot auto-discover the relationship for `!inner`. Doing
+    # this in two steps avoids needing a schema migration on prod Supabase.
     result = (
         supabase_admin.table("saved_searches")
-        .select("*, profiles!inner(user_tier, email, name)")
+        .select("*")
         .eq("is_active", True)
         .eq("notify_new_matches", True)
-        .eq("profiles.user_tier", "pro")
         .execute()
     )
 
@@ -34,12 +36,36 @@ def send_daily_alerts():
         logger.info("No active saved searches to process")
         return {"sent": 0}
 
+    # Batch-fetch profile rows for the saved-search owners, filtered to Pro.
+    user_ids = sorted({s["user_id"] for s in result.data if s.get("user_id")})
+    if not user_ids:
+        return {"sent": 0}
+
+    profiles_resp = (
+        supabase_admin.table("profiles")
+        .select("id, user_tier, email, name")
+        .in_("id", user_ids)
+        .eq("user_tier", "pro")
+        .execute()
+    )
+    profiles_by_id = {p["id"]: p for p in (profiles_resp.data or [])}
+
+    # Keep only searches whose owner is a Pro user with an email.
+    pro_searches = [
+        {**s, "_profile": profiles_by_id[s["user_id"]]}
+        for s in result.data
+        if s.get("user_id") in profiles_by_id
+    ]
+    if not pro_searches:
+        logger.info("No Pro users with active saved searches to alert")
+        return {"sent": 0}
+
     from app.services.apartment_service import ApartmentService
     service = ApartmentService()
     sent_count = 0
 
-    for search in result.data:
-        profile = search.get("profiles", {})
+    for search in pro_searches:
+        profile = search.get("_profile", {})
         email = profile.get("email")
         if not email:
             continue
