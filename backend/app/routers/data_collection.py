@@ -110,41 +110,82 @@ async def trigger_scrape_job(request: TriggerJobRequest):
     """
     Trigger a manual scrape job.
 
-    Args:
-        request: Job configuration
+    Two modes:
+    - With `city` + `state`: scrape that one market. Looks up the
+      `market_id` from `market_configs` (the `scrape_city_task` signature
+      switched from (source, city, state, max_listings) to (market_id) and
+      this route's body shape was never updated — this resolves the
+      mismatch).
+    - Without city: full-source scrape across all configured cities.
 
     Returns:
-        Job ID and status
+        Job ID and Celery task ID.
     """
     job_id = str(uuid.uuid4())
 
     try:
-        # Import celery task
         from app.tasks.scrape_tasks import scrape_source, scrape_city_task
 
         if request.city and request.state:
-            # Single city scrape
-            task = scrape_city_task.delay(
-                source=request.source,
-                city=request.city,
-                state=request.state,
-                max_listings=request.max_listings,
-            )
-        else:
-            # Full source scrape
-            task = scrape_source.delay(
-                source=request.source,
-                max_listings_per_city=request.max_listings,
-            )
+            # Resolve city+state to a market_id (case-insensitive). If no
+            # matching market exists, surface a 400 so the operator knows
+            # to create the market_config first, OR use the explicit
+            # /markets/{id}/scrape endpoint.
+            from sqlalchemy import select, func
+            from app.models.market_config import MarketConfigModel
+            from app.database import get_session_context
 
+            async with get_session_context() as session:
+                stmt = select(MarketConfigModel).where(
+                    func.lower(MarketConfigModel.city) == request.city.lower(),
+                    func.lower(MarketConfigModel.state) == request.state.lower(),
+                )
+                result = await session.execute(stmt)
+                market = result.scalar_one_or_none()
+
+            if not market:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"No market configured for {request.city}, {request.state}. "
+                        f"Create it via POST /api/admin/data-collection/markets first, "
+                        f"or call /api/admin/data-collection/markets/{{market_id}}/scrape "
+                        f"with the market id directly."
+                    ),
+                )
+
+            task = scrape_city_task.apply_async(
+                kwargs={"market_id": market.id},
+                queue="scraping",
+            )
+            return {
+                "job_id": job_id,
+                "task_id": task.id,
+                "source": request.source,
+                "market_id": market.id,
+                "status": "queued",
+                "message": (
+                    f"Scrape job queued for market {market.id} "
+                    f"({request.city}, {request.state})"
+                ),
+            }
+
+        # Full source scrape — scrape_source signature still matches the
+        # body shape, no remapping needed.
+        task = scrape_source.delay(
+            source=request.source,
+            max_listings_per_city=request.max_listings,
+        )
         return {
             "job_id": job_id,
             "task_id": task.id,
             "source": request.source,
             "status": "queued",
-            "message": f"Scrape job queued for {request.source}",
+            "message": f"Full-source scrape job queued for {request.source}",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Failed to trigger scrape job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
