@@ -77,6 +77,15 @@ export interface Apartment {
   source_url?: string | null;
   contact_phone?: string | null;
   contact_email?: string | null;
+  contact_name?: string | null;
+  property_website?: string | null;
+  walk_score?: number | null;
+  transit_score?: number | null;
+  apartments_com_rating?: number | null;
+  specials?: ApartmentSpecial | null;
+  available_units?: ApartmentUnit[];
+  transit_options?: ApartmentTransitOption[];
+  virtual_tour_urls?: string[];
   true_cost_monthly?: number | null;
   true_cost_move_in?: number | null;
   cost_breakdown?: CostBreakdown | null;
@@ -85,6 +94,40 @@ export interface Apartment {
   first_seen_at?: string;
   times_seen?: number;
   distance_miles?: number | null;
+}
+
+/**
+ * Promotion / special offer attached to a listing (e.g. "Lease today, get one month free").
+ * Shape mirrors what apartments.com surfaces — `description` is the long-form
+ * detail, `label` or `title` is the short pill text.
+ */
+export interface ApartmentSpecial {
+  title?: string | null;
+  label?: string | null;
+  description?: string | null;
+}
+
+/**
+ * A single available unit within a property (when the listing represents a
+ * building with multiple floor plans).
+ */
+export interface ApartmentUnit {
+  unitNumber?: string | null;
+  beds?: number | string | null;
+  baths?: number | string | null;
+  sqft?: number | null;
+  price?: number | string | null;
+  availableDate?: string | null;
+}
+
+/**
+ * Nearby transit option scraped from apartments.com.
+ */
+export interface ApartmentTransitOption {
+  name?: string | null;
+  walk?: string | null;
+  drive?: string | null;
+  distance?: string | null;
 }
 
 /**

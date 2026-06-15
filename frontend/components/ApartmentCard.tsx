@@ -114,6 +114,21 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
 
       {/* Card Content */}
       <div className="p-4 space-y-3">
+        {/* Specials banner — apartments.com promo (e.g. "1 month free") */}
+        {apartment.specials && (apartment.specials.label || apartment.specials.title || apartment.specials.description) && (
+          <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs text-amber-900">
+            <span aria-hidden className="inline-block mt-0.5">🏷️</span>
+            <span className="leading-snug">
+              <span className="font-semibold">
+                {apartment.specials.label || apartment.specials.title || 'Special offer'}
+              </span>
+              {apartment.specials.description && (
+                <span className="block text-amber-800/90">{apartment.specials.description}</span>
+              )}
+            </span>
+          </div>
+        )}
+
         {/* Rent and Property Type */}
         <div className="flex justify-between items-start">
           <div>
@@ -209,6 +224,36 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
             {formatSqft(sqft)} sqft
           </span>
         </div>
+
+        {/* Walk / Transit / Rating badges */}
+        {(apartment.walk_score != null || apartment.transit_score != null || apartment.apartments_com_rating != null) && (
+          <div className="flex flex-wrap gap-1.5 text-xs">
+            {apartment.walk_score != null && (
+              <span
+                className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full"
+                title="Walk Score (0–100)"
+              >
+                Walk {apartment.walk_score}
+              </span>
+            )}
+            {apartment.transit_score != null && (
+              <span
+                className="px-2 py-0.5 bg-sky-50 text-sky-800 border border-sky-200 rounded-full"
+                title="Transit Score (0–100)"
+              >
+                Transit {apartment.transit_score}
+              </span>
+            )}
+            {apartment.apartments_com_rating != null && (
+              <span
+                className="px-2 py-0.5 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-full"
+                title="apartments.com rating"
+              >
+                ★ {apartment.apartments_com_rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Availability */}
         {(() => {

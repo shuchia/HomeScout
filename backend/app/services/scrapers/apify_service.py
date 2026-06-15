@@ -740,6 +740,9 @@ class ApifyService(BaseScraper):
         if isinstance(contact, dict):
             contact_phone = contact.get("phone") or contact.get("phoneNumber")
             contact_email = contact.get("email")
+            contact_name = contact.get("name")
+        else:
+            contact_name = None
         # Fallback to top-level fields
         if not contact_phone:
             contact_phone = raw.get("phone") or raw.get("phoneNumber") or raw.get("contactPhone")
@@ -752,6 +755,36 @@ class ApifyService(BaseScraper):
                 contact_phone = mgmt.get("phone") or mgmt.get("phoneNumber")
             if not contact_email:
                 contact_email = mgmt.get("email")
+            if not contact_name:
+                contact_name = mgmt.get("name")
+
+        # Enrichment fields — pull from raw whatever the bulk Apify run
+        # already returns. Conservative: only set if the source value is
+        # the right shape; never fabricate.
+        score = raw.get("score") or {}
+        walk_score = score.get("walkScore") if isinstance(score, dict) else None
+        transit_score = score.get("transitScore") if isinstance(score, dict) else None
+
+        rating_raw = raw.get("rating")
+        apartments_com_rating: Optional[float] = None
+        if isinstance(rating_raw, (int, float)):
+            apartments_com_rating = float(rating_raw)
+
+        specials_raw = raw.get("specials")
+        specials = specials_raw if isinstance(specials_raw, dict) and specials_raw else None
+
+        rentals = raw.get("rentals")
+        available_units = rentals if isinstance(rentals, list) and rentals else None
+
+        transit = raw.get("transportation")
+        transit_options = transit if isinstance(transit, list) and transit else None
+
+        vt = raw.get("virtualTours")
+        virtual_tour_urls = [u for u in vt if isinstance(u, str)] if isinstance(vt, list) else None
+        if virtual_tour_urls == []:
+            virtual_tour_urls = None
+
+        property_website = raw.get("propertyWebsite") or None
 
         return ScrapedListing(
             external_id=str(raw.get("id", "")),
@@ -782,6 +815,15 @@ class ApifyService(BaseScraper):
             other_monthly_fees=other_monthly or None,
             contact_phone=contact_phone,
             contact_email=contact_email,
+            contact_name=contact_name,
+            walk_score=walk_score,
+            transit_score=transit_score,
+            apartments_com_rating=apartments_com_rating,
+            property_website=property_website,
+            specials=specials,
+            available_units=available_units,
+            transit_options=transit_options,
+            virtual_tour_urls=virtual_tour_urls,
             raw_data=raw,
         )
 

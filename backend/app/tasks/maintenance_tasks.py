@@ -519,3 +519,117 @@ async def _cleanup_maintenance() -> Dict[str, Any]:
 
     logger.info(f"Daily maintenance: {results}")
     return {"status": "completed", **results}
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def backfill_enrichment(self, batch_size: int = 200, only_missing: bool = True) -> Dict[str, Any]:
+    """Backfill the enrichment columns from existing apartments.raw_data.
+
+    Reads raw_data for apartments whose enrichment fields are still NULL and
+    populates them in place. Idempotent: re-running only touches rows that
+    still have null values when ``only_missing`` is True.
+    """
+    if not is_database_enabled():
+        return {"status": "skipped", "reason": "Database not enabled"}
+
+    return run_async(_backfill_enrichment(batch_size=batch_size, only_missing=only_missing))
+
+
+async def _backfill_enrichment(batch_size: int, only_missing: bool) -> Dict[str, Any]:
+    from sqlalchemy import select, or_
+    from app.models.apartment import ApartmentModel
+
+    updated = 0
+    scanned = 0
+    skipped_no_raw = 0
+    last_id: str = ""
+
+    while True:
+        async with get_session_context() as session:
+            stmt = select(ApartmentModel).where(
+                ApartmentModel.is_active == 1,
+                ApartmentModel.raw_data.isnot(None),
+            )
+            if only_missing:
+                # Only rows where every enrichment column is still null
+                stmt = stmt.where(
+                    ApartmentModel.specials.is_(None),
+                    ApartmentModel.walk_score.is_(None),
+                    ApartmentModel.transit_score.is_(None),
+                    ApartmentModel.apartments_com_rating.is_(None),
+                    ApartmentModel.available_units.is_(None),
+                    ApartmentModel.transit_options.is_(None),
+                    ApartmentModel.virtual_tour_urls.is_(None),
+                    ApartmentModel.contact_name.is_(None),
+                    ApartmentModel.property_website.is_(None),
+                )
+            if last_id:
+                stmt = stmt.where(ApartmentModel.id > last_id)
+            stmt = stmt.order_by(ApartmentModel.id).limit(batch_size)
+
+            rows = (await session.execute(stmt)).scalars().all()
+            if not rows:
+                break
+
+            for apt in rows:
+                scanned += 1
+                raw = apt.raw_data or {}
+                if not isinstance(raw, dict):
+                    skipped_no_raw += 1
+                    last_id = apt.id
+                    continue
+
+                contact = raw.get("contact") or {}
+                score = raw.get("score") or {}
+                rentals = raw.get("rentals")
+                transit = raw.get("transportation")
+                vt = raw.get("virtualTours")
+                specials_raw = raw.get("specials")
+
+                touched = False
+
+                if apt.contact_name is None and isinstance(contact, dict) and contact.get("name"):
+                    apt.contact_name = contact.get("name")
+                    touched = True
+                if apt.walk_score is None and isinstance(score, dict) and isinstance(score.get("walkScore"), (int, float)):
+                    apt.walk_score = int(score["walkScore"])
+                    touched = True
+                if apt.transit_score is None and isinstance(score, dict) and isinstance(score.get("transitScore"), (int, float)):
+                    apt.transit_score = int(score["transitScore"])
+                    touched = True
+                if apt.apartments_com_rating is None and isinstance(raw.get("rating"), (int, float)):
+                    apt.apartments_com_rating = float(raw["rating"])
+                    touched = True
+                if apt.property_website is None and raw.get("propertyWebsite"):
+                    apt.property_website = raw.get("propertyWebsite")
+                    touched = True
+                if apt.specials is None and isinstance(specials_raw, dict) and specials_raw:
+                    apt.specials = specials_raw
+                    touched = True
+                if apt.available_units is None and isinstance(rentals, list) and rentals:
+                    apt.available_units = rentals
+                    touched = True
+                if apt.transit_options is None and isinstance(transit, list) and transit:
+                    apt.transit_options = transit
+                    touched = True
+                if apt.virtual_tour_urls is None and isinstance(vt, list):
+                    cleaned = [u for u in vt if isinstance(u, str)]
+                    if cleaned:
+                        apt.virtual_tour_urls = cleaned
+                        touched = True
+
+                if touched:
+                    updated += 1
+                last_id = apt.id
+
+            await session.commit()
+
+    logger.info(
+        f"backfill_enrichment: scanned={scanned} updated={updated} skipped_no_raw={skipped_no_raw}"
+    )
+    return {
+        "status": "completed",
+        "scanned": scanned,
+        "updated": updated,
+        "skipped_no_raw": skipped_no_raw,
+    }

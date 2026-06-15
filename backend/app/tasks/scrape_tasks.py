@@ -327,6 +327,16 @@ async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
                     # Precomputed true cost totals
                     true_cost_monthly=listing_data.get("true_cost_monthly"),
                     true_cost_move_in=listing_data.get("true_cost_move_in"),
+                    # Enrichment fields pulled out of raw_data
+                    contact_name=listing_data.get("contact_name"),
+                    walk_score=listing_data.get("walk_score"),
+                    transit_score=listing_data.get("transit_score"),
+                    apartments_com_rating=listing_data.get("apartments_com_rating"),
+                    property_website=listing_data.get("property_website"),
+                    specials=listing_data.get("specials"),
+                    available_units=listing_data.get("available_units"),
+                    transit_options=listing_data.get("transit_options"),
+                    virtual_tour_urls=listing_data.get("virtual_tour_urls"),
                 )
                 session.add(apartment)
                 await session.commit()
