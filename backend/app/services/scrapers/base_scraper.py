@@ -65,6 +65,18 @@ class ScrapedListing:
     # Contact info (extracted from listing)
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None
+    contact_name: Optional[str] = None
+
+    # Enrichment fields — present in the bulk Apify payload but were
+    # previously discarded. Added 2026-06-15.
+    walk_score: Optional[int] = None
+    transit_score: Optional[int] = None
+    apartments_com_rating: Optional[float] = None
+    property_website: Optional[str] = None
+    specials: Optional[Dict[str, Any]] = None              # {title, label, description}
+    available_units: Optional[List[Dict[str, Any]]] = None # list of unit objects
+    transit_options: Optional[List[Dict[str, Any]]] = None # list of transit stops
+    virtual_tour_urls: Optional[List[str]] = None          # video / 3D tour URLs
 
     # Raw data for debugging
     raw_data: Optional[Dict[str, Any]] = None
@@ -105,6 +117,15 @@ class ScrapedListing:
             "pricing_model_confidence": self.pricing_model_confidence,
             "contact_phone": self.contact_phone,
             "contact_email": self.contact_email,
+            "contact_name": self.contact_name,
+            "walk_score": self.walk_score,
+            "transit_score": self.transit_score,
+            "apartments_com_rating": self.apartments_com_rating,
+            "property_website": self.property_website,
+            "specials": self.specials,
+            "available_units": self.available_units,
+            "transit_options": self.transit_options,
+            "virtual_tour_urls": self.virtual_tour_urls,
             "raw_data": self.raw_data,
         }
 

@@ -80,6 +80,26 @@ class ApartmentModel(Base):
     true_cost_monthly = Column(Integer, nullable=True)
     true_cost_move_in = Column(Integer, nullable=True)
 
+    # Enrichment fields — data already in raw_data but pulled into proper
+    # columns so the UI + search can use them. Added 2026-06-15 (migration
+    # k7g8h9i0j1k2). Populated by the normalizer on every scrape going
+    # forward; populated retroactively for older rows by the
+    # backfill_enrichment Celery task.
+    contact_name = Column(String(255), nullable=True)              # leasing office contact name
+    walk_score = Column(Integer, nullable=True)                    # 0-100, from apartments.com
+    transit_score = Column(Integer, nullable=True)                 # 0-100, from apartments.com
+    apartments_com_rating = Column(Float, nullable=True)           # 0-5 rating
+    property_website = Column(Text, nullable=True)                 # property's own marketing URL (often null)
+    specials = Column(JSONB, nullable=True)                        # {title, label, description}
+    available_units = Column(JSONB, nullable=True)                 # list of {unitNumber, beds, baths, sqft, ...}
+    transit_options = Column(JSONB, nullable=True)                 # list of {name, walk, drive, distance}
+    virtual_tour_urls = Column(JSONB, nullable=True)               # list of URL strings
+
+    # Detail-mode enrichment timestamp (Commit 2 — per-tour URL-mode scrape).
+    # Bulk extraction (this commit) does NOT touch this; only the per-tour
+    # enrich_apartment_detail task sets it, which gates the 7-day re-scrape.
+    last_enriched_at = Column(DateTime(timezone=True), nullable=True)
+
     # Deduplication and quality
     content_hash = Column(String(64), nullable=True, unique=True)  # SHA256 hash for dedup
     data_quality_score = Column(Integer, default=50)  # 0-100 quality score
@@ -173,6 +193,16 @@ class ApartmentModel(Base):
             "source_url": self.source_url,
             "contact_phone": self.contact_phone,
             "contact_email": self.contact_email,
+            "contact_name": self.contact_name,
+            "property_website": self.property_website,
+            "walk_score": self.walk_score,
+            "transit_score": self.transit_score,
+            "apartments_com_rating": self.apartments_com_rating,
+            "specials": self.specials,
+            "available_units": self.available_units or [],
+            "transit_options": self.transit_options or [],
+            "virtual_tour_urls": self.virtual_tour_urls or [],
+            "last_enriched_at": self.last_enriched_at.isoformat() if self.last_enriched_at else None,
             "latitude": self.latitude,
             "longitude": self.longitude,
             "data_quality_score": self.data_quality_score,
@@ -226,6 +256,14 @@ class ApartmentModel(Base):
             "city": self.city,
             "state": self.state,
             "zip_code": self.zip_code,
+            # Enrichment fields surfaced in card view — specials drives the
+            # promo pill, walk/transit_score show as small badges; the heavier
+            # JSONB fields (available_units, transit_options, etc.) stay in
+            # to_dict for detail view only.
+            "specials": self.specials,
+            "walk_score": self.walk_score,
+            "transit_score": self.transit_score,
+            "apartments_com_rating": self.apartments_com_rating,
             "latitude": self.latitude,
             "longitude": self.longitude,
             "freshness_confidence": self.freshness_confidence,

@@ -657,6 +657,32 @@ async def backfill_fees():
     return {"status": "dispatched", "task_id": task.id, "message": "Backfill running in background"}
 
 
+@router.post("/backfill-enrichment")
+async def backfill_enrichment(only_missing: bool = True, batch_size: int = 200):
+    """Populate the enrichment columns (specials, walk_score, transit_score,
+    apartments_com_rating, available_units, transit_options, virtual_tour_urls,
+    contact_name, property_website) from existing apartments.raw_data.
+
+    Idempotent — by default only touches rows whose enrichment fields are
+    still NULL. Pass ``only_missing=false`` to force re-extraction.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import backfill_enrichment as backfill_enrichment_task
+    task = backfill_enrichment_task.apply_async(
+        kwargs={"only_missing": only_missing, "batch_size": batch_size},
+        queue="maintenance",
+    )
+
+    return {
+        "status": "dispatched",
+        "task_id": task.id,
+        "only_missing": only_missing,
+        "batch_size": batch_size,
+    }
+
+
 @router.delete("/listings")
 async def delete_all_listings():
     """Delete all apartment listings. Use with caution — dev/testing only."""
