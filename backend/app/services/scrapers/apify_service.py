@@ -257,6 +257,71 @@ class ApifyService(BaseScraper):
             "maxResults": max_listings,
         }
 
+    async def scrape_by_url(
+        self,
+        source_url: str,
+        max_wait_seconds: int = 300,
+    ) -> Optional[ScrapedListing]:
+        """Detail-mode scrape: fetch a single listing by its source URL.
+
+        Used for per-tour enrichment when the user adds an apartment to tours
+        — the bulk search scrape may have missed fields like leasing-office
+        email or per-unit pricing, and a direct hit on the listing page
+        usually fills those in. Runs the same epctex actor in URL mode
+        (`startUrls`) with `maxItems=1`. Polls Apify more aggressively than
+        bulk scrapes (10s instead of 30s) since a single-listing run is
+        typically 30-90s end to end.
+
+        Returns the normalized listing or None if the run failed / returned
+        nothing.
+        """
+        if self._client:
+            try:
+                await self._client.aclose()
+            except Exception:
+                pass
+            self._client = None
+
+        if not self.api_token:
+            logger.error("APIFY_API_TOKEN not configured — cannot enrich")
+            return None
+
+        actor_input = {
+            "startUrls": [{"url": source_url}],
+            "maxItems": 1,
+            "includeInteriorAmenities": True,
+            "includeReviews": True,
+            "includeVisuals": True,
+            "includeWalkScore": True,
+        }
+
+        try:
+            url = f"{self.API_BASE_URL}/acts/{self.actor_id}/runs"
+            response = await self.client.post(url, json=actor_input)
+            response.raise_for_status()
+            run_data = response.json().get("data", {})
+            run_id = run_data.get("id")
+            if not run_id:
+                logger.error("No run ID returned from Apify (url-mode)")
+                return None
+
+            run_result = await self._wait_for_run(run_id, max_wait_seconds=max_wait_seconds)
+            if not run_result:
+                return None
+
+            dataset_id = run_result.get("defaultDatasetId")
+            if not dataset_id:
+                return None
+
+            items = await self._get_dataset_items(dataset_id, max_items=1)
+            if not items:
+                return None
+
+            return self._normalize_listing(items[0])
+        except Exception as e:
+            logger.exception(f"Error during URL-mode Apify scrape for {source_url}: {e}")
+            return None
+
     async def _run_actor(self, actor_input: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Run an Apify actor and wait for completion.

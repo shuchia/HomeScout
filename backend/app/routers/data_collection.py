@@ -645,6 +645,23 @@ async def backfill_fees():
     return {"status": "dispatched", "task_id": task.id, "message": "Backfill running in background"}
 
 
+@router.post("/enrich/{apartment_id}")
+async def trigger_enrichment(apartment_id: str):
+    """Run detail-mode enrichment for a single apartment synchronously.
+
+    Manual/debug counterpart to the BackgroundTasks-triggered enrichment that
+    fires on POST /api/tours. Useful for verifying the Apify URL-mode path
+    end to end. Honors the same 7-day TTL — pass a fresh apartment ID or
+    wait out the TTL if you need a forced re-run.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.services.enrichment_service import enrich_apartment
+    result = await enrich_apartment(apartment_id)
+    return result
+
+
 @router.post("/backfill-enrichment")
 async def backfill_enrichment(only_missing: bool = True, batch_size: int = 200):
     """Populate the enrichment columns (specials, walk_score, transit_score,
