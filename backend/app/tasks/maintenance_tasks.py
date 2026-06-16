@@ -1,25 +1,15 @@
 """
 Celery tasks for maintenance and cleanup operations.
 """
-import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
 from app.celery_app import celery_app
 from app.database import get_session_context, is_database_enabled
+from app.tasks._async_runner import run_async
 
 logger = logging.getLogger(__name__)
-
-
-def run_async(coro):
-    """Run an async coroutine in a sync context."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task
@@ -217,86 +207,79 @@ def vacuum_database() -> Dict[str, Any]:
         return {"status": "failed", "error": str(e)}
 
 
+async def compute_metrics_snapshot() -> Dict[str, Any]:
+    """Compute data-collection metrics in pure async form.
+
+    Lives at module level (rather than nested inside the Celery task) so the
+    FastAPI `/metrics` endpoint can `await` it directly. Going through the
+    Celery task wrapper from a FastAPI handler used to fail silently because
+    `run_async()` tried to spin a new event loop inside the request's running
+    loop, and the endpoint's bare `except` swallowed the resulting
+    RuntimeError and returned zeros.
+    """
+    from sqlalchemy import select, func
+    from app.models.apartment import ApartmentModel
+    from app.models.scrape_job import ScrapeJobModel
+
+    metrics: Dict[str, Any] = {}
+
+    async with get_session_context() as session:
+        stmt = select(func.count(ApartmentModel.id))
+        result = await session.execute(stmt)
+        metrics["total_listings"] = result.scalar() or 0
+
+        stmt = select(func.count(ApartmentModel.id)).where(
+            ApartmentModel.is_active == 1
+        )
+        result = await session.execute(stmt)
+        metrics["active_listings"] = result.scalar() or 0
+
+        stmt = select(
+            ApartmentModel.source,
+            func.count(ApartmentModel.id)
+        ).group_by(ApartmentModel.source)
+        result = await session.execute(stmt)
+        metrics["listings_by_source"] = {row[0]: row[1] for row in result}
+
+        stmt = select(
+            ApartmentModel.city,
+            func.count(ApartmentModel.id)
+        ).where(
+            ApartmentModel.city.isnot(None)
+        ).group_by(ApartmentModel.city).limit(20)
+        result = await session.execute(stmt)
+        metrics["listings_by_city"] = {row[0]: row[1] for row in result}
+
+        stmt = select(func.avg(ApartmentModel.data_quality_score))
+        result = await session.execute(stmt)
+        metrics["avg_quality_score"] = round(result.scalar() or 0, 2)
+
+        stmt = select(func.count(ScrapeJobModel.id)).where(
+            ScrapeJobModel.created_at > datetime.utcnow() - timedelta(days=1)
+        )
+        result = await session.execute(stmt)
+        metrics["jobs_last_24h"] = result.scalar() or 0
+
+        stmt = select(func.count(ScrapeJobModel.id)).where(
+            ScrapeJobModel.created_at > datetime.utcnow() - timedelta(days=1),
+            ScrapeJobModel.status == "completed",
+        )
+        result = await session.execute(stmt)
+        metrics["successful_jobs_last_24h"] = result.scalar() or 0
+
+    metrics["timestamp"] = datetime.utcnow().isoformat()
+    return metrics
+
+
 @celery_app.task
 def generate_metrics_snapshot() -> Dict[str, Any]:
-    """
-    Generate a snapshot of data collection metrics.
-
-    Returns:
-        Dict with current metrics
-    """
+    """Celery task wrapper around `compute_metrics_snapshot`."""
     if not is_database_enabled():
         return {"status": "skipped", "reason": "Database not enabled"}
 
     logger.info("Generating metrics snapshot")
-
-    async def _metrics():
-        from sqlalchemy import select, func
-        from app.models.apartment import ApartmentModel
-        from app.models.scrape_job import ScrapeJobModel
-
-        metrics = {}
-
-        async with get_session_context() as session:
-            # Total listings
-            stmt = select(func.count(ApartmentModel.id))
-            result = await session.execute(stmt)
-            metrics["total_listings"] = result.scalar() or 0
-
-            # Active listings
-            stmt = select(func.count(ApartmentModel.id)).where(
-                ApartmentModel.is_active == 1
-            )
-            result = await session.execute(stmt)
-            metrics["active_listings"] = result.scalar() or 0
-
-            # Listings by source
-            stmt = select(
-                ApartmentModel.source,
-                func.count(ApartmentModel.id)
-            ).group_by(ApartmentModel.source)
-            result = await session.execute(stmt)
-            metrics["listings_by_source"] = {
-                row[0]: row[1] for row in result
-            }
-
-            # Listings by city
-            stmt = select(
-                ApartmentModel.city,
-                func.count(ApartmentModel.id)
-            ).where(
-                ApartmentModel.city.isnot(None)
-            ).group_by(ApartmentModel.city).limit(20)
-            result = await session.execute(stmt)
-            metrics["listings_by_city"] = {
-                row[0]: row[1] for row in result
-            }
-
-            # Average data quality
-            stmt = select(func.avg(ApartmentModel.data_quality_score))
-            result = await session.execute(stmt)
-            metrics["avg_quality_score"] = round(result.scalar() or 0, 2)
-
-            # Recent scrape jobs
-            stmt = select(func.count(ScrapeJobModel.id)).where(
-                ScrapeJobModel.created_at > datetime.utcnow() - timedelta(days=1)
-            )
-            result = await session.execute(stmt)
-            metrics["jobs_last_24h"] = result.scalar() or 0
-
-            # Successful jobs last 24h
-            stmt = select(func.count(ScrapeJobModel.id)).where(
-                ScrapeJobModel.created_at > datetime.utcnow() - timedelta(days=1),
-                ScrapeJobModel.status == "completed",
-            )
-            result = await session.execute(stmt)
-            metrics["successful_jobs_last_24h"] = result.scalar() or 0
-
-        return metrics
-
     try:
-        metrics = run_async(_metrics())
-        metrics["timestamp"] = datetime.utcnow().isoformat()
+        metrics = run_async(compute_metrics_snapshot())
         logger.info(f"Metrics snapshot: {metrics}")
         return {"status": "completed", "metrics": metrics}
     except Exception as e:

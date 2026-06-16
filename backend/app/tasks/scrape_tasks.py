@@ -1,7 +1,6 @@
 """
 Celery tasks for apartment listing scraping.
 """
-import asyncio
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -13,6 +12,7 @@ from app.services.scrapers.apify_service import ApifyService
 from app.services.scrapers.scrapingbee_service import ScrapingBeeService
 from app.services.normalization.normalizer import NormalizationService
 from app.services.deduplication.deduplicator import DeduplicationService
+from app.tasks._async_runner import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -22,16 +22,6 @@ DEFAULT_CITIES = [
     ("Bryn Mawr", "PA"),
     ("Pittsburgh", "PA"),
 ]
-
-
-def run_async(coro):
-    """Run an async coroutine in a sync context."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task(bind=True, max_retries=3)
