@@ -1,6 +1,7 @@
 """Celery tasks for recomputing true cost estimates."""
 import logging
 from app.celery_app import celery_app
+from app.tasks._async_runner import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,6 @@ def recompute_true_costs(self):
     Run this after updating cost_estimates.json or changing the
     estimation logic. Processes all active listings.
     """
-    import asyncio
     from app.database import get_session_context
     from app.models.apartment import ApartmentModel
     from app.services.cost_estimator import CostEstimator
@@ -65,11 +65,7 @@ def recompute_true_costs(self):
 
             await session.commit()
 
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_recompute())
-    finally:
-        loop.close()
+    run_async(_recompute())
 
     logger.info(f"Recomputed true costs for {updated} listings")
     return {"updated": updated}
@@ -83,17 +79,11 @@ def backfill_fees_task(self):
     were scraped with old code. Reads raw Apify data stored in each listing
     and re-runs fee extraction + cost computation.
     """
-    import asyncio
     import json as _json
-    import app.database as db_module
     from app.services.scrapers.apify_service import ApifyService
     from app.services.cost_estimator import CostEstimator
     from app.services.pricing_model_detector import detect_pricing_model
     from sqlalchemy import text
-
-    # Reset cached engine/session to avoid event loop mismatch in forked worker
-    db_module._engine = None
-    db_module._async_session_maker = None
 
     svc = ApifyService()
     estimator = CostEstimator()
@@ -200,12 +190,7 @@ def backfill_fees_task(self):
                 await session.commit()
                 offset += BATCH_SIZE
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_backfill())
-    finally:
-        loop.close()
+    run_async(_backfill())
 
     logger.info(f"Backfill complete: {updated} updated, {errors} errors")
     return {"updated": updated, "errors": errors}

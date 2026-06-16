@@ -438,41 +438,29 @@ async def update_data_source(source_id: str, request: SourceUpdateRequest):
 
 @router.get("/metrics", response_model=MetricsResponse)
 async def get_collection_metrics():
-    """
-    Get data collection metrics.
+    """Get data collection metrics.
 
-    Returns:
-        Current metrics for data collection
+    Calls the async compute function directly. Going through the Celery task
+    wrapper from within a FastAPI handler used to silently return zeros — the
+    wrapper spawns a fresh event loop via `run_async`, which collides with the
+    request's running loop and raises a RuntimeError that the handler's
+    `except` then swallowed.
     """
-    default_metrics = MetricsResponse(
-        total_listings=0,
-        active_listings=0,
-        listings_by_source={},
-        listings_by_city={},
-        avg_quality_score=0.0,
-        jobs_last_24h=0,
-        successful_jobs_last_24h=0,
-        timestamp=datetime.utcnow().isoformat(),
-    )
-
     if not is_database_enabled():
-        return default_metrics
+        return MetricsResponse(
+            total_listings=0,
+            active_listings=0,
+            listings_by_source={},
+            listings_by_city={},
+            avg_quality_score=0.0,
+            jobs_last_24h=0,
+            successful_jobs_last_24h=0,
+            timestamp=datetime.utcnow().isoformat(),
+        )
 
-    try:
-        from app.tasks.maintenance_tasks import generate_metrics_snapshot
-
-        # Get metrics from task (sync call)
-        result = generate_metrics_snapshot()
-
-        if result.get("status") == "completed":
-            metrics = result["metrics"]
-            return MetricsResponse(**metrics)
-
-        return default_metrics
-
-    except Exception as e:
-        logger.exception(f"Failed to get metrics: {e}")
-        return default_metrics
+    from app.tasks.maintenance_tasks import compute_metrics_snapshot
+    metrics = await compute_metrics_snapshot()
+    return MetricsResponse(**metrics)
 
 
 @router.get("/health", response_model=HealthCheckResponse)

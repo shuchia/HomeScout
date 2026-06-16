@@ -9,19 +9,9 @@ from typing import Dict, Any
 
 from app.celery_app import celery_app
 from app.database import get_session_context, is_database_enabled
+from app.tasks._async_runner import run_async
 
 logger = logging.getLogger(__name__)
-
-
-def run_async(coro):
-    """Run an async coroutine in a sync context."""
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task

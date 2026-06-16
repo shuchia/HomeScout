@@ -1,6 +1,7 @@
 import logging
 from app.celery_app import celery_app
 from app.services.tier_service import supabase_admin
+from app.tasks._async_runner import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,6 @@ def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id
     """Transcribe voice note, then auto-enhance for Pro users."""
     from app.services.transcription.whisper_service import WhisperService
     from app.services.tier_service import TierService
-    import asyncio
 
     if not supabase_admin:
         logger.error("Supabase not configured, cannot update note")
@@ -28,9 +28,7 @@ def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id
 
         # Check tier and chain enhancement for Pro users
         try:
-            loop = asyncio.new_event_loop()
-            tier = loop.run_until_complete(TierService.get_user_tier(user_id))
-            loop.close()
+            tier = run_async(TierService.get_user_tier(user_id))
         except Exception:
             tier = "free"
 
