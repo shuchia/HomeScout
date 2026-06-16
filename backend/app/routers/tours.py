@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel
 
 from app.auth import get_current_user, UserContext
@@ -434,9 +434,18 @@ async def generate_decision_brief(
 @router.post("/api/tours", status_code=201)
 async def create_tour(
     body: CreateTourRequest,
+    background: BackgroundTasks,
     user: UserContext = Depends(get_current_user),
 ):
-    """Add an apartment to the user's tour pipeline."""
+    """Add an apartment to the user's tour pipeline.
+
+    Side effect: schedules a fire-and-forget enrichment of the apartment via
+    Apify URL-mode (gated by a 7-day TTL on `apartments.last_enriched_at`).
+    The user gets an instant 201 — the enrichment runs after the response is
+    flushed and backfills `contact_email`/`contact_phone`/etc. on both the
+    apartment row and any tour rows that don't yet have them. See
+    `app/services/enrichment_service.py` for the why.
+    """
     _ensure_supabase()
 
     try:
@@ -488,6 +497,14 @@ async def create_tour(
             .execute()
         )
         tour = result.data[0] if result.data else row
+
+        # Fire-and-forget enrichment. Runs after the 201 is sent.
+        try:
+            from app.services.enrichment_service import enrich_apartment
+            background.add_task(enrich_apartment, body.apartment_id)
+        except Exception as e:
+            logger.warning(f"Could not schedule enrichment for {body.apartment_id}: {e}")
+
         return {"tour": _build_tour_response(tour)}
     except HTTPException:
         raise
