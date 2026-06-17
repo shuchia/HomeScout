@@ -151,45 +151,6 @@ export default function TourDetailPage() {
   }, [pendingCount, tourId])
 
   // ------------------------------------------
-  // Enrichment polling
-  //
-  // When the user just added an apartment to tours, POST /api/tours schedules
-  // a background Apify URL-mode enrichment that may take 30–90s to backfill
-  // leasing-office email/phone onto both the apartment and the tour row.
-  // Poll while the tour is freshly created and contact_email is still empty.
-  // The shouldPoll guard avoids reactivating this whenever the user opens an
-  // older tour that just happens to have no email.
-  // ------------------------------------------
-
-  const shouldPollEnrichment = useMemo(() => {
-    if (!tour) return false
-    if (tour.contact_email) return false
-    const created = new Date(tour.created_at).getTime()
-    const ageMs = Date.now() - created
-    return ageMs < 3 * 60 * 1000  // within last 3 min
-  }, [tour])
-
-  useEffect(() => {
-    if (!shouldPollEnrichment) return
-
-    let attempts = 0
-    const maxAttempts = 9  // 9 × 10s = 90s
-    const interval = setInterval(async () => {
-      attempts += 1
-      try {
-        const { tour: updated } = await getTour(tourId)
-        setTour(updated)
-        if (updated.contact_email) clearInterval(interval)
-      } catch {
-        // Silently retry on next tick
-      }
-      if (attempts >= maxAttempts) clearInterval(interval)
-    }, 10_000)
-
-    return () => clearInterval(interval)
-  }, [shouldPollEnrichment, tourId])
-
-  // ------------------------------------------
   // Mutation helpers
   // ------------------------------------------
 
@@ -592,33 +553,15 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
                   </svg>
                 </button>
               </div>
-            ) : (() => {
-              // Show "Pulling latest details…" pill briefly after a tour is
-              // created — POST /api/tours schedules a background enrichment
-              // that may backfill contact_email within 30–90s. After the
-              // 3-minute window expires, fall back to "Add email address".
-              const justCreated = (Date.now() - new Date(tour.created_at).getTime()) < 3 * 60 * 1000
-              if (justCreated) {
-                return (
-                  <span className="flex-1 inline-flex items-center gap-2 text-sm text-gray-500">
-                    <svg className="h-3.5 w-3.5 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Pulling latest details&hellip;
-                  </span>
-                )
-              }
-              return (
-                <button
-                  type="button"
-                  onClick={() => setEditingEmail(true)}
-                  className="flex-1 text-sm text-gray-400 text-left hover:text-gray-600"
-                >
-                  Add email address
-                </button>
-              )
-            })()}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingEmail(true)}
+                className="flex-1 text-sm text-gray-400 text-left hover:text-gray-600"
+              >
+                Add email address
+              </button>
+            )}
           </div>
         </div>
       </section>

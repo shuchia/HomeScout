@@ -95,9 +95,13 @@ class ApartmentModel(Base):
     transit_options = Column(JSONB, nullable=True)                 # list of {name, walk, drive, distance}
     virtual_tour_urls = Column(JSONB, nullable=True)               # list of URL strings
 
-    # Detail-mode enrichment timestamp (Commit 2 — per-tour URL-mode scrape).
-    # Bulk extraction (this commit) does NOT touch this; only the per-tour
-    # enrich_apartment_detail task sets it, which gates the 7-day re-scrape.
+    # Reserved for a future enrichment source. The original per-tour Apify
+    # URL-mode enrichment was reverted after a value comparison showed the
+    # epctex actor returns byte-identical payloads in bulk-search and URL
+    # modes — no new data to be had. Column is kept (not dropped) so a
+    # different enrichment source can populate it later without a fresh
+    # migration; rows stamped during the brief Commit 2 window are
+    # harmless to leave.
     last_enriched_at = Column(DateTime(timezone=True), nullable=True)
 
     # Deduplication and quality
