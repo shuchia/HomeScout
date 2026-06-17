@@ -614,6 +614,8 @@ async def update_tour(
             updates["contact_phone"] = body.contact_phone
         if body.contact_email is not None:
             updates["contact_email"] = body.contact_email
+        if body.inquiry_email_draft is not None:
+            updates["inquiry_email_draft"] = body.inquiry_email_draft
 
         if not updates:
             raise HTTPException(status_code=400, detail="No fields to update")

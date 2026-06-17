@@ -989,6 +989,12 @@ function ContactTab({
   // is actually useful (vs. the apartments.com buttons where the user's
   // focus has already moved to the new tab).
   const [previewCopied, setPreviewCopied] = useState(false)
+  // Editable copy of the draft body. Initialized from the saved draft;
+  // user edits live here, debounced-saved on textarea blur. All copy
+  // actions use this value (not the original draft) so what gets pasted
+  // reflects the user's tweaks.
+  const [editedBody, setEditedBody] = useState('')
+  const [savingDraft, setSavingDraft] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [markingSent, setMarkingSent] = useState(false)
@@ -997,38 +1003,51 @@ function ContactTab({
   // script reference, SMS body, apartments.com form message).
   const emailDraft = tour.inquiry_email_draft
   let emailSubject = ''
-  let emailBody = ''
+  let savedBody = ''
   if (emailDraft) {
     const doubleNewline = emailDraft.indexOf('\n\n')
     if (doubleNewline !== -1) {
       const firstLine = emailDraft.slice(0, doubleNewline)
       emailSubject = firstLine.startsWith('Subject: ') ? firstLine.slice(9) : firstLine
-      emailBody = emailDraft.slice(doubleNewline + 2)
+      savedBody = emailDraft.slice(doubleNewline + 2)
     } else {
-      emailBody = emailDraft
+      savedBody = emailDraft
     }
   }
+
+  // Sync the editable textarea state with the saved draft whenever the
+  // saved draft changes (initial load, after a Regenerate). Without this
+  // a regenerated draft would silently vanish from the textarea.
+  useEffect(() => {
+    setEditedBody(savedBody)
+  }, [savedBody])
+
+  // Effective body: what the user is currently editing. Falls back to
+  // the saved body if state hasn't been initialized yet.
+  const effectiveBody = editedBody || savedBody
+  const isEdited = editedBody !== savedBody && editedBody.length > 0
 
   const phoneForLink = normalizePhoneForLink(tour.contact_phone || apartment?.contact_phone)
   const phoneDisplay = tour.contact_phone || apartment?.contact_phone || null
   const sourceUrl = apartment?.source_url || null
-  const shortMessage = emailBody ? buildShortMessage(emailBody) : ''
-  const shortMessageTruncated = emailBody.length > shortMessage.length
+  const shortMessage = effectiveBody ? buildShortMessage(effectiveBody) : ''
+  const shortMessageTruncated = effectiveBody.length > shortMessage.length
 
   // Opens the apartments.com listing in a new tab with the short version
-  // of the message already in the clipboard. apartments.com's own sticky
-  // CTAs (Send Message panel, Schedule Tour button) are already visible
+  // of (the user-edited) message already in the clipboard. apartments.com's
+  // own sticky CTAs (Send Message panel, Schedule Tour button) are visible
   // on page load — no scrolling required.
-  async function openListing(intent: 'contact' | 'tour') {
+  async function openListing(_intent: 'contact' | 'tour') {
     if (!sourceUrl) return
     setClipboardError(null)
+    // Fire-and-forget the persistence; we don't await before opening the
+    // tab so the user gesture stays bound to window.open (popup-blocker
+    // safety). The save happens server-side while the new tab loads.
+    if (isEdited) void saveEditIfChanged()
     if (shortMessage) {
       try {
         await navigator.clipboard.writeText(shortMessage)
       } catch {
-        // The new tab is about to open and the user won't be able to act
-        // on a banner there, so flag the failure here. They can come back
-        // and use the explicit Copy button on the draft preview.
         setClipboardError(
           'Couldn’t copy automatically. Use the Copy link on the message below before going to apartments.com.'
         )
@@ -1042,14 +1061,33 @@ function ContactTab({
   // probably wants to use it in a longer-form channel like their own
   // email client.
   async function handleCopyMessage() {
-    if (!emailBody) return
+    if (!effectiveBody) return
     setClipboardError(null)
     try {
-      await navigator.clipboard.writeText(emailBody)
+      await navigator.clipboard.writeText(effectiveBody)
       setPreviewCopied(true)
       setTimeout(() => setPreviewCopied(false), 1500)
     } catch {
       setClipboardError('Couldn’t copy to clipboard. Select the message text and copy manually.')
+    }
+  }
+
+  // Persist edits to the inquiry message when the user blurs the
+  // textarea (or clicks an action button). Only saves if the body
+  // actually changed from what's on the server.
+  async function saveEditIfChanged() {
+    if (!isEdited) return
+    setSavingDraft(true)
+    try {
+      const newDraft = emailSubject
+        ? `Subject: ${emailSubject}\n\n${editedBody}`
+        : editedBody
+      const res = await updateTour(tour.id, { inquiry_email_draft: newDraft })
+      onTourUpdate(res.tour)
+    } catch {
+      // Silent — user's edits still live in local state for this session
+    } finally {
+      setSavingDraft(false)
     }
   }
 
@@ -1165,6 +1203,7 @@ function ContactTab({
         {phoneForLink && shortMessage && (
           <a
             href={`sms:${phoneForLink}?body=${encodeURIComponent(shortMessage)}`}
+            onClick={() => { if (isEdited) void saveEditIfChanged() }}
             className="flex items-center justify-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1200,28 +1239,15 @@ function ContactTab({
         )}
       </div>
 
-      {/* Pre-action hint. Sets expectations BEFORE the user clicks
-          Contact / Schedule — a post-action banner showed up after the
-          tab had already opened, by which point the user's focus was on
-          apartments.com. Telling them what to expect ahead of time
-          (plus mobile/desktop paste mechanics) replaces the need for
-          per-click confirmation. */}
+      {/* Pre-action hint. Trimmed to a single line — char counts and
+          form-limit mechanics aren't user-relevant; what is, is the
+          paste gesture once they land on apartments.com. */}
       {sourceUrl && shortMessage && (
-        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-xs text-blue-900 leading-snug">
-          <svg className="h-4 w-4 mt-0.5 shrink-0 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p>
-            Tapping <span className="font-medium">Contact this property</span> or{' '}
-            <span className="font-medium">Schedule a tour</span> copies the
-            drafted message ({shortMessage.length} chars
-            {shortMessageTruncated && ', trimmed at the last sentence to fit 400-char form'})
-            to your clipboard and opens apartments.com in a new tab. On the listing,
-            find the message field and{' '}
-            <span className="font-medium">long-press → Paste</span> on mobile or{' '}
-            <span className="font-medium">Cmd / Ctrl + V</span> on desktop.
-          </p>
-        </div>
+        <p className="text-xs text-gray-500 px-1 leading-snug">
+          We&rsquo;ll copy your message and open apartments.com — paste it into
+          the form with <span className="font-medium">long-press → Paste</span>{' '}
+          or <span className="font-medium">Cmd/Ctrl + V</span>.
+        </p>
       )}
 
       {/* Error banner — only shown if a clipboard write actually failed.
@@ -1253,7 +1279,14 @@ function ContactTab({
           user review/edit context before sending. */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-gray-900">Drafted Message</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-900">Drafted Message</h3>
+            {isEdited && (
+              <span className="text-[10px] uppercase tracking-wide text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                {savingDraft ? 'Saving…' : 'Edited'}
+              </span>
+            )}
+          </div>
           <div className="flex gap-3 text-xs">
             <button
               type="button"
@@ -1272,16 +1305,24 @@ function ContactTab({
             </button>
           </div>
         </div>
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 rounded-lg p-3">
           {emailSubject && (
             <>
               <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Subject</p>
               <p className="font-medium text-gray-900 mb-3">{emailSubject}</p>
             </>
           )}
-          <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
-            {emailBody}
-          </div>
+          {/* Editable textarea. Edits are debounced-saved on blur via
+              saveEditIfChanged(); they're also flushed when the user
+              clicks any of the Contact/Schedule/SMS action buttons. */}
+          <textarea
+            value={editedBody}
+            onChange={(e) => setEditedBody(e.target.value)}
+            onBlur={saveEditIfChanged}
+            rows={Math.min(12, Math.max(5, editedBody.split('\n').length + 1))}
+            className="w-full bg-transparent text-gray-700 text-sm leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] rounded p-1 -m-1"
+            placeholder="Your drafted message will appear here once generated."
+          />
         </div>
       </div>
 
@@ -1289,7 +1330,8 @@ function ContactTab({
           email on the Info tab. apartments.com itself almost never gives one. */}
       {tour.contact_email && (
         <a
-          href={`mailto:${tour.contact_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`}
+          href={`mailto:${tour.contact_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(effectiveBody)}`}
+          onClick={() => { if (isEdited) void saveEditIfChanged() }}
           className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
         >
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
