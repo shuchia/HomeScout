@@ -44,6 +44,9 @@ class GenerateCodesRequest(BaseModel):
     max_uses: int = Field(default=1, ge=1, le=100)
     prefix: str = Field(default="BETA")
     expires_at: str | None = None
+    # Vanity code: supply an exact value (e.g. "BETA-GIRLHACKS") to mint a single
+    # named code. Overrides prefix/count; stored uppercased to match redemption.
+    code: str | None = Field(default=None, max_length=50)
 
 
 def _ensure_supabase():
@@ -151,8 +154,31 @@ async def get_invite_status(
 
 @router.post("/api/admin/invite-codes", dependencies=[Depends(verify_admin_key)])
 async def generate_invite_codes(body: GenerateCodesRequest):
-    """Generate invite codes. Requires X-Admin-Key header."""
+    """Generate invite codes. Requires X-Admin-Key header.
+
+    Pass `code` to mint a single vanity code (exact value); otherwise `count`
+    random `{prefix}-XXXXXX` codes are generated.
+    """
     _ensure_supabase()
+
+    # Vanity path: caller supplies the exact code string.
+    if body.code:
+        vanity = body.code.strip().upper()
+        if not vanity:
+            raise HTTPException(status_code=422, detail="code must be non-empty")
+        existing = (
+            supabase_admin.table("invite_codes")
+            .select("code")
+            .eq("code", vanity)
+            .execute()
+        )
+        if existing.data:
+            raise HTTPException(status_code=409, detail=f"Code {vanity} already exists")
+        data = {"code": vanity, "max_uses": body.max_uses}
+        if body.expires_at:
+            data["expires_at"] = body.expires_at
+        supabase_admin.table("invite_codes").insert(data).execute()
+        return {"codes": [vanity]}
 
     codes = []
     for _ in range(body.count):
