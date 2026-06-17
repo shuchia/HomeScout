@@ -95,6 +95,11 @@ class ApartmentModel(Base):
     transit_options = Column(JSONB, nullable=True)                 # list of {name, walk, drive, distance}
     virtual_tour_urls = Column(JSONB, nullable=True)               # list of URL strings
 
+    # Added 2026-06-17 (migration m9i0j1k2l3m4). Sourced from existing
+    # raw_data; no extra Apify cost. See task #27.
+    nearby_schools = Column(JSONB, nullable=True)                  # {public: [...], private: [...]}
+    floor_plans = Column(JSONB, nullable=True)                     # list of unit models with pricing/sqft/availability
+
     # Reserved for a future enrichment source. The original per-tour Apify
     # URL-mode enrichment was reverted after a value comparison showed the
     # epctex actor returns byte-identical payloads in bulk-search and URL
@@ -206,6 +211,8 @@ class ApartmentModel(Base):
             "available_units": self.available_units or [],
             "transit_options": self.transit_options or [],
             "virtual_tour_urls": self.virtual_tour_urls or [],
+            "nearby_schools": self.nearby_schools,
+            "floor_plans": self.floor_plans or [],
             "last_enriched_at": self.last_enriched_at.isoformat() if self.last_enriched_at else None,
             "latitude": self.latitude,
             "longitude": self.longitude,
