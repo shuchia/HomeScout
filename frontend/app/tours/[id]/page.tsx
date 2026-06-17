@@ -60,7 +60,7 @@ function formatDate(iso: string): string {
 // Tab types
 // ---------------------------------------------------------------------------
 
-type Tab = 'info' | 'capture' | 'email'
+type Tab = 'info' | 'capture' | 'contact'
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -339,7 +339,7 @@ export default function TourDetailPage() {
       {/* ---- Tab bar ---- */}
       <nav className="bg-white border-b border-gray-200 sticky top-[57px] z-10">
         <div className="flex max-w-2xl mx-auto">
-          {(['info', 'capture', 'email'] as Tab[]).map((tab) => (
+          {(['info', 'capture', 'contact'] as Tab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -380,8 +380,8 @@ export default function TourDetailPage() {
               onRemoveTag={handleRemoveTag}
             />
           )}
-          {activeTab === 'email' && (
-            <EmailTab tour={tour} isPro={isPro} profileLoading={profileLoading} onTourUpdate={setTour} />
+          {activeTab === 'contact' && (
+            <ContactTab tour={tour} apartment={apartment} isPro={isPro} profileLoading={profileLoading} onTourUpdate={setTour} />
           )}
         </div>
       </main>
@@ -554,13 +554,20 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setEditingEmail(true)}
-                className="flex-1 text-sm text-gray-400 text-left hover:text-gray-600"
-              >
-                Add email address
-              </button>
+              // Most apartments.com listings don't expose a public email.
+              // Surface the workaround instead of a dead "Add email" CTA.
+              <span className="flex-1 text-xs text-gray-500 leading-snug">
+                Most properties don&rsquo;t list a public email. Use the{' '}
+                <span className="font-medium text-gray-700">Contact</span>{' '}
+                tab to call, text, or send via apartments.com&rsquo;s form.{' '}
+                <button
+                  type="button"
+                  onClick={() => setEditingEmail(true)}
+                  className="underline underline-offset-2 hover:text-gray-700"
+                >
+                  Add manually
+                </button>
+              </span>
             )}
           </div>
         </div>
@@ -911,13 +918,53 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
 // Email Tab
 // ---------------------------------------------------------------------------
 
-function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; isPro: boolean; profileLoading?: boolean; onTourUpdate: (tour: Tour) => void; }) {
-  const [copied, setCopied] = useState(false)
+// SMS bodies max out around 1600 chars on iOS and break across many segments
+// in transit. The AI-drafted email body is usually ~600-1200 chars including
+// salutation/sign-off. Keep SMS short — strip the salutation block, take the
+// meaty middle, drop the email signature. If still too long, truncate.
+const SMS_MAX_CHARS = 600
+
+function buildSmsBody(emailBody: string): string {
+  if (!emailBody) return ''
+  let body = emailBody.trim()
+  body = body.replace(/^(Hi|Hello|Dear|Good (morning|afternoon|evening))[^\n]*\n+/i, '')
+  body = body.replace(/\n+(Thanks|Best|Regards|Sincerely|Cheers)[^]*$/i, '')
+  body = body.trim()
+  if (body.length > SMS_MAX_CHARS) {
+    body = body.slice(0, SMS_MAX_CHARS - 1).trim() + '…'
+  }
+  return body
+}
+
+// Normalize "(412) 231-9292" → "+14122319292" for tel:/sms: links
+function normalizePhoneForLink(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length === 10) return `+1${digits}`
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
+  return digits ? `+${digits}` : null
+}
+
+function ContactTab({
+  tour,
+  apartment,
+  isPro,
+  profileLoading,
+  onTourUpdate,
+}: {
+  tour: Tour
+  apartment: Apartment | null
+  isPro: boolean
+  profileLoading?: boolean
+  onTourUpdate: (tour: Tour) => void
+}) {
+  const [copied, setCopied] = useState<null | 'message' | 'form-open'>(null)
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [markingSent, setMarkingSent] = useState(false)
 
-  // Parse the draft into subject and body
+  // The AI-drafted inquiry email drives all three contact paths (call
+  // script reference, SMS body, apartments.com form message).
   const emailDraft = tour.inquiry_email_draft
   let emailSubject = ''
   let emailBody = ''
@@ -932,14 +979,31 @@ function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; i
     }
   }
 
-  async function handleCopy() {
-    if (!emailDraft) return
+  const phoneForLink = normalizePhoneForLink(tour.contact_phone || apartment?.contact_phone)
+  const phoneDisplay = tour.contact_phone || apartment?.contact_phone || null
+  const sourceUrl = apartment?.source_url || null
+  const smsBody = emailBody ? buildSmsBody(emailBody) : ''
+
+  async function handleCopyAndOpenForm() {
+    if (!sourceUrl) return
     try {
-      await navigator.clipboard.writeText(emailDraft)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      if (emailBody) await navigator.clipboard.writeText(emailBody)
     } catch {
-      // Clipboard API may fail in some contexts
+      // Clipboard may be denied; the user can still copy from the draft preview.
+    }
+    setCopied('form-open')
+    setTimeout(() => setCopied(null), 4000)
+    window.open(sourceUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  async function handleCopyMessage() {
+    if (!emailBody) return
+    try {
+      await navigator.clipboard.writeText(emailBody)
+      setCopied('message')
+      setTimeout(() => setCopied(null), 2000)
+    } catch {
+      // ignore
     }
   }
 
@@ -947,15 +1011,14 @@ function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; i
     setEmailLoading(true)
     setEmailError(null)
     try {
-      const result = await generateInquiryEmail(tour.id)
-      // Refresh tour data to pick up saved draft
+      await generateInquiryEmail(tour.id)
       const res = await getTour(tour.id)
       onTourUpdate(res.tour)
     } catch (err) {
       if (err instanceof ApiError) {
         setEmailError(err.message)
       } else {
-        setEmailError('Failed to generate email. Please try again.')
+        setEmailError('Failed to generate message. Please try again.')
       }
     } finally {
       setEmailLoading(false)
@@ -985,146 +1048,178 @@ function EmailTab({ tour, isPro, profileLoading, onTourUpdate }: { tour: Tour; i
   if (!isPro) {
     return (
       <div className="py-8">
-        <UpgradePrompt feature="AI-generated inquiry emails" />
+        <UpgradePrompt feature="AI-generated inquiry messages and one-tap contact" />
       </div>
     )
   }
 
-  if (emailDraft) {
+  // No draft yet — empty state explains the channel choices we unlock once
+  // the message exists.
+  if (!emailDraft) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Inquiry Email Draft</h3>
+      <div className="flex flex-col items-center justify-center py-12">
+        <svg className="h-12 w-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">No message draft yet</h3>
+        <p className="text-sm text-gray-500 mb-4 text-center px-6">
+          Snugd will draft a personalized inquiry you can use to call, text,
+          or paste into the property&rsquo;s contact form on apartments.com.
+        </p>
+        {emailError && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+            {emailError}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={emailLoading}
+          className="bg-[var(--color-primary)] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {emailLoading ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Generating&hellip;
+            </>
+          ) : (
+            'Generate Inquiry Message'
+          )}
+        </button>
+      </div>
+    )
+  }
+
+  // Have a draft — three channel actions, message preview below.
+  return (
+    <div className="space-y-4">
+      {/* Phone-first because apartments.com doesn't expose leasing-office
+          emails; the message-and-form path is the explicit "I want to
+          write" choice rather than the default. */}
+      <div className="grid gap-2">
+        {phoneForLink ? (
+          <a
+            href={`tel:${phoneForLink}`}
+            className="flex items-center justify-center gap-2 bg-[var(--color-primary)] text-white px-4 py-3 rounded-lg text-sm font-semibold hover:bg-[var(--color-primary-light)] transition-colors"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            Call {phoneDisplay}
+          </a>
+        ) : (
+          <div className="flex items-center justify-center gap-2 bg-gray-50 text-gray-400 px-4 py-3 rounded-lg text-sm">
+            No phone number on file for this property
+          </div>
+        )}
+
+        {phoneForLink && smsBody && (
+          <a
+            href={`sms:${phoneForLink}?body=${encodeURIComponent(smsBody)}`}
+            className="flex items-center justify-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            Text leasing office (draft pre-filled)
+          </a>
+        )}
+
+        {sourceUrl && (
+          <button
+            type="button"
+            onClick={handleCopyAndOpenForm}
+            className="flex items-center justify-center gap-2 bg-gray-100 text-gray-800 border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            {copied === 'form-open'
+              ? 'Message copied — paste into the contact form'
+              : 'Send via apartments.com contact form'}
+          </button>
+        )}
+      </div>
+
+      {/* Drafted message preview — what gets pre-filled into SMS and
+          copied for the apartments.com form. Showing it inline lets the
+          user review/edit context before sending. */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold text-gray-900">Drafted Message</h3>
+          <div className="flex gap-3 text-xs">
+            <button
+              type="button"
+              onClick={handleCopyMessage}
+              className="text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
+            >
+              {copied === 'message' ? 'Copied!' : 'Copy'}
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={emailLoading}
+              className="text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              {emailLoading ? 'Regenerating…' : 'Regenerate'}
+            </button>
+          </div>
         </div>
         <div className="bg-gray-50 rounded-lg p-4">
           {emailSubject && (
-            <p className="font-medium text-gray-900">{emailSubject}</p>
+            <>
+              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Subject</p>
+              <p className="font-medium text-gray-900 mb-3">{emailSubject}</p>
+            </>
           )}
-          <div className={`text-gray-700 whitespace-pre-wrap text-sm leading-relaxed ${emailSubject ? 'mt-3' : ''}`}>
+          <div className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
             {emailBody}
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {tour.contact_email && (
-            <a
-              href={`mailto:${tour.contact_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`}
-              className="flex items-center gap-1.5 bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-              Send Email
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tour.contact_email
-                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                : 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-light)]'
-            }`}
-          >
-            {copied ? (
-              <>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Copied!
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Copy
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={emailLoading}
-            className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {emailLoading ? (
-              <>
-                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Regenerating...
-              </>
-            ) : (
-              'Regenerate'
-            )}
-          </button>
-        </div>
-        {!tour.contact_email && (
-          <p className="text-xs text-gray-400">Add a contact email on the Info tab to send this email directly.</p>
-        )}
-        {tour.stage === 'interested' && (
-          <button
-            type="button"
-            onClick={handleMarkOutreachSent}
-            disabled={markingSent}
-            className="w-full flex items-center justify-center gap-2 bg-yellow-50 text-yellow-800 border border-yellow-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-yellow-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {markingSent ? (
-              <>
-                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Updating...
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-                Mark Outreach as Sent
-              </>
-            )}
-          </button>
-        )}
       </div>
-    )
-  }
 
-  // No draft yet - show generate button
-  return (
-    <div className="flex flex-col items-center justify-center py-12">
-      <svg className="h-12 w-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-      </svg>
-      <h3 className="text-sm font-semibold text-gray-900 mb-1">No email draft yet</h3>
-      <p className="text-sm text-gray-500 mb-4 text-center">
-        Generate a personalized inquiry email for this listing.
-      </p>
-      {emailError && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-          {emailError}
-        </div>
+      {/* Fallback mailto: — only if the user manually entered a contact
+          email on the Info tab. apartments.com itself almost never gives one. */}
+      {tour.contact_email && (
+        <a
+          href={`mailto:${tour.contact_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`}
+          className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          Or open in email app ({tour.contact_email})
+        </a>
       )}
-      <button
-        type="button"
-        onClick={handleGenerate}
-        disabled={emailLoading}
-        className="bg-[var(--color-primary)] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-      >
-        {emailLoading ? (
-          <>
-            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            Generating...
-          </>
-        ) : (
-          'Generate Inquiry Email'
-        )}
-      </button>
+
+      {tour.stage === 'interested' && (
+        <button
+          type="button"
+          onClick={handleMarkOutreachSent}
+          disabled={markingSent}
+          className="w-full flex items-center justify-center gap-2 bg-yellow-50 text-yellow-800 border border-yellow-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-yellow-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {markingSent ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Updating&hellip;
+            </>
+          ) : (
+            <>
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Mark Outreach as Sent
+            </>
+          )}
+        </button>
+      )}
     </div>
   )
 }
