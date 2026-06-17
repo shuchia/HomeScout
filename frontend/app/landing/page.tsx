@@ -24,11 +24,11 @@ const FEATURES = [
     ),
   },
   {
-    title: 'AI Inquiry Emails',
-    desc: 'One click drafts a personalized email to the landlord with your details, timeline, and questions — ready to send.',
+    title: 'Multi-Channel Outreach',
+    desc: 'AI drafts your inquiry, then you choose: call, text, or paste into the listing contact form. Message auto-trims per channel.',
     icon: (
       <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
       </svg>
     ),
   },
@@ -68,21 +68,40 @@ const FEATURES = [
       </svg>
     ),
   },
+  {
+    title: 'True Cost Calculator',
+    desc: 'See what you will actually pay — rent plus utilities, insurance, and fees. Split per person when you have roommates.',
+    icon: (
+      <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Proximity Search',
+    desc: 'Search near your campus or workplace. Drop a pin or type an address, set a radius, and results are ranked by distance.',
+    icon: (
+      <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+      </svg>
+    ),
+  },
 ];
 
 const HOW_IT_WORKS = [
   { step: 1, title: 'Search & Favorite', desc: 'Browse listings across 23 cities. Heart the ones that catch your eye.' },
   { step: 2, title: 'Start Touring', desc: 'Move favorites into your tour pipeline. Each apartment gets its own stage tracker.' },
-  { step: 3, title: 'Send Outreach', desc: 'AI drafts personalized inquiry emails. One click to send to each landlord.' },
-  { step: 4, title: 'Tour & Capture', desc: 'Visit in person. Record voice notes that AI transcribes into structured pros/cons.' },
+  { step: 3, title: 'Reach Out', desc: 'AI drafts your inquiry. Call, text, or paste into the listing\'s contact form — one tap for each channel.' },
+  { step: 4, title: 'Tour & Capture', desc: 'Visit in person. Record voice notes and snap photos that AI organizes automatically.' },
   { step: 5, title: 'Get Your Top Pick', desc: 'AI weighs everything — scores, notes, priorities — and recommends your best match.' },
 ];
 
 const STATS = [
-  { value: '20-40 hrs', label: 'Saved per search' },
+  { value: '23', label: 'Cities covered' },
   { value: '92%', label: 'Match accuracy' },
   { value: '<60 sec', label: 'AI scoring time' },
-  { value: '5', label: 'Pipeline stages' },
+  { value: '20-40 hrs', label: 'Saved per search' },
 ];
 
 const FREE_FEATURES = [
@@ -90,22 +109,75 @@ const FREE_FEATURES = [
   'Basic comparison table',
   'Up to 5 favorites',
   'Tour pipeline (5 active)',
-  'Community support',
+  'Voice notes + transcription',
+  'True cost headline',
 ];
 
 const PRO_FEATURES = [
   'Unlimited AI searches',
   'Claude head-to-head analysis',
-  'Unlimited favorites',
-  'Full tour pipeline',
-  'AI inquiry emails',
+  'Unlimited favorites & tours',
+  'AI inquiry messages (call, text, form)',
+  'AI day planner',
   'Voice capture + transcription',
-  'AI decision brief',
+  'Tour photo uploads',
+  'Full true cost breakdown',
+  'AI decision brief + top pick',
   'Daily email alerts',
-  'Priority support',
 ];
 
-const TECH_STACK = ['Claude AI', 'Next.js', 'FastAPI', 'Supabase', 'Whisper', 'Stripe'];
+const TECH_STACK = ['Claude AI', 'Next.js 16', 'FastAPI', 'Supabase', 'Whisper', 'Stripe', 'AWS ECS'];
+
+const COMING_SOON = [
+  {
+    title: 'Email Response Tracking',
+    desc: 'Auto-detect landlord replies across call, text, and form channels. AI extracts proposed tour times. One-click to confirm and advance your pipeline.',
+    icon: '📨',
+    tag: 'Next up',
+    tagColor: 'bg-amber-100 text-amber-700',
+  },
+  {
+    title: 'Neighborhood Insights',
+    desc: 'Walkability, transit scores, and safety data baked into every listing detail page.',
+    icon: '🏘️',
+    tag: 'Planned',
+    tagColor: 'bg-indigo-100 text-indigo-600',
+  },
+  {
+    title: 'Commute Calculator',
+    desc: 'Add your work or school address. Every listing shows estimated drive and transit time.',
+    icon: '🚗',
+    tag: 'Planned',
+    tagColor: 'bg-indigo-100 text-indigo-600',
+  },
+  {
+    title: 'Price-Drop Alerts',
+    desc: 'Weekly digests and instant push notifications when a saved listing drops in price.',
+    icon: '📉',
+    tag: 'Planned',
+    tagColor: 'bg-indigo-100 text-indigo-600',
+  },
+];
+
+const COST_LINE_ITEMS = [
+  { label: 'Base Rent', amount: 1850, source: 'listing', splittable: true },
+  { label: 'Pet Rent', amount: 35, source: 'listing', splittable: false },
+  { label: 'Electric', amount: 85, source: 'estimate', splittable: true },
+  { label: 'Heat / Gas', amount: 45, source: 'estimate', splittable: true },
+  { label: 'Water', amount: 0, source: 'included', splittable: false },
+  { label: 'Internet', amount: 55, source: 'estimate', splittable: false },
+  { label: "Renter's Insurance", amount: 15, source: 'estimate', splittable: false },
+];
+
+/* ──────────────────────────── helpers ──────────────────────────── */
+
+function CheckIcon({ className = 'w-5 h-5 text-[var(--color-primary)]' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  );
+}
 
 /* ──────────────────────── Waitlist Form ──────────────────────── */
 
@@ -115,9 +187,6 @@ function WaitlistForm({ compact = false }: { compact?: boolean }) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
-  // Posts directly to the Supabase `waitlist` table using the anon key.
-  // This decouples the landing page from the backend so snugd.ai can serve
-  // waitlist signups even when api.snugd.ai is dormant.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
@@ -127,9 +196,6 @@ function WaitlistForm({ compact = false }: { compact?: boolean }) {
       .insert({ email: email.trim().toLowerCase(), name: name.trim() || null, referral_source: 'landing_page' });
     if (error) {
       setStatus('error');
-      // Duplicate-email errors look like unique-constraint violations — treat
-      // those as success ("you're already on the list") so we don't surface
-      // confusing copy.
       if (error.code === '23505' || error.message?.toLowerCase().includes('duplicate')) {
         setStatus('success');
         setMessage("You're already on the list. We'll reach out soon.");
@@ -146,9 +212,7 @@ function WaitlistForm({ compact = false }: { compact?: boolean }) {
     return (
       <div className={`flex items-center gap-3 ${compact ? 'py-3' : 'py-6'}`}>
         <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-          <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
+          <CheckIcon className="w-5 h-5 text-emerald-600" />
         </div>
         <p className="text-emerald-700 font-medium">{message}</p>
       </div>
@@ -183,9 +247,7 @@ function WaitlistForm({ compact = false }: { compact?: boolean }) {
           {status === 'loading' ? 'Joining...' : 'Get Early Access'}
         </button>
       </div>
-      {status === 'error' && (
-        <p className="text-sm text-red-600">{message}</p>
-      )}
+      {status === 'error' && <p className="text-sm text-red-600">{message}</p>}
     </form>
   );
 }
@@ -195,12 +257,10 @@ function WaitlistForm({ compact = false }: { compact?: boolean }) {
 function PipelineMockup({ activeStage }: { activeStage: number }) {
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-[var(--color-border)] p-5 w-full max-w-sm">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <span className="text-sm font-semibold text-[var(--color-text)]">Tour Pipeline</span>
         <span className="text-xs text-[var(--color-text-muted)]">3 active</span>
       </div>
-      {/* Stages */}
       <div className="space-y-2">
         {PIPELINE_STAGES.map((stage, i) => (
           <div
@@ -221,7 +281,6 @@ function PipelineMockup({ activeStage }: { activeStage: number }) {
           </div>
         ))}
       </div>
-      {/* Sample apartment card */}
       <div className="mt-4 p-3 rounded-lg bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
         <div className="flex items-start gap-3">
           <div className="w-12 h-12 rounded-lg bg-emerald-200/50 flex items-center justify-center text-lg flex-shrink-0">
@@ -287,7 +346,6 @@ function FavoritesMockup() {
 function CompareMockup() {
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-[var(--color-border)] p-5 max-w-sm w-full">
-      {/* Winner card */}
       <div className="p-3 rounded-lg bg-gradient-to-br from-emerald-50 to-amber-50 border border-emerald-200 mb-4">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-amber-500 text-lg">&#9733;</span>
@@ -295,7 +353,6 @@ function CompareMockup() {
         </div>
         <p className="text-xs text-[var(--color-text-secondary)]">Best overall value with largest space and top amenities for the price.</p>
       </div>
-      {/* Scores */}
       <div className="space-y-2.5">
         {[
           { cat: 'Value', a: 82, b: 91 },
@@ -334,6 +391,72 @@ function CompareMockup() {
   );
 }
 
+/* ─────────────────── True Cost Mockup ──────────────────────── */
+
+function TrueCostMockup() {
+  const [occupancy, setOccupancy] = useState(1);
+  const total = COST_LINE_ITEMS.reduce((sum, item) => sum + item.amount, 0);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-xl border border-[var(--color-border)] p-5 max-w-sm w-full">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm font-semibold text-[var(--color-text)]">True Cost Breakdown</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[var(--color-text-muted)]">People:</span>
+          <button
+            onClick={() => setOccupancy(Math.max(1, occupancy - 1))}
+            className="w-6 h-6 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] text-xs flex items-center justify-center hover:bg-gray-50 transition"
+          >
+            −
+          </button>
+          <span className="text-sm font-semibold w-4 text-center">{occupancy}</span>
+          <button
+            onClick={() => setOccupancy(Math.min(4, occupancy + 1))}
+            className="w-6 h-6 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] text-xs flex items-center justify-center hover:bg-gray-50 transition"
+          >
+            +
+          </button>
+        </div>
+      </div>
+      <div className="space-y-1">
+        {COST_LINE_ITEMS.map((item) => {
+          const perPerson = occupancy > 1 && item.splittable;
+          const display = perPerson ? Math.round(item.amount / occupancy) : item.amount;
+          return (
+            <div key={item.label} className="flex items-center justify-between py-1.5 text-sm">
+              <span className="text-[var(--color-text-secondary)] flex items-center gap-1.5">
+                {item.label}
+                {perPerson && <span className="text-xs text-[var(--color-text-muted)]">/person</span>}
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    item.source === 'listing' ? 'bg-blue-500' : item.source === 'included' ? 'bg-emerald-500' : 'bg-gray-400'
+                  }`}
+                />
+              </span>
+              <span className={`${item.source === 'included' ? 'text-[var(--color-primary)] font-medium' : 'text-[var(--color-text)]'}`}>
+                {item.source === 'included' ? 'Included' : `$${display}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]">
+        <span className="font-semibold text-[var(--color-text)]">
+          Est. Monthly{occupancy > 1 ? ' /person' : ''}
+        </span>
+        <span className="font-bold text-lg text-[var(--color-text)]">
+          ${occupancy > 1 ? Math.round(total / occupancy).toLocaleString() : total.toLocaleString()}
+        </span>
+      </div>
+      <div className="flex items-center gap-4 mt-3 text-[10px] text-[var(--color-text-muted)]">
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> From listing</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Regional estimate</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Included</span>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────── MAIN PAGE ──────────────────────── */
 
 export default function LandingPage() {
@@ -341,7 +464,6 @@ export default function LandingPage() {
   const [activeStage, setActiveStage] = useState(0);
   const heroRef = useRef<HTMLDivElement>(null);
 
-  /* Hide standard layout header & bottom nav */
   useEffect(() => {
     const header = document.querySelector('header');
     const bottomNav = document.querySelector('nav.fixed.bottom-0');
@@ -353,14 +475,12 @@ export default function LandingPage() {
     };
   }, []);
 
-  /* Scroll detection for nav */
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  /* Pipeline stage cycling */
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveStage((prev) => (prev + 1) % PIPELINE_STAGES.length);
@@ -385,27 +505,14 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="text-2xl font-bold tracking-tight text-[var(--color-primary)]">snugd</span>
           <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition">
-              Features
-            </a>
-            <a href="#how-it-works" className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition">
-              How It Works
-            </a>
-            <a href="#pricing" className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition">
-              Pricing
-            </a>
-            <button
-              onClick={scrollToWaitlist}
-              className="px-5 py-2 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-light)] transition"
-            >
+            <a href="#features" className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition">Features</a>
+            <a href="#how-it-works" className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition">How It Works</a>
+            <a href="#pricing" className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition">Pricing</a>
+            <button onClick={scrollToWaitlist} className="px-5 py-2 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-light)] transition">
               Get Early Access
             </button>
           </div>
-          {/* Mobile nav button */}
-          <button
-            onClick={scrollToWaitlist}
-            className="md:hidden px-4 py-2 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-light)] transition"
-          >
+          <button onClick={scrollToWaitlist} className="md:hidden px-4 py-2 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-light)] transition">
             Get Early Access
           </button>
         </div>
@@ -414,11 +521,10 @@ export default function LandingPage() {
       {/* ─── HERO ─── */}
       <section ref={heroRef} className="pt-28 pb-16 md:pt-36 md:pb-24">
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
-          {/* Left */}
           <div>
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold mb-6">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              MVP live &mdash; accepting early users
+              Beta live across 23 cities
             </span>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--color-text)] leading-tight tracking-tight mb-6">
               Stop apartment hunting with{' '}
@@ -434,7 +540,6 @@ export default function LandingPage() {
               Free tier available &middot; No credit card required
             </p>
           </div>
-          {/* Right */}
           <div className="flex justify-center md:justify-end">
             <PipelineMockup activeStage={activeStage} />
           </div>
@@ -461,10 +566,10 @@ export default function LandingPage() {
               Everything you need to find home
             </h2>
             <p className="text-[var(--color-text-secondary)] max-w-2xl mx-auto">
-              Six AI-powered tools that replace spreadsheets, email drafts, scattered notes, and gut feelings.
+              Eight AI-powered tools that replace spreadsheets, email drafts, scattered notes, and gut feelings.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {FEATURES.map((f) => (
               <div
                 key={f.title}
@@ -499,9 +604,7 @@ export default function LandingPage() {
             <ul className="space-y-3">
               {['Heart apartments as you browse', 'Batch-move favorites to touring pipeline', 'Track each apartment through 5 stages'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-[var(--color-text)]">
-                  <svg className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                  </svg>
+                  <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" />
                   {item}
                 </li>
               ))}
@@ -533,9 +636,132 @@ export default function LandingPage() {
             <ul className="space-y-3">
               {['Category-by-category scoring', 'Personalized to your priorities', 'Winner with detailed reasoning'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-[var(--color-text)]">
-                  <svg className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── TRUE COST CALCULATOR ─── */}
+      <section className="py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+          <div>
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold mb-4">
+              True Cost Calculator
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-[var(--color-text)] mb-4">
+              Rent is never the whole story
+            </h2>
+            <p className="text-[var(--color-text-secondary)] leading-relaxed mb-6">
+              Every listing shows a headline rent. The real cost includes utilities, pet fees, parking,
+              and insurance. Snugd calculates it automatically&nbsp;&mdash; with regional estimates filling
+              gaps where listings stay silent.
+            </p>
+            <ul className="space-y-3">
+              {[
+                'Per-person splitting for roommates — adjust occupancy instantly',
+                'Blue dots from listing data, gray dots for regional estimates',
+                'Move-in total: application fee + deposit + first month',
+                'Detects per-person pricing models (common in student housing)',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-sm text-[var(--color-text)]">
+                  <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex justify-center">
+            <TrueCostMockup />
+          </div>
+        </div>
+      </section>
+
+      {/* ─── MULTI-CHANNEL CONTACT ─── */}
+      <section className="py-20">
+        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+          <div className="flex justify-center order-2 md:order-1">
+            <div className="bg-white rounded-2xl shadow-xl border border-[var(--color-border)] p-5 max-w-sm w-full">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm font-semibold text-[var(--color-text)]">Contact</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Message ready</span>
+              </div>
+              {/* Call button */}
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center justify-center gap-2 bg-[var(--color-primary)] text-white px-4 py-3 rounded-lg text-sm font-semibold">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                   </svg>
+                  Call (412) 231-9292
+                </div>
+                {/* Text button */}
+                <div className="flex items-center justify-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2.5 rounded-lg text-sm font-medium">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Text leasing office (draft pre-filled)
+                </div>
+                {/* Contact form buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center justify-center gap-2 bg-gray-100 text-gray-800 border border-gray-200 px-3 py-2.5 rounded-lg text-xs font-medium">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Contact property
+                  </div>
+                  <div className="flex items-center justify-center gap-2 bg-gray-100 text-gray-800 border border-gray-200 px-3 py-2.5 rounded-lg text-xs font-medium">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Schedule a tour
+                  </div>
+                </div>
+              </div>
+              {/* Hint */}
+              <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-[10px] text-blue-900 leading-snug">
+                <svg className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p>Message copied to clipboard. Paste into the form on apartments.com.</p>
+              </div>
+              {/* Draft preview */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-gray-700">Drafted Message</span>
+                  <span className="text-[10px] text-gray-400">380 chars · fits form limit</span>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 leading-relaxed">
+                  I&rsquo;m interested in the 1-bedroom at $1,850/mo. I&rsquo;m relocating for work and looking to move in by August 1. Could you let me know about availability and whether tours are open this week?
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="order-1 md:order-2">
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-100 text-purple-600 text-xs font-semibold mb-4">
+              Contact Hub
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-[var(--color-text)] mb-4">
+              Call, text, or paste. One AI draft&nbsp;&mdash; every channel.
+            </h2>
+            <p className="text-[var(--color-text-secondary)] leading-relaxed mb-6">
+              Most listings don&apos;t expose a leasing-office email. Snugd adapts. AI generates your
+              inquiry message once, then you pick how to send it&nbsp;&mdash; phone call, text, or pasted
+              directly into the apartments.com contact form. The message auto-trims to fit each
+              channel&apos;s character limits.
+            </p>
+            <ul className="space-y-3">
+              {[
+                'One-tap call with phone number auto-detected from listing',
+                'Pre-filled SMS — opens Messages with your draft ready to send',
+                'Clipboard + redirect to apartments.com contact form (380 char limit handled)',
+                'Full AI draft visible as a call script before you dial',
+                'Mark Outreach as Sent to advance your pipeline stage',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-sm text-[var(--color-text)]">
+                  <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0 mt-0.5" />
                   {item}
                 </li>
               ))}
@@ -548,9 +774,7 @@ export default function LandingPage() {
       <section id="how-it-works" className="py-20 md:py-28 bg-[var(--color-primary-dark)]">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              How it works
-            </h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">How it works</h2>
             <p className="text-emerald-200 max-w-2xl mx-auto">
               Five stages from discovery to decision. The AI handles the busywork.
             </p>
@@ -565,7 +789,6 @@ export default function LandingPage() {
                   <h3 className="text-white font-semibold mb-2">{step.title}</h3>
                   <p className="text-emerald-200 text-sm leading-relaxed">{step.desc}</p>
                 </div>
-                {/* Connector arrow (hidden on last item and mobile) */}
                 {i < HOW_IT_WORKS.length - 1 && (
                   <div className="hidden lg:block absolute top-1/2 -right-3 -translate-y-1/2 text-white/30">
                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -579,8 +802,40 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ─── COMING SOON ─── */}
+      <section className="py-20 md:py-28">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold mb-4">
+              Roadmap
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-[var(--color-text)] mb-4">
+              We&apos;re just getting started
+            </h2>
+            <p className="text-[var(--color-text-secondary)] max-w-2xl mx-auto">
+              The touring pipeline is the foundation. Here&apos;s what&apos;s coming next.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {COMING_SOON.map((item) => (
+              <div
+                key={item.title}
+                className="relative p-6 rounded-2xl bg-white border border-[var(--color-border)] hover:shadow-lg transition-all duration-300"
+              >
+                <span className={`absolute top-4 right-4 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${item.tagColor}`}>
+                  {item.tag}
+                </span>
+                <span className="text-2xl">{item.icon}</span>
+                <h3 className="text-lg font-semibold text-[var(--color-text)] mt-3 mb-2">{item.title}</h3>
+                <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ─── PRICING ─── */}
-      <section id="pricing" className="py-20 md:py-28">
+      <section id="pricing" className="py-20 md:py-28 bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <h2 className="text-3xl md:text-4xl font-bold text-[var(--color-text)] mb-4">
@@ -591,7 +846,6 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-            {/* Free */}
             <div className="p-8 rounded-2xl bg-white border border-[var(--color-border)] flex flex-col">
               <h3 className="text-lg font-semibold text-[var(--color-text)] mb-1">Free</h3>
               <p className="text-3xl font-bold text-[var(--color-text)] mb-1">$0 <span className="text-base font-normal text-[var(--color-text-muted)]">/mo</span></p>
@@ -599,21 +853,15 @@ export default function LandingPage() {
               <ul className="space-y-3 mb-8 flex-1">
                 {FREE_FEATURES.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-sm text-[var(--color-text)]">
-                    <svg className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
+                    <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0 mt-0.5" />
                     {f}
                   </li>
                 ))}
               </ul>
-              <a
-                href="/"
-                className="block text-center py-3 rounded-xl border-2 border-[var(--color-primary)] text-[var(--color-primary)] font-semibold hover:bg-[var(--color-primary)] hover:text-white transition"
-              >
+              <a href="/" className="block text-center py-3 rounded-xl border-2 border-[var(--color-primary)] text-[var(--color-primary)] font-semibold hover:bg-[var(--color-primary)] hover:text-white transition">
                 Get Started Free
               </a>
             </div>
-            {/* Pro */}
             <div className="p-8 rounded-2xl bg-white border-2 border-[var(--color-primary)] shadow-lg flex flex-col relative">
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-0.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-semibold">
                 Most Popular
@@ -624,17 +872,12 @@ export default function LandingPage() {
               <ul className="space-y-3 mb-8 flex-1">
                 {PRO_FEATURES.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-sm text-[var(--color-text)]">
-                    <svg className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
+                    <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0 mt-0.5" />
                     {f}
                   </li>
                 ))}
               </ul>
-              <a
-                href="/"
-                className="block text-center py-3 rounded-xl bg-[var(--color-primary)] text-white font-semibold hover:bg-[var(--color-primary-light)] transition"
-              >
+              <a href="/" className="block text-center py-3 rounded-xl bg-[var(--color-primary)] text-white font-semibold hover:bg-[var(--color-primary-light)] transition">
                 Start with Invite Code
               </a>
             </div>
@@ -648,9 +891,7 @@ export default function LandingPage() {
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
             <span className="text-sm text-[var(--color-text-muted)]">Built with</span>
             {TECH_STACK.map((tech) => (
-              <span key={tech} className="text-sm font-medium text-[var(--color-text-secondary)]">
-                {tech}
-              </span>
+              <span key={tech} className="text-sm font-medium text-[var(--color-text-secondary)]">{tech}</span>
             ))}
           </div>
         </div>
@@ -681,12 +922,8 @@ export default function LandingPage() {
               <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
             </svg>
           </div>
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Your next apartment is out there.
-          </h2>
-          <p className="text-xl text-emerald-200 mb-10">
-            Get Snugd.
-          </p>
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Your next apartment is out there.</h2>
+          <p className="text-xl text-emerald-200 mb-10">Get Snugd.</p>
           <div className="max-w-md mx-auto">
             <WaitlistForm compact />
           </div>
@@ -697,11 +934,9 @@ export default function LandingPage() {
       <footer className="py-8 bg-[var(--color-primary-dark)] border-t border-white/10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <span className="text-lg font-bold text-white tracking-tight">snugd</span>
-          <p className="text-sm text-emerald-200">
-            &copy; {new Date().getFullYear()} Snugd. All rights reserved.
-          </p>
-          <a href="mailto:hello@snugd.app" className="text-sm text-emerald-200 hover:text-white transition">
-            hello@snugd.app
+          <p className="text-sm text-emerald-200">&copy; {new Date().getFullYear()} Snugd. All rights reserved.</p>
+          <a href="mailto:founders@snugd.ai" className="text-sm text-emerald-200 hover:text-white transition">
+            founders@snugd.ai
           </a>
         </div>
       </footer>
