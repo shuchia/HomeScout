@@ -958,7 +958,7 @@ function ContactTab({
   profileLoading?: boolean
   onTourUpdate: (tour: Tour) => void
 }) {
-  const [copied, setCopied] = useState<null | 'message' | 'form-open'>(null)
+  const [copied, setCopied] = useState<null | 'message' | 'contact-open' | 'tour-open'>(null)
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [markingSent, setMarkingSent] = useState(false)
@@ -984,14 +984,18 @@ function ContactTab({
   const sourceUrl = apartment?.source_url || null
   const smsBody = emailBody ? buildSmsBody(emailBody) : ''
 
-  async function handleCopyAndOpenForm() {
+  // Opens the apartments.com listing in a new tab with the AI-drafted
+  // message already in the clipboard. apartments.com's own sticky CTAs
+  // (Send Message panel, Schedule Tour button) are already visible on
+  // page load — no scrolling required for the user to find them.
+  async function openListing(intent: 'contact' | 'tour') {
     if (!sourceUrl) return
     try {
       if (emailBody) await navigator.clipboard.writeText(emailBody)
     } catch {
-      // Clipboard may be denied; the user can still copy from the draft preview.
+      // Clipboard may be denied; user can still copy from the draft preview.
     }
-    setCopied('form-open')
+    setCopied(intent === 'contact' ? 'contact-open' : 'tour-open')
     setTimeout(() => setCopied(null), 4000)
     window.open(sourceUrl, '_blank', 'noopener,noreferrer')
   }
@@ -1129,18 +1133,28 @@ function ContactTab({
         )}
 
         {sourceUrl && (
-          <button
-            type="button"
-            onClick={handleCopyAndOpenForm}
-            className="flex items-center justify-center gap-2 bg-gray-100 text-gray-800 border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-            {copied === 'form-open'
-              ? 'Message copied — paste into the contact form'
-              : 'Send via apartments.com contact form'}
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => openListing('contact')}
+              className="flex items-center justify-center gap-2 bg-gray-100 text-gray-800 border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              {copied === 'contact-open' ? 'Message copied — paste into form' : 'Contact this property'}
+            </button>
+            <button
+              type="button"
+              onClick={() => openListing('tour')}
+              className="flex items-center justify-center gap-2 bg-gray-100 text-gray-800 border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {copied === 'tour-open' ? 'Message copied — schedule on site' : 'Schedule a tour'}
+            </button>
+          </div>
         )}
       </div>
 
