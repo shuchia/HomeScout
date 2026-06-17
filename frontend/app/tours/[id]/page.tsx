@@ -918,25 +918,43 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
 // Email Tab
 // ---------------------------------------------------------------------------
 
-// apartments.com's contact form caps the message field at ~400 chars. SMS
-// messages over ~160 chars split into multiple segments but still send
-// fine. Cap at 380 with a small safety buffer below the form limit, and
-// reuse the same short version for SMS so what's pre-filled into Messages
-// matches what gets pasted into the contact form. The AI draft (~600-1200
-// chars including salutation/sign-off) stays visible in the preview for
-// the call-script use case.
+// apartments.com's contact form caps the message field at 400 chars. The
+// backend prompt now asks Claude for ≤320 chars, so in the common case
+// this function is a no-op and what we paste is the AI's full message.
+// The trim below is defensive — if a regenerate ever runs long, we cut
+// at the last sentence boundary (period / question / exclamation) before
+// the limit so the pasted text never ends mid-word like "this prope…".
 const SHORT_MESSAGE_MAX_CHARS = 380
 
 function buildShortMessage(emailBody: string): string {
   if (!emailBody) return ''
-  let body = emailBody.trim()
-  body = body.replace(/^(Hi|Hello|Dear|Good (morning|afternoon|evening))[^\n]*\n+/i, '')
-  body = body.replace(/\n+(Thanks|Best|Regards|Sincerely|Cheers)[^]*$/i, '')
-  body = body.trim()
-  if (body.length > SHORT_MESSAGE_MAX_CHARS) {
-    body = body.slice(0, SHORT_MESSAGE_MAX_CHARS - 1).trim() + '…'
+  const body = emailBody.trim()
+  if (body.length <= SHORT_MESSAGE_MAX_CHARS) return body
+
+  // Find the last full sentence that fits. Look for `.`, `!`, `?`
+  // followed by whitespace or end-of-string.
+  const window = body.slice(0, SHORT_MESSAGE_MAX_CHARS)
+  const sentenceEnd = Math.max(
+    window.lastIndexOf('. '),
+    window.lastIndexOf('! '),
+    window.lastIndexOf('? '),
+    window.lastIndexOf('.\n'),
+    window.lastIndexOf('!\n'),
+    window.lastIndexOf('?\n'),
+  )
+  if (sentenceEnd > SHORT_MESSAGE_MAX_CHARS * 0.5) {
+    // Found a sentence break in the back half — clean cut, keep the
+    // terminating punctuation, drop everything after.
+    return body.slice(0, sentenceEnd + 1).trim()
   }
-  return body
+  // No reasonable sentence boundary — fall back to a word boundary so we
+  // at least don't slice mid-word.
+  const wordBreak = window.lastIndexOf(' ')
+  if (wordBreak > SHORT_MESSAGE_MAX_CHARS * 0.5) {
+    return body.slice(0, wordBreak).trim() + '…'
+  }
+  // Truly nothing to grab — bail at the hard limit. Rare.
+  return body.slice(0, SHORT_MESSAGE_MAX_CHARS - 1).trim() + '…'
 }
 
 // Normalize "(412) 231-9292" → "+14122319292" for tel:/sms: links
@@ -1196,8 +1214,9 @@ function ContactTab({
           <p>
             Tapping <span className="font-medium">Contact this property</span> or{' '}
             <span className="font-medium">Schedule a tour</span> copies the
-            drafted message ({shortMessage.length} chars{shortMessageTruncated ? ', trimmed to fit the 400-char form limit' : ''}) to
-            your clipboard and opens apartments.com in a new tab. On the listing,
+            drafted message ({shortMessage.length} chars
+            {shortMessageTruncated && ', trimmed at the last sentence to fit 400-char form'})
+            to your clipboard and opens apartments.com in a new tab. On the listing,
             find the message field and{' '}
             <span className="font-medium">long-press → Paste</span> on mobile or{' '}
             <span className="font-medium">Cmd / Ctrl + V</span> on desktop.
