@@ -918,20 +918,23 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
 // Email Tab
 // ---------------------------------------------------------------------------
 
-// SMS bodies max out around 1600 chars on iOS and break across many segments
-// in transit. The AI-drafted email body is usually ~600-1200 chars including
-// salutation/sign-off. Keep SMS short — strip the salutation block, take the
-// meaty middle, drop the email signature. If still too long, truncate.
-const SMS_MAX_CHARS = 600
+// apartments.com's contact form caps the message field at ~400 chars. SMS
+// messages over ~160 chars split into multiple segments but still send
+// fine. Cap at 380 with a small safety buffer below the form limit, and
+// reuse the same short version for SMS so what's pre-filled into Messages
+// matches what gets pasted into the contact form. The AI draft (~600-1200
+// chars including salutation/sign-off) stays visible in the preview for
+// the call-script use case.
+const SHORT_MESSAGE_MAX_CHARS = 380
 
-function buildSmsBody(emailBody: string): string {
+function buildShortMessage(emailBody: string): string {
   if (!emailBody) return ''
   let body = emailBody.trim()
   body = body.replace(/^(Hi|Hello|Dear|Good (morning|afternoon|evening))[^\n]*\n+/i, '')
   body = body.replace(/\n+(Thanks|Best|Regards|Sincerely|Cheers)[^]*$/i, '')
   body = body.trim()
-  if (body.length > SMS_MAX_CHARS) {
-    body = body.slice(0, SMS_MAX_CHARS - 1).trim() + '…'
+  if (body.length > SHORT_MESSAGE_MAX_CHARS) {
+    body = body.slice(0, SHORT_MESSAGE_MAX_CHARS - 1).trim() + '…'
   }
   return body
 }
@@ -958,7 +961,16 @@ function ContactTab({
   profileLoading?: boolean
   onTourUpdate: (tour: Tour) => void
 }) {
-  const [copied, setCopied] = useState<null | 'message' | 'contact-open' | 'tour-open'>(null)
+  // Persistent confirmation banner shown after a clipboard-copy action. Set
+  // by openListing / handleCopyMessage; dismissed by the X button on the
+  // banner or by triggering another copy (which replaces it). Stays visible
+  // across alt-tabs so the user sees it when they return to Snugd after
+  // pasting into apartments.com.
+  const [copyConfirmation, setCopyConfirmation] = useState<{
+    intent: 'contact' | 'tour' | 'message'
+    chars: number
+    truncated: boolean
+  } | null>(null)
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [markingSent, setMarkingSent] = useState(false)
@@ -982,30 +994,41 @@ function ContactTab({
   const phoneForLink = normalizePhoneForLink(tour.contact_phone || apartment?.contact_phone)
   const phoneDisplay = tour.contact_phone || apartment?.contact_phone || null
   const sourceUrl = apartment?.source_url || null
-  const smsBody = emailBody ? buildSmsBody(emailBody) : ''
+  const shortMessage = emailBody ? buildShortMessage(emailBody) : ''
+  const shortMessageTruncated = emailBody.length > shortMessage.length
 
-  // Opens the apartments.com listing in a new tab with the AI-drafted
-  // message already in the clipboard. apartments.com's own sticky CTAs
-  // (Send Message panel, Schedule Tour button) are already visible on
-  // page load — no scrolling required for the user to find them.
+  // Opens the apartments.com listing in a new tab with the short version
+  // of the message already in the clipboard. apartments.com's own sticky
+  // CTAs (Send Message panel, Schedule Tour button) are already visible
+  // on page load — no scrolling required.
   async function openListing(intent: 'contact' | 'tour') {
     if (!sourceUrl) return
     try {
-      if (emailBody) await navigator.clipboard.writeText(emailBody)
+      if (shortMessage) await navigator.clipboard.writeText(shortMessage)
     } catch {
       // Clipboard may be denied; user can still copy from the draft preview.
     }
-    setCopied(intent === 'contact' ? 'contact-open' : 'tour-open')
-    setTimeout(() => setCopied(null), 4000)
+    setCopyConfirmation({
+      intent,
+      chars: shortMessage.length,
+      truncated: shortMessageTruncated,
+    })
     window.open(sourceUrl, '_blank', 'noopener,noreferrer')
   }
 
+  // Explicit "Copy" button next to the message preview copies the FULL
+  // draft (not the short version), since the user clicking that button
+  // probably wants to use it in a longer-form channel like their own
+  // email client.
   async function handleCopyMessage() {
     if (!emailBody) return
     try {
       await navigator.clipboard.writeText(emailBody)
-      setCopied('message')
-      setTimeout(() => setCopied(null), 2000)
+      setCopyConfirmation({
+        intent: 'message',
+        chars: emailBody.length,
+        truncated: false,
+      })
     } catch {
       // ignore
     }
@@ -1120,9 +1143,9 @@ function ContactTab({
           </div>
         )}
 
-        {phoneForLink && smsBody && (
+        {phoneForLink && shortMessage && (
           <a
-            href={`sms:${phoneForLink}?body=${encodeURIComponent(smsBody)}`}
+            href={`sms:${phoneForLink}?body=${encodeURIComponent(shortMessage)}`}
             className="flex items-center justify-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1142,7 +1165,7 @@ function ContactTab({
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-              {copied === 'contact-open' ? 'Message copied — paste into form' : 'Contact this property'}
+              Contact this property
             </button>
             <button
               type="button"
@@ -1152,11 +1175,46 @@ function ContactTab({
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              {copied === 'tour-open' ? 'Message copied — schedule on site' : 'Schedule a tour'}
+              Schedule a tour
             </button>
           </div>
         )}
       </div>
+
+      {/* Clipboard confirmation banner — persistent across alt-tabs so the
+          user sees it when they come back from apartments.com. Dismiss via
+          the X; replaced (not stacked) when the user does another copy. */}
+      {copyConfirmation && (
+        <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 text-sm text-emerald-900">
+          <svg className="h-5 w-5 mt-0.5 shrink-0 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1 leading-snug">
+            <p className="font-medium">
+              {copyConfirmation.intent === 'tour'
+                ? 'Message copied — paste into the tour request form on apartments.com'
+                : copyConfirmation.intent === 'contact'
+                ? 'Message copied — paste into the contact form on apartments.com'
+                : 'Full message copied to clipboard'}
+            </p>
+            <p className="text-emerald-800/80 text-xs mt-0.5">
+              {copyConfirmation.chars} chars
+              {copyConfirmation.truncated && ' (trimmed for 400-char form limit)'}
+              . Long-press → Paste, or use Cmd/Ctrl + V.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCopyConfirmation(null)}
+            aria-label="Dismiss"
+            className="text-emerald-700 hover:text-emerald-900 -m-1 p-1"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Drafted message preview — what gets pre-filled into SMS and
           copied for the apartments.com form. Showing it inline lets the
@@ -1170,7 +1228,7 @@ function ContactTab({
               onClick={handleCopyMessage}
               className="text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
             >
-              {copied === 'message' ? 'Copied!' : 'Copy'}
+              Copy
             </button>
             <button
               type="button"
