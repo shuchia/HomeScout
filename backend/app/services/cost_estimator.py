@@ -11,11 +11,51 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Amenity strings that indicate utilities are included
-_HEAT_INCLUDED = {"heat included", "heating included", "gas included"}
-_WATER_INCLUDED = {"water included", "water/sewer included"}
-_ELECTRIC_INCLUDED = {"electric included", "electricity included"}
-_ALL_UTILITIES = {"utilities included", "all utilities included"}
+import re
+
+# Amenity strings that explicitly claim utility inclusion. These match
+# AFTER lowercasing+stripping the amenity. The lists grew 2026-06-17
+# (task #18 follow-up) — original sets only had a handful of exact
+# phrasings and missed common variants we saw in real listings.
+_HEAT_INCLUDED = {
+    "heat included",
+    "heating included",
+    "gas included",
+    "heat & hot water included",
+    "heat and hot water included",
+    "heat/hot water included",
+    "hot water included",
+}
+_WATER_INCLUDED = {
+    "water included",
+    "water/sewer included",
+    "water and sewer included",
+    "water & sewer included",
+    "sewer included",
+    "water sewer trash included",
+    "water/sewer/trash included",
+}
+_ELECTRIC_INCLUDED = {
+    "electric included",
+    "electricity included",
+}
+_INTERNET_INCLUDED = {
+    "internet included",
+    "wifi included",
+    "wi-fi included",
+    "high-speed internet included",
+    "high speed internet included",
+    "cable & internet included",
+}
+_ALL_UTILITIES = {
+    "utilities included",
+    "all utilities included",
+    "all bills paid",
+    "all utilities paid",
+    "utilities paid by owner",
+    "utilities paid by landlord",
+    "inclusive of utilities",
+}
 _IN_UNIT_LAUNDRY = {
     "in-unit washer/dryer",
     "in-unit laundry",
@@ -26,21 +66,75 @@ _IN_UNIT_LAUNDRY = {
     "w/d in unit",
 }
 _INSURANCE_REQUIRED = {"renters insurance required", "renters insurance program", "insurance required"}
-_INTERNET_INCLUDED = {"internet included", "wifi included", "wi-fi included", "high-speed internet included"}
 
-# Description patterns that indicate all utilities included
-import re
+# Description patterns. The previous implementation only had patterns
+# for the "all utilities included" case. Real listings often state
+# utility coverage for individual utilities ("Heat is included in
+# rent", "Water/sewer paid by owner"). Tuples are (utility_label,
+# compiled_regex) — `utility_label` matches the keys in the
+# returned breakdown.
 _DESC_ALL_UTILITIES_PATTERNS = [
-    r"all\s+utilities\s+included",
-    r"utilities\s+included",
-    r"utilities\s+are\s+included",
-    r"includes?\s+(?:all\s+)?utilities",
+    re.compile(p) for p in [
+        r"all\s+utilities\s+included",
+        r"utilities\s+(?:are\s+)?included(?:\s+in\s+rent)?",
+        r"includes?\s+(?:all\s+)?utilities",
+        r"utilities?\s+paid\s+by\s+(?:owner|landlord)",
+        r"all\s+bills\s+paid",
+        r"inclusive\s+of\s+utilities",
+    ]
 ]
+_DESC_PER_UTILITY_PATTERNS = {
+    "heat": [
+        re.compile(r"\b(?:heat|heating|hot\s*water)(?:\s*[/&]\s*hot\s*water|\s+and\s+hot\s*water)?\s+(?:is\s+)?included"),
+        re.compile(r"\b(?:heat|heating|gas)(?:\s*[/&]\s*\w+)?\s+paid\s+by\s+(?:owner|landlord)"),
+    ],
+    "water": [
+        re.compile(r"\b(?:water|sewer)(?:\s*/\s*(?:sewer|trash|water))*\s+(?:is\s+)?included"),
+        re.compile(r"\b(?:water|sewer)(?:\s*/\s*(?:sewer|trash|water))*\s+paid\s+by\s+(?:owner|landlord)"),
+    ],
+    "electric": [
+        re.compile(r"\belectric(?:ity)?\s+(?:is\s+)?included"),
+        re.compile(r"\belectric(?:ity)?\s+paid\s+by\s+(?:owner|landlord)"),
+    ],
+    "internet": [
+        re.compile(r"\b(?:wi-?fi|internet|cable\s+(?:and|&)\s+internet)\s+(?:is\s+)?included"),
+    ],
+}
+
+# Negation window: if any of these tokens appear within ~30 chars BEFORE
+# the matched phrase, we treat the match as a false positive. Catches
+# "Utilities NOT included" / "Does not include utilities" / etc.
+_NEGATION_TOKENS = re.compile(r"\b(?:not|no|n't|never|exclude|excluding|excluded|without|tenant\s+pays|resident\s+pays|paid\s+by\s+resident|paid\s+by\s+tenant)\b")
+
+
+def _has_negation_before(text: str, match_start: int, window: int = 30) -> bool:
+    """True if a negation token appears within `window` chars before match_start."""
+    start = max(0, match_start - window)
+    return bool(_NEGATION_TOKENS.search(text[start:match_start]))
 
 
 def _desc_has_all_utilities(desc_lower: str) -> bool:
-    """Check if description text indicates all utilities are included."""
-    return any(re.search(p, desc_lower) for p in _DESC_ALL_UTILITIES_PATTERNS)
+    """Check if description claims all utilities included, with negation guard."""
+    for pat in _DESC_ALL_UTILITIES_PATTERNS:
+        m = pat.search(desc_lower)
+        if m and not _has_negation_before(desc_lower, m.start()):
+            return True
+    return False
+
+
+def _desc_utility_included(desc_lower: str, utility: str) -> bool:
+    """Check if description claims a SPECIFIC utility is included.
+
+    Lets us catch "Heat is included" / "Water paid by owner" even when the
+    listing doesn't claim "all utilities included" overall. Same negation
+    guard as the all-utilities matcher.
+    """
+    patterns = _DESC_PER_UTILITY_PATTERNS.get(utility, [])
+    for pat in patterns:
+        m = pat.search(desc_lower)
+        if m and not _has_negation_before(desc_lower, m.start()):
+            return True
+    return False
 
 
 class CostEstimator:
@@ -100,14 +194,35 @@ class CostEstimator:
         amenity_set = {a.lower().strip() for a in amenities}
         desc_lower = (description or "").lower()
 
-        # Determine which utilities are included — check both amenities and description
+        # Determine which utilities are included. Three signals, OR'd together:
+        #   1. The "all utilities included" claim (amenity set match OR
+        #      description regex with negation guard).
+        #   2. Per-utility amenity match (e.g. "heat included").
+        #   3. Per-utility description match (e.g. "heat is included in rent"),
+        #      also negation-guarded.
         all_included = bool(amenity_set & _ALL_UTILITIES) or _desc_has_all_utilities(desc_lower)
-        heat_included = all_included or bool(amenity_set & _HEAT_INCLUDED)
-        water_included = all_included or bool(amenity_set & _WATER_INCLUDED)
-        electric_included = all_included or bool(amenity_set & _ELECTRIC_INCLUDED)
+        heat_included = (
+            all_included
+            or bool(amenity_set & _HEAT_INCLUDED)
+            or _desc_utility_included(desc_lower, "heat")
+        )
+        water_included = (
+            all_included
+            or bool(amenity_set & _WATER_INCLUDED)
+            or _desc_utility_included(desc_lower, "water")
+        )
+        electric_included = (
+            all_included
+            or bool(amenity_set & _ELECTRIC_INCLUDED)
+            or _desc_utility_included(desc_lower, "electric")
+        )
+        internet_included = (
+            all_included
+            or bool(amenity_set & _INTERNET_INCLUDED)
+            or _desc_utility_included(desc_lower, "internet")
+        )
         has_in_unit_laundry = bool(amenity_set & _IN_UNIT_LAUNDRY)
         insurance_required = bool(amenity_set & _INSURANCE_REQUIRED)
-        internet_included = all_included or bool(amenity_set & _INTERNET_INCLUDED)
 
         # Build estimates (zero out included utilities)
         est_electric = 0 if electric_included else estimates["electric"]
