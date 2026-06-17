@@ -961,16 +961,16 @@ function ContactTab({
   profileLoading?: boolean
   onTourUpdate: (tour: Tour) => void
 }) {
-  // Persistent confirmation banner shown after a clipboard-copy action. Set
-  // by openListing / handleCopyMessage; dismissed by the X button on the
-  // banner or by triggering another copy (which replaces it). Stays visible
-  // across alt-tabs so the user sees it when they return to Snugd after
-  // pasting into apartments.com.
-  const [copyConfirmation, setCopyConfirmation] = useState<{
-    intent: 'contact' | 'tour' | 'message'
-    chars: number
-    truncated: boolean
-  } | null>(null)
+  // After-action confirmation was replaced with a pre-action hint
+  // (rendered below the buttons). We still surface a banner if the
+  // clipboard write actually fails — rare, but the user shouldn't be
+  // left assuming the message landed when it didn't.
+  const [clipboardError, setClipboardError] = useState<string | null>(null)
+  // Brief in-place "Copied!" feedback for the small Copy link next to
+  // the message preview — that one stays in view, so a 1.5s flash there
+  // is actually useful (vs. the apartments.com buttons where the user's
+  // focus has already moved to the new tab).
+  const [previewCopied, setPreviewCopied] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [markingSent, setMarkingSent] = useState(false)
@@ -1003,16 +1003,19 @@ function ContactTab({
   // on page load — no scrolling required.
   async function openListing(intent: 'contact' | 'tour') {
     if (!sourceUrl) return
-    try {
-      if (shortMessage) await navigator.clipboard.writeText(shortMessage)
-    } catch {
-      // Clipboard may be denied; user can still copy from the draft preview.
+    setClipboardError(null)
+    if (shortMessage) {
+      try {
+        await navigator.clipboard.writeText(shortMessage)
+      } catch {
+        // The new tab is about to open and the user won't be able to act
+        // on a banner there, so flag the failure here. They can come back
+        // and use the explicit Copy button on the draft preview.
+        setClipboardError(
+          'Couldn’t copy automatically. Use the Copy link on the message below before going to apartments.com.'
+        )
+      }
     }
-    setCopyConfirmation({
-      intent,
-      chars: shortMessage.length,
-      truncated: shortMessageTruncated,
-    })
     window.open(sourceUrl, '_blank', 'noopener,noreferrer')
   }
 
@@ -1022,15 +1025,13 @@ function ContactTab({
   // email client.
   async function handleCopyMessage() {
     if (!emailBody) return
+    setClipboardError(null)
     try {
       await navigator.clipboard.writeText(emailBody)
-      setCopyConfirmation({
-        intent: 'message',
-        chars: emailBody.length,
-        truncated: false,
-      })
+      setPreviewCopied(true)
+      setTimeout(() => setPreviewCopied(false), 1500)
     } catch {
-      // ignore
+      setClipboardError('Couldn’t copy to clipboard. Select the message text and copy manually.')
     }
   }
 
@@ -1181,33 +1182,45 @@ function ContactTab({
         )}
       </div>
 
-      {/* Clipboard confirmation banner — persistent across alt-tabs so the
-          user sees it when they come back from apartments.com. Dismiss via
-          the X; replaced (not stacked) when the user does another copy. */}
-      {copyConfirmation && (
-        <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 text-sm text-emerald-900">
-          <svg className="h-5 w-5 mt-0.5 shrink-0 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      {/* Pre-action hint. Sets expectations BEFORE the user clicks
+          Contact / Schedule — a post-action banner showed up after the
+          tab had already opened, by which point the user's focus was on
+          apartments.com. Telling them what to expect ahead of time
+          (plus mobile/desktop paste mechanics) replaces the need for
+          per-click confirmation. */}
+      {sourceUrl && shortMessage && (
+        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-xs text-blue-900 leading-snug">
+          <svg className="h-4 w-4 mt-0.5 shrink-0 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <div className="flex-1 leading-snug">
-            <p className="font-medium">
-              {copyConfirmation.intent === 'tour'
-                ? 'Message copied — paste into the tour request form on apartments.com'
-                : copyConfirmation.intent === 'contact'
-                ? 'Message copied — paste into the contact form on apartments.com'
-                : 'Full message copied to clipboard'}
-            </p>
-            <p className="text-emerald-800/80 text-xs mt-0.5">
-              {copyConfirmation.chars} chars
-              {copyConfirmation.truncated && ' (trimmed for 400-char form limit)'}
-              . Long-press → Paste, or use Cmd/Ctrl + V.
-            </p>
-          </div>
+          <p>
+            Tapping <span className="font-medium">Contact this property</span> or{' '}
+            <span className="font-medium">Schedule a tour</span> copies the
+            drafted message ({shortMessage.length} chars{shortMessageTruncated ? ', trimmed to fit the 400-char form limit' : ''}) to
+            your clipboard and opens apartments.com in a new tab. On the listing,
+            find the message field and{' '}
+            <span className="font-medium">long-press → Paste</span> on mobile or{' '}
+            <span className="font-medium">Cmd / Ctrl + V</span> on desktop.
+          </p>
+        </div>
+      )}
+
+      {/* Error banner — only shown if a clipboard write actually failed.
+          Rare (clipboard API is well-supported in HTTPS contexts with a
+          user gesture) but worth surfacing because the new tab is already
+          opening and the user otherwise has no signal that they have
+          nothing on their clipboard. */}
+      {clipboardError && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm text-amber-900">
+          <svg className="h-5 w-5 mt-0.5 shrink-0 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="flex-1 leading-snug">{clipboardError}</p>
           <button
             type="button"
-            onClick={() => setCopyConfirmation(null)}
+            onClick={() => setClipboardError(null)}
             aria-label="Dismiss"
-            className="text-emerald-700 hover:text-emerald-900 -m-1 p-1"
+            className="text-amber-700 hover:text-amber-900 -m-1 p-1"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1228,7 +1241,7 @@ function ContactTab({
               onClick={handleCopyMessage}
               className="text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
             >
-              Copy
+              {previewCopied ? 'Copied!' : 'Copy'}
             </button>
             <button
               type="button"
