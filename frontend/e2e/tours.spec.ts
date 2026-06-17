@@ -389,10 +389,10 @@ test.describe('Tour Pipeline E2E Tests', () => {
     await mockTourApis(page)
     await page.goto('/tours/tour-001')
 
-    // Should show the three tab buttons (info, capture, email)
+    // Should show the three tab buttons (info, capture, contact)
     await expect(page.locator('button:has-text("info")').first()).toBeVisible({ timeout: 10000 })
     await expect(page.locator('button:has-text("capture")').first()).toBeVisible()
-    await expect(page.locator('button:has-text("email")').first()).toBeVisible()
+    await expect(page.locator('button:has-text("contact")').first()).toBeVisible()
   })
 
   test('tour detail shows apartment info on Info tab', async ({ page }) => {
@@ -457,14 +457,14 @@ test.describe('Tour Pipeline E2E Tests', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Tour AI Features E2E Tests', () => {
-  test('email tab shows upgrade prompt for free users', async ({ page }) => {
+  test('contact tab shows upgrade prompt for free users', async ({ page }) => {
     // Default mockAuth creates a free-tier user (no profile = free)
     await mockAuth(page)
     await mockTourApis(page)
     await page.goto('/tours/tour-001')
 
-    // Click Email tab
-    await page.locator('button:has-text("email")').first().click()
+    // Click Contact tab (renamed from Email)
+    await page.locator('button:has-text("contact")').first().click()
 
     // Free users should see the UpgradePrompt with "Upgrade" text
     await expect(
@@ -472,21 +472,22 @@ test.describe('Tour AI Features E2E Tests', () => {
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('email tab shows generate button for pro users', async ({ page }) => {
+  test('contact tab shows generate button for pro users', async ({ page }) => {
     await mockProAuth(page)
     await mockTourApis(page)
     await page.goto('/tours/tour-001')
 
-    // Click Email tab
-    await page.locator('button:has-text("email")').first().click()
+    // Click Contact tab
+    await page.locator('button:has-text("contact")').first().click()
 
-    // Pro users should see the "Generate Inquiry Email" button
+    // Pro users should see the "Generate Inquiry Message" button
+    // (renamed from "Generate Inquiry Email" in the Contact tab refactor)
     await expect(
-      page.locator('button:has-text("Generate Inquiry Email")'),
+      page.locator('button:has-text("Generate Inquiry Message")'),
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('email generation works for pro users', async ({ page }) => {
+  test('inquiry-message generation works for pro users', async ({ page }) => {
     await mockProAuth(page)
 
     // Track whether the inquiry-email endpoint has been called so we can
@@ -553,11 +554,12 @@ test.describe('Tour AI Features E2E Tests', () => {
 
     await page.goto('/tours/tour-001')
 
-    // Click Email tab
-    await page.locator('button:has-text("email")').first().click()
+    // Click Contact tab (renamed from Email)
+    await page.locator('button:has-text("contact")').first().click()
 
-    // Click Generate
-    const generateBtn = page.locator('button:has-text("Generate Inquiry Email")')
+    // Click Generate. Button copy is "Generate Inquiry Message" since the
+    // refactor — the same Claude pipeline now drives form-paste / SMS / mailto.
+    const generateBtn = page.locator('button:has-text("Generate Inquiry Message")')
     await expect(generateBtn).toBeVisible({ timeout: 10000 })
     await generateBtn.click()
 
@@ -566,10 +568,11 @@ test.describe('Tour AI Features E2E Tests', () => {
       page.locator('text=Inquiry about 123 Test St').first(),
     ).toBeVisible({ timeout: 10000 })
 
-    // Body should also be visible
+    // Body lives in an editable textarea now (post-refactor) — assert via
+    // textarea value rather than text content.
     await expect(
-      page.locator('text=Dear Property Manager').first(),
-    ).toBeVisible()
+      page.locator('textarea').first(),
+    ).toHaveValue(/Dear Property Manager/)
   })
 
   test('day planner shows on tours page with multiple same-day tours', async ({ page }) => {
