@@ -78,6 +78,11 @@ class ScrapedListing:
     transit_options: Optional[List[Dict[str, Any]]] = None # list of transit stops
     virtual_tour_urls: Optional[List[str]] = None          # video / 3D tour URLs
 
+    # Added 2026-06-17 (task #27) — also in the bulk Apify payload,
+    # previously discarded.
+    nearby_schools: Optional[Dict[str, Any]] = None        # {public: [...], private: [...]}
+    floor_plans: Optional[List[Dict[str, Any]]] = None     # per-floor-plan unit models
+
     # Raw data for debugging
     raw_data: Optional[Dict[str, Any]] = None
 
@@ -126,6 +131,8 @@ class ScrapedListing:
             "available_units": self.available_units,
             "transit_options": self.transit_options,
             "virtual_tour_urls": self.virtual_tour_urls,
+            "nearby_schools": self.nearby_schools,
+            "floor_plans": self.floor_plans,
             "raw_data": self.raw_data,
         }
 

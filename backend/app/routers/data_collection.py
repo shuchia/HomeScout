@@ -645,6 +645,28 @@ async def backfill_fees():
     return {"status": "dispatched", "task_id": task.id, "message": "Backfill running in background"}
 
 
+@router.post("/backfill-extended-fields")
+async def backfill_extended_fields_endpoint(only_missing: bool = True, batch_size: int = 200):
+    """Populate the nearby_schools + floor_plans columns from existing
+    apartments.raw_data. No Apify call — pure-backend extraction added
+    in task #27. Idempotent when only_missing=True.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import backfill_extended_fields as task
+    dispatched = task.apply_async(
+        kwargs={"only_missing": only_missing, "batch_size": batch_size},
+        queue="maintenance",
+    )
+    return {
+        "status": "dispatched",
+        "task_id": dispatched.id,
+        "only_missing": only_missing,
+        "batch_size": batch_size,
+    }
+
+
 @router.post("/backfill-enrichment")
 async def backfill_enrichment(only_missing: bool = True, batch_size: int = 200):
     """Populate the enrichment columns (specials, walk_score, transit_score,

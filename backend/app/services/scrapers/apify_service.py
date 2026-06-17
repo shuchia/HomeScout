@@ -786,6 +786,22 @@ class ApifyService(BaseScraper):
 
         property_website = raw.get("propertyWebsite") or None
 
+        # Nearby schools: epctex returns {"public": [...], "private": [...]}.
+        # Each entry has {type, name, grades, numberOfStudents} — no ratings,
+        # so this is "what schools are nearby" not "how good are they."
+        schools_raw = raw.get("schools")
+        nearby_schools = (
+            schools_raw
+            if isinstance(schools_raw, dict) and (schools_raw.get("public") or schools_raw.get("private"))
+            else None
+        )
+
+        # Floor plans: epctex returns these in `models`, not `floorPlans`
+        # (which is consistently empty). Each entry has modelName, basePrice,
+        # totalPrice, details (beds/baths), squareFeet, availability, image.
+        models_raw = raw.get("models")
+        floor_plans = models_raw if isinstance(models_raw, list) and models_raw else None
+
         return ScrapedListing(
             external_id=str(raw.get("id", "")),
             source="apartments_com",
@@ -824,6 +840,8 @@ class ApifyService(BaseScraper):
             available_units=available_units,
             transit_options=transit_options,
             virtual_tour_urls=virtual_tour_urls,
+            nearby_schools=nearby_schools,
+            floor_plans=floor_plans,
             raw_data=raw,
         )
 

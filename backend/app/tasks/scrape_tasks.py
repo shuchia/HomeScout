@@ -327,6 +327,8 @@ async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
                     available_units=listing_data.get("available_units"),
                     transit_options=listing_data.get("transit_options"),
                     virtual_tour_urls=listing_data.get("virtual_tour_urls"),
+                    nearby_schools=listing_data.get("nearby_schools"),
+                    floor_plans=listing_data.get("floor_plans"),
                 )
                 session.add(apartment)
                 await session.commit()

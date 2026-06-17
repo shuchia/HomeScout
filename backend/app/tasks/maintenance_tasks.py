@@ -616,3 +616,88 @@ async def _backfill_enrichment(batch_size: int, only_missing: bool) -> Dict[str,
         "updated": updated,
         "skipped_no_raw": skipped_no_raw,
     }
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def backfill_extended_fields(self, batch_size: int = 200, only_missing: bool = True) -> Dict[str, Any]:
+    """Backfill nearby_schools + floor_plans from existing apartments.raw_data.
+
+    Mirrors backfill_enrichment but for the columns added in migration
+    m9i0j1k2l3m4 (task #27). Pure-backend extraction — no Apify cost.
+    Idempotent when ``only_missing`` is True (the default).
+    """
+    if not is_database_enabled():
+        return {"status": "skipped", "reason": "Database not enabled"}
+
+    return run_async(_backfill_extended_fields(batch_size=batch_size, only_missing=only_missing))
+
+
+async def _backfill_extended_fields(batch_size: int, only_missing: bool) -> Dict[str, Any]:
+    from sqlalchemy import select
+    from app.models.apartment import ApartmentModel
+
+    updated = 0
+    scanned = 0
+    skipped_no_raw = 0
+    last_id: str = ""
+
+    while True:
+        async with get_session_context() as session:
+            stmt = select(ApartmentModel).where(
+                ApartmentModel.is_active == 1,
+                ApartmentModel.raw_data.isnot(None),
+            )
+            if only_missing:
+                stmt = stmt.where(
+                    ApartmentModel.nearby_schools.is_(None),
+                    ApartmentModel.floor_plans.is_(None),
+                )
+            if last_id:
+                stmt = stmt.where(ApartmentModel.id > last_id)
+            stmt = stmt.order_by(ApartmentModel.id).limit(batch_size)
+
+            rows = (await session.execute(stmt)).scalars().all()
+            if not rows:
+                break
+
+            for apt in rows:
+                scanned += 1
+                raw = apt.raw_data or {}
+                if not isinstance(raw, dict):
+                    skipped_no_raw += 1
+                    last_id = apt.id
+                    continue
+
+                touched = False
+
+                # Nearby schools (object: {public, private})
+                if apt.nearby_schools is None:
+                    schools_raw = raw.get("schools")
+                    if isinstance(schools_raw, dict) and (
+                        schools_raw.get("public") or schools_raw.get("private")
+                    ):
+                        apt.nearby_schools = schools_raw
+                        touched = True
+
+                # Floor plans (array, sourced from raw.models)
+                if apt.floor_plans is None:
+                    models_raw = raw.get("models")
+                    if isinstance(models_raw, list) and models_raw:
+                        apt.floor_plans = models_raw
+                        touched = True
+
+                if touched:
+                    updated += 1
+                last_id = apt.id
+
+            await session.commit()
+
+    logger.info(
+        f"backfill_extended_fields: scanned={scanned} updated={updated} skipped_no_raw={skipped_no_raw}"
+    )
+    return {
+        "status": "completed",
+        "scanned": scanned,
+        "updated": updated,
+        "skipped_no_raw": skipped_no_raw,
+    }
