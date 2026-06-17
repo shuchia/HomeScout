@@ -371,11 +371,14 @@ Return valid JSON only, no additional text."""
 
         system_prompt = (
             "You are a helpful assistant writing a polite, professional inquiry "
-            "email about an apartment listing. The email should be warm but "
-            "concise — landlords receive many inquiries."
+            "about an apartment listing. The message must be short — it will be "
+            "pasted into apartments.com's contact form, which caps messages at "
+            "400 characters. It will also pre-fill SMS to the leasing office "
+            "and serve as a phone-call talking-point script. One source of "
+            "truth across all three channels."
         )
 
-        user_prompt = f"""Write an inquiry email for the following apartment listing.
+        user_prompt = f"""Write an inquiry message for the following apartment listing.
 
 ## Apartment Details
 {apartment_json}
@@ -384,18 +387,22 @@ Return valid JSON only, no additional text."""
 {user_json}
 
 Instructions:
-- Write a subject line and email body.
-- Address the landlord/property manager politely.
-- Mention the tenant's name, desired move-in date, and budget if provided.
-- Reference specific apartment details (address, rent, beds/baths, amenities) to show genuine interest.
-- Ask smart questions based on what is MISSING from the listing:
-  - No sqft listed? Ask about the apartment size.
-  - No pet policy mentioned? Ask about pets if the tenant mentioned pets in preferences.
-  - No parking info? Ask about parking if relevant.
-  - No utilities info? Ask what's included.
-  - No lease term info? Ask about lease length and terms.
-- Keep it to 150-250 words for the body.
-- Be professional but personable.
+- Write a subject line (≤8 words) and a body.
+- The body MUST be 320 characters or fewer. Hard limit — the contact form
+  truncates at 400 chars and we want a buffer.
+- End on a complete sentence. Never let the message end mid-thought.
+- Open with a brief, friendly opener that names the property or unit.
+- Mention move-in date and budget IF provided.
+- Ask 1 (at most 2) of the most useful missing-info questions, prioritised by:
+  - parking, if no parking info in listing
+  - utilities included, if no utilities info
+  - pet policy, if tenant mentioned pets in preferences
+  - lease term/length, if no lease info
+  Skip questions whose answer is already in the listing.
+- Include a salutation ("Hi,") and brief sign-off ("Thanks, <first name>") since
+  the message also gets used for SMS and mailto. The leasing office form has
+  separate name/email fields but accepts a friendly tone.
+- Be direct. No fluff like "I hope this email finds you well." Every character counts.
 
 Return ONLY a JSON object with "subject" and "body" fields. No additional text."""
 
