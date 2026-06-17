@@ -286,6 +286,9 @@ class UpdateTourRequest(BaseModel):
     decision_reason: Optional[str] = None
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None
+    # User edits to the AI-drafted inquiry message persist via this field
+    # so they survive page reload. Saved on textarea blur from the Contact tab.
+    inquiry_email_draft: Optional[str] = None
 
     @field_validator("stage")
     @classmethod

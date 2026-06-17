@@ -371,6 +371,7 @@ export async function updateTour(tourId: string, updates: Partial<{
   decision_reason: string
   contact_phone: string
   contact_email: string
+  inquiry_email_draft: string
 }>): Promise<{ tour: Tour }> {
   const response = await fetchWithAuth(`${API_URL}/api/tours/${tourId}`, {
     method: 'PATCH',
