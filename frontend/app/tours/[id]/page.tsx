@@ -1034,10 +1034,15 @@ function ContactTab({
   const shortMessageTruncated = effectiveBody.length > shortMessage.length
 
   // Opens the apartments.com listing in a new tab with the short version
-  // of (the user-edited) message already in the clipboard. apartments.com's
-  // own sticky CTAs (Send Message panel, Schedule Tour button) are visible
-  // on page load — no scrolling required.
-  async function openListing(_intent: 'contact' | 'tour') {
+  // of (the user-edited) message already in the clipboard. The URL is
+  // suffixed with a fragment that targets the relevant CTA button on
+  // apartments.com — IDs verified against the live DOM (task #28). On
+  // desktop the CTAs are in the sticky right rail and already above the
+  // fold; the fragment mainly helps mobile, where the page content sits
+  // above the CTA stack. The fragment scrolls the button into view but
+  // does NOT auto-click — the user still taps to open the modal, then
+  // pastes the pre-copied message.
+  async function openListing(intent: 'contact' | 'tour') {
     if (!sourceUrl) return
     setClipboardError(null)
     // Fire-and-forget the persistence; we don't await before opening the
@@ -1053,7 +1058,12 @@ function ContactTab({
         )
       }
     }
-    window.open(sourceUrl, '_blank', 'noopener,noreferrer')
+    // Anchor IDs verified against apartments.com's live DOM (Aera listing,
+    // 2026-06-18). Both buttons live in <div class="ctaContainer"> within
+    // the stickyContactRightRail; on desktop they're always in view, on
+    // mobile this fragment scrolls them into view.
+    const anchor = intent === 'tour' ? '#checkAvailabilityTourBtn' : '#sendMessageBtn'
+    window.open(sourceUrl + anchor, '_blank', 'noopener,noreferrer')
   }
 
   // Explicit "Copy" button next to the message preview copies the FULL
