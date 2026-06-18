@@ -528,12 +528,22 @@ export async function uploadTourPhoto(
  */
 export async function generateDayPlan(
   date: string,
-  tourIds: string[]
+  tourIds: string[],
+  startingAddress?: string,
 ): Promise<{ tours_ordered: Array<Record<string, unknown>>; travel_notes: string[]; tips: string[] }> {
+  const body: { date: string; tour_ids: string[]; starting_address?: string } = {
+    date,
+    tour_ids: tourIds,
+  }
+  // Only send the field when meaningful — backend treats it as optional and
+  // a blank string would tell Claude to anchor the route on an empty point.
+  if (startingAddress && startingAddress.trim()) {
+    body.starting_address = startingAddress.trim()
+  }
   const response = await fetchWithAuth(`${API_URL}/api/tours/day-plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, tour_ids: tourIds }),
+    body: JSON.stringify(body),
   })
   if (!response.ok) throw new ApiError('Failed to generate day plan', response.status)
   return response.json()

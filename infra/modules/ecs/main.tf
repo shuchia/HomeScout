@@ -96,6 +96,15 @@ resource "aws_ecs_task_definition" "api" {
       }
     }
   }])
+
+  # CI/CD owns image tags and env-var/secret rollouts via register-task-definition.
+  # Terraform creates the initial revision; subsequent revisions belong to the
+  # deploy pipeline. Without this, every `terraform apply` reverts the TD to
+  # whatever image_tag terraform was told about (default `:latest`), which CI
+  # has never pushed and ECS can't pull. See docs/launch-readiness.md #19.
+  lifecycle {
+    ignore_changes = [container_definitions]
+  }
 }
 
 # --- Worker Task Definition ---
@@ -127,6 +136,10 @@ resource "aws_ecs_task_definition" "worker" {
       }
     }
   }])
+
+  lifecycle {
+    ignore_changes = [container_definitions]
+  }
 }
 
 # --- Beat Task Definition ---
@@ -158,6 +171,10 @@ resource "aws_ecs_task_definition" "beat" {
       }
     }
   }])
+
+  lifecycle {
+    ignore_changes = [container_definitions]
+  }
 }
 
 # --- ECS Services ---
@@ -184,6 +201,14 @@ resource "aws_ecs_service" "api" {
     container_name   = "api"
     container_port   = 8000
   }
+
+  # CI calls aws ecs update-service to point at fresh TD revisions; if
+  # terraform reverts that pointer back to the original revision, ECS
+  # cycles back to whatever image_tag terraform thinks current is
+  # (default `:latest`, which CI never tagged). Let CI own this.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 resource "aws_ecs_service" "worker" {
@@ -203,6 +228,10 @@ resource "aws_ecs_service" "worker" {
     security_groups  = [var.ecs_security_group_id]
     assign_public_ip = false
   }
+
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 resource "aws_ecs_service" "beat" {
@@ -221,5 +250,9 @@ resource "aws_ecs_service" "beat" {
     subnets          = var.private_subnet_ids
     security_groups  = [var.ecs_security_group_id]
     assign_public_ip = false
+  }
+
+  lifecycle {
+    ignore_changes = [task_definition]
   }
 }

@@ -215,7 +215,9 @@ async def generate_day_plan(
 
         claude = ClaudeService()
         plan = await asyncio.to_thread(
-            claude.generate_day_plan, tours=tour_data
+            claude.generate_day_plan,
+            tours=tour_data,
+            user_home_address=body.starting_address,
         )
 
         return plan

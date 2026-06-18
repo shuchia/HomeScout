@@ -1,8 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { generateDayPlan } from '@/lib/api'
 import UpgradePrompt from '@/components/UpgradePrompt'
+
+// localStorage key for the day-plan starting address. Persisted across
+// visits because users typically tour from the same place (hotel, current
+// home, airport) — retyping it every time is friction. Stored per-browser,
+// not per-user, since this is preferences not data.
+const STARTING_ADDRESS_KEY = 'snugd-day-plan-starting-address'
 
 interface DayPlannerProps {
   date: string              // ISO date (YYYY-MM-DD)
@@ -30,12 +36,28 @@ export default function DayPlanner({ date, tourIds, isPro, profileLoading }: Day
   const [plan, setPlan] = useState<DayPlanResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [startingAddress, setStartingAddress] = useState('')
+
+  // Hydrate the saved starting address on mount. Skip on the SSR pass
+  // (window check) to avoid a hydration mismatch.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(STARTING_ADDRESS_KEY)
+    if (saved) setStartingAddress(saved)
+  }, [])
+
+  const handleStartingAddressChange = (value: string) => {
+    setStartingAddress(value)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STARTING_ADDRESS_KEY, value)
+    }
+  }
 
   const handleGeneratePlan = async () => {
     try {
       setLoading(true)
       setError(null)
-      const result = await generateDayPlan(date, tourIds)
+      const result = await generateDayPlan(date, tourIds, startingAddress || undefined)
       setPlan(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate day plan')
@@ -84,12 +106,30 @@ export default function DayPlanner({ date, tourIds, isPro, profileLoading }: Day
         </p>
 
         {!plan && !loading && (
-          <button
-            onClick={handleGeneratePlan}
-            className="w-full py-2 px-4 bg-[var(--color-primary)] text-white text-sm font-medium rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
-          >
-            Plan This Day
-          </button>
+          <>
+            {/* Optional starting point so the route optimizer can anchor
+                the first leg. Persisted in localStorage — users typically
+                tour from the same place (hotel/home/airport). */}
+            <div className="mb-3">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Starting from <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={startingAddress}
+                onChange={(e) => handleStartingAddressChange(e.target.value)}
+                placeholder="e.g., 123 Main St, Pittsburgh PA, or hotel name"
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">Saved on this device for next time.</p>
+            </div>
+            <button
+              onClick={handleGeneratePlan}
+              className="w-full py-2 px-4 bg-[var(--color-primary)] text-white text-sm font-medium rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
+            >
+              Plan This Day
+            </button>
+          </>
         )}
 
         {loading && (
