@@ -73,9 +73,20 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          IMAGE=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.image_tag }}
+          REGISTRY=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          IMAGE=$REGISTRY:${{ steps.meta.outputs.image_tag }}
+          LATEST=$REGISTRY:${{ needs.resolve-env.outputs.environment }}-latest
+
           docker build -t $IMAGE ./backend
           docker push $IMAGE
+
+          # Also tag/push :{env}-latest so a fresh `terraform apply` (e.g.
+          # during prod bootstrap) finds an image to pull. Terraform now
+          # ignore_changes the TD's container_definitions and the service's
+          # task_definition pointer, but this still helps the *initial*
+          # creation case where there's no CI-deployed revision yet.
+          docker tag $IMAGE $LATEST
+          docker push $LATEST
 
   deploy:
     name: Deploy to ${{ needs.resolve-env.outputs.environment }}

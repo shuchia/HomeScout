@@ -4,6 +4,9 @@ enable_redundant_nat = false # Single NAT for now (cost saving)
 frontend_url         = "https://snugd.ai"
 log_level            = "INFO"
 
+# Initial image (see qa.tfvars for the same lifecycle-ignore rationale).
+image_tag            = "prod-latest"
+
 # RDS — same as QA for now, scale up when ready for real launch
 rds_instance_class      = "db.t4g.micro"
 rds_allocated_storage   = 50 # Can't shrink RDS storage — was created at 50GB

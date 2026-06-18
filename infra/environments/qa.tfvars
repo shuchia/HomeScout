@@ -4,6 +4,12 @@ enable_redundant_nat = false
 frontend_url         = "https://qa.snugd.ai"
 log_level            = "INFO"
 
+# Initial image. CI pushes :qa-latest alongside each :qa-{sha} so this
+# stays pullable. Subsequent revisions belong to CI — the ECS module
+# uses lifecycle.ignore_changes on container_definitions + the service's
+# task_definition pointer so terraform doesn't fight the deploy pipeline.
+image_tag            = "qa-latest"
+
 # RDS
 rds_instance_class      = "db.t4g.micro"
 rds_allocated_storage   = 20
