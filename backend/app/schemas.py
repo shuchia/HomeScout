@@ -391,6 +391,10 @@ class DayPlanRequest(BaseModel):
     """Request model for generating a day plan."""
     date: date
     tour_ids: List[str]
+    # Optional starting point for the route optimizer. Free-text — typically
+    # the user's hotel, current home, or the airport. Claude already accepts
+    # this via the `user_home_address` arg in generate_day_plan().
+    starting_address: Optional[str] = None
 
 
 class DayPlanResponse(BaseModel):
