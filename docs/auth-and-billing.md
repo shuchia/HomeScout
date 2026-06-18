@@ -128,6 +128,8 @@ Required env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`.
 
 Atomic `times_used` increment avoids TOCTOU; redemption sets `user_tier=pro` and `current_period_end` 90 days out. UI surface: `frontend/components/InviteCodeBanner.tsx`. Tables defined in `supabase/migrations/006_beta_launch.sql`.
 
+**Minting** (`POST /api/admin/invite-codes`): `count` (1–50), `max_uses` (1–100, per-code redemption cap — each user can redeem a given code only once), `prefix` (default `BETA`), optional `expires_at` (ISO8601). A **shared** code is just one code with `max_uses` set to the group size. Pass `code` (e.g. `"BETA-GIRLHACKS"`) to mint a single **vanity** code with that exact value — it overrides `prefix`/`count`, is uppercased to match redemption, and returns 409 if the code already exists.
+
 ## Rate Limiting
 
 `backend/app/middleware/rate_limit.py`. Redis sliding window per minute. Identity: authed users keyed by token hash, anonymous by IP. Fail-open. Skipped when `TESTING=1`.
