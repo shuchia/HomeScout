@@ -279,10 +279,23 @@ Be honest and practical in scoring. A perfect 100% match is rare. Most good matc
         apartments: List[Dict],
         preferences: str,
         search_context: Optional[Dict] = None,
+        model: Optional[str] = None,
     ) -> Dict:
         """
         Deep head-to-head comparison of 2-3 apartments.
         Returns dict with winner, categories, and per-apartment scores.
+
+        Args:
+            apartments: 2-3 apartment dicts to compare.
+            preferences: User-stated priorities (free text).
+            search_context: Optional original search criteria.
+            model: Override the default model. Pass `self.MODEL_FAST` (Haiku)
+                or `self.MODEL_DEEP` (Sonnet). Defaults to MODEL_FAST since
+                Sonnet 4.5's ~30s wall time for this prompt was the dominant
+                latency complaint pre-2026-06-18 — Haiku 4.5 ships the same
+                structured output in ~10-15s with marginal quality loss for
+                this task. Sonnet stays available via the endpoint's
+                ?ai_model=sonnet override for A/B and quality validation.
         """
         slim_apartments = [
             self.prepare_apartment_for_scoring(apt) for apt in apartments
@@ -331,10 +344,11 @@ Return valid JSON only, no additional text."""
 
         system_prompt = """You are an expert apartment comparison analyst for snugd. Compare apartments head-to-head across multiple categories, considering the stated preferences and search criteria. Write all reasoning as if speaking directly to the renter — use "you" and "your", never "the user" or third-person references. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. When comparing per-person and per-unit listings, normalize to per-person cost for fair comparison. A 3BR at $1,030/person (total $3,090/unit) should NOT appear cheaper than a 1BR at $1,500/unit. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
 
+        selected_model = model or self.MODEL_FAST
         try:
             message = self.client.messages.create(
-                model=self.MODEL_DEEP,
-                max_tokens=4096,
+                model=selected_model,
+                max_tokens=2500,
                 system=[{
                     "type": "text",
                     "text": system_prompt,
@@ -342,7 +356,7 @@ Return valid JSON only, no additional text."""
                 }],
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            self._log_usage("compare_analysis", message)
+            self._log_usage(f"compare_analysis:{selected_model}", message)
 
             response_text = message.content[0].text
             result = self._parse_comparison_response(response_text)

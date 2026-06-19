@@ -2,6 +2,8 @@
 API endpoints for apartment detail and batch retrieval.
 """
 import asyncio
+import hashlib
+import json
 import logging
 from typing import List, Dict, Any, Optional
 
@@ -304,12 +306,25 @@ async def get_apartments_batch(apartment_ids: List[str] = Body(..., max_length=5
 @router.post("/compare")
 async def compare_apartments(
     request: CompareRequest,
+    ai_model: Optional[str] = Query(None, regex="^(haiku|sonnet)$"),
     user: UserContext | None = Depends(get_optional_user),
 ):
     """
     Compare up to 3 apartments with optional preference scoring.
-    When preferences are provided, Claude performs a deep head-to-head analysis.
-    Claude analysis is only available for pro-tier users.
+    When the user provides preferences AND is on the pro tier, Claude
+    performs a head-to-head analysis. Claude analysis is only available
+    to pro-tier users.
+
+    Performance notes (task #30, 2026-06-18):
+      - Result is cached in Redis (1hr TTL, key = sha256 of sorted IDs +
+        prefs + search_ctx + selected model). Repeat clicks: ~36s → ~100ms.
+      - Default model is Haiku 4.5 (~10-15s vs Sonnet 4.5's ~33-43s).
+      - ?ai_model=sonnet forces the deeper model for A/B and quality
+        verification without redeploying. The cache key includes the
+        model name, so the two paths cache independently.
+      - Empty `preferences` no longer auto-triggers a 30s call against a
+        useless "general comparison" placeholder — Claude only runs when
+        the user has actually expressed priorities.
     """
     comparison_fields = [
         "rent", "bedrooms", "bathrooms", "sqft",
@@ -352,33 +367,75 @@ async def compare_apartments(
             if aid in apt_map:
                 apartments.append(apt_map[aid])
 
-    # Run Claude comparison analysis only for pro-tier users with at least 2 apartments
+    # Pro-tier Claude analysis. Runs only when the user actually stated
+    # preferences — the prior "general comparison" placeholder was a 30s
+    # call with weak prompting that delivered marginal value.
     comparison_analysis = None
-    if tier == "pro" and len(apartments) >= 2:
+    user_prefs = (request.preferences or "").strip()
+    if tier == "pro" and len(apartments) >= 2 and user_prefs:
         from app.services.claude_service import ClaudeService
 
         claude = _get_claude_service()
         search_ctx = request.search_context.model_dump() if request.search_context else None
-        prefs = request.preferences.strip() if request.preferences else "general comparison"
 
-        try:
-            from app.services.apartment_service import _claude_semaphore
-            async with _claude_semaphore:
-                raw_analysis = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        claude.compare_apartments_with_analysis,
-                        apartments=apartments,
-                        preferences=prefs,
-                        search_context=search_ctx,
-                    ),
-                    timeout=45.0,
-                )
-            from app.schemas import ComparisonAnalysis
-            comparison_analysis = ComparisonAnalysis(**raw_analysis)
-        except asyncio.TimeoutError:
-            logger.warning("Claude comparison timed out after 25s")
-        except Exception as e:
-            logger.error(f"Claude comparison analysis failed: {e}")
+        # Resolve the model selection. Endpoint ?ai_model=sonnet forces the
+        # deeper model; default is Haiku 4.5 (MODEL_FAST).
+        selected_model = claude.MODEL_DEEP if ai_model == "sonnet" else claude.MODEL_FAST
+
+        # Cache key: sorted apartment IDs (order shouldn't change cache hit),
+        # the user prefs string, the search context JSON, and the model
+        # name. sha256 → 16 chars is plenty for collision avoidance at our
+        # scale.
+        ids_key = ",".join(sorted(request.apartment_ids))
+        ctx_key = json.dumps(search_ctx, sort_keys=True) if search_ctx else ""
+        cache_raw = f"{ids_key}|{user_prefs}|{ctx_key}|{selected_model}"
+        cache_key = "compare:" + hashlib.sha256(cache_raw.encode()).hexdigest()[:16]
+
+        from app.schemas import ComparisonAnalysis
+        cached_hit = False
+
+        if _apartment_service._redis:
+            try:
+                cached = await _apartment_service._redis.get(cache_key)
+                if cached:
+                    comparison_analysis = ComparisonAnalysis(**json.loads(cached))
+                    cached_hit = True
+            except Exception as e:
+                logger.warning(f"Compare cache read failed: {e}")
+
+        if not cached_hit:
+            try:
+                from app.services.apartment_service import _claude_semaphore
+                async with _claude_semaphore:
+                    raw_analysis = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            claude.compare_apartments_with_analysis,
+                            apartments=apartments,
+                            preferences=user_prefs,
+                            search_context=search_ctx,
+                            model=selected_model,
+                        ),
+                        # Haiku finishes in ~15s typical; Sonnet in ~35s.
+                        # Keep the timeout generous to absorb tail latency
+                        # but tighter than the previous 45s since Haiku
+                        # shouldn't approach that.
+                        timeout=50.0 if selected_model == claude.MODEL_DEEP else 25.0,
+                    )
+                comparison_analysis = ComparisonAnalysis(**raw_analysis)
+
+                # Write through to cache. Best-effort — never block the
+                # response on a Redis hiccup.
+                if _apartment_service._redis and comparison_analysis:
+                    try:
+                        await _apartment_service._redis.setex(
+                            cache_key, 3600, comparison_analysis.model_dump_json()
+                        )
+                    except Exception as e:
+                        logger.warning(f"Compare cache write failed: {e}")
+            except asyncio.TimeoutError:
+                logger.warning(f"Claude comparison timed out (model={selected_model})")
+            except Exception as e:
+                logger.error(f"Claude comparison analysis failed: {e}")
 
     # Add true cost data to apartments (breakdown for all users — fee data is public)
     for i, apt in enumerate(apartments):
