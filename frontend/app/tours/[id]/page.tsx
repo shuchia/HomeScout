@@ -1034,36 +1034,39 @@ function ContactTab({
   const shortMessageTruncated = effectiveBody.length > shortMessage.length
 
   // Opens the apartments.com listing in a new tab with the short version
-  // of (the user-edited) message already in the clipboard. The URL is
-  // suffixed with a fragment that targets the relevant CTA button on
-  // apartments.com — IDs verified against the live DOM (task #28). On
-  // desktop the CTAs are in the sticky right rail and already above the
-  // fold; the fragment mainly helps mobile, where the page content sits
-  // above the CTA stack. The fragment scrolls the button into view but
-  // does NOT auto-click — the user still taps to open the modal, then
-  // pastes the pre-copied message.
-  async function openListing(intent: 'contact' | 'tour') {
+  // of (the user-edited) message already in the clipboard.
+  //
+  // CRITICAL ordering: window.open() must fire SYNCHRONOUSLY, before any
+  // await, so it stays bound to the tap's transient activation. Awaiting the
+  // clipboard write first (the previous behavior) consumed the activation and
+  // made mobile browsers blank/block the new tab. So: open first, then copy.
+  //
+  // The deep-link fragment (#checkAvailabilityTourBtn / #sendMessageBtn) is
+  // appended on DESKTOP ONLY. Those IDs were verified against apartments.com's
+  // desktop DOM (task #28); on mobile that DOM differs and the unresolved hash
+  // blanked the page (regression from a2c2a3d). The fragment is a harmless
+  // no-op on desktop and a scroll affordance there at worst, so desktop keeps
+  // it; mobile opens the bare listing URL.
+  function openListing(intent: 'contact' | 'tour') {
     if (!sourceUrl) return
     setClipboardError(null)
-    // Fire-and-forget the persistence; we don't await before opening the
-    // tab so the user gesture stays bound to window.open (popup-blocker
-    // safety). The save happens server-side while the new tab loads.
+    const isDesktop =
+      typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+    const anchor = intent === 'tour' ? '#checkAvailabilityTourBtn' : '#sendMessageBtn'
+    // Open synchronously to preserve user activation. Drop the windowFeatures
+    // string ('noopener,noreferrer') — it can degrade the new tab into a blank
+    // popup on mobile; null the opener manually for the same security instead.
+    const win = window.open(isDesktop ? sourceUrl + anchor : sourceUrl, '_blank')
+    if (win) win.opener = null
+    // Now do the non-urgent, activation-independent work (fire-and-forget).
     if (isEdited) void saveEditIfChanged()
     if (shortMessage) {
-      try {
-        await navigator.clipboard.writeText(shortMessage)
-      } catch {
+      navigator.clipboard.writeText(shortMessage).catch(() => {
         setClipboardError(
           'Couldn’t copy automatically. Use the Copy link on the message below before going to apartments.com.'
         )
-      }
+      })
     }
-    // Anchor IDs verified against apartments.com's live DOM (Aera listing,
-    // 2026-06-18). Both buttons live in <div class="ctaContainer"> within
-    // the stickyContactRightRail; on desktop they're always in view, on
-    // mobile this fragment scrolls them into view.
-    const anchor = intent === 'tour' ? '#checkAvailabilityTourBtn' : '#sendMessageBtn'
-    window.open(sourceUrl + anchor, '_blank', 'noopener,noreferrer')
   }
 
   // Explicit "Copy" button next to the message preview copies the FULL
