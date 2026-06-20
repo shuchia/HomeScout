@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 /* ──────────────────────────── constants ──────────────────────────── */
@@ -858,9 +859,9 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <a href="/" className="block text-center py-3 rounded-xl border-2 border-[var(--color-primary)] text-[var(--color-primary)] font-semibold hover:bg-[var(--color-primary)] hover:text-white transition">
+              <Link href="/" className="block text-center py-3 rounded-xl border-2 border-[var(--color-primary)] text-[var(--color-primary)] font-semibold hover:bg-[var(--color-primary)] hover:text-white transition">
                 Get Started Free
-              </a>
+              </Link>
             </div>
             <div className="p-8 rounded-2xl bg-white border-2 border-[var(--color-primary)] shadow-lg flex flex-col relative">
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-0.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-semibold">
@@ -877,9 +878,9 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <a href="/" className="block text-center py-3 rounded-xl bg-[var(--color-primary)] text-white font-semibold hover:bg-[var(--color-primary-light)] transition">
+              <Link href="/" className="block text-center py-3 rounded-xl bg-[var(--color-primary)] text-white font-semibold hover:bg-[var(--color-primary-light)] transition">
                 Start with Invite Code
-              </a>
+              </Link>
             </div>
           </div>
         </div>

@@ -61,4 +61,4 @@ resend==2.5.1
 
 # Development
 pytest==8.0.0
-pytest-asyncio==0.23.3
+pytest-asyncio==0.23.8

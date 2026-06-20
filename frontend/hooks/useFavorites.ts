@@ -81,6 +81,8 @@ export function useFavorites() {
   }, [user])
 
   useEffect(() => {
+    // Intentional: load on mount; loadFavorites sets state (react-hooks v6).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadFavorites()
 
     if (!user) return

@@ -68,6 +68,8 @@ export function OnboardingWalkthrough() {
     if (user && profile && !profile.has_completed_onboarding) {
       // Detect mobile vs desktop and build steps with correct targets
       const isMobile = window.matchMedia('(max-width: 767px)').matches
+      // Intentional: rebuild steps for viewport on first load (react-hooks v6).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSteps(buildSteps(isMobile))
       const timer = setTimeout(() => setRun(true), 1000)
       return () => clearTimeout(timer)

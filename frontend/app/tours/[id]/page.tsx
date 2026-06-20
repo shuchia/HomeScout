@@ -470,8 +470,11 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
 
   // Sync local state when tour updates externally
   useEffect(() => {
+    // Intentional prop→state sync; pre-existing pattern flagged by react-hooks v6.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setPhoneValue(tour.contact_phone || '')
     setEmailValue(tour.contact_email || '')
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [tour.contact_phone, tour.contact_email])
 
   if (!apartment) {
