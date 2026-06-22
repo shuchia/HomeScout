@@ -143,10 +143,14 @@ class CommuteService:
                     "minutes_walk": per_mode["walking"].get((ai, j)),
                 }
                 rows.append(self._row(loc, value))
-                await self._cache_set(
-                    redis, apt["latitude"], apt["longitude"],
-                    loc["latitude"], loc["longitude"], value,
-                )
+                # Only cache successful lookups. Caching an all-None result
+                # (e.g. a transient REQUEST_DENIED or API outage) would poison
+                # the entry for the full 7-day TTL.
+                if any(v is not None for v in value.values()):
+                    await self._cache_set(
+                        redis, apt["latitude"], apt["longitude"],
+                        loc["latitude"], loc["longitude"], value,
+                    )
             result[apt["id"]] = rows
         return result
 
@@ -194,7 +198,9 @@ class CommuteService:
     def _pair_key(alat: float, alng: float, llat: float, llng: float) -> str:
         # Round to ~11m so nearby listings share cache entries.
         raw = f"{round(alat, 4)},{round(alng, 4)},{round(llat, 4)},{round(llng, 4)}"
-        return f"commute:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
+        # v2 prefix invalidates entries poisoned by the early REQUEST_DENIED
+        # period (key was IP/referrer-restricted against the backend).
+        return f"commute:v2:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
     async def _cache_get(
         self, redis: Optional[aioredis.Redis], alat: float, alng: float, llat: float, llng: float,
