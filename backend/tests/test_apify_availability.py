@@ -34,14 +34,16 @@ def test_extracts_earliest_date_from_rentals(scraper):
         models=[
             {"modelId": "m1", "availability": "2 Available units", "availabilityInfo": "Now"},
         ],
+        # Far-future dates keep this test from going stale (past dates collapse
+        # to "Now" by design — see test_past_dates_collapse_to_now).
         rentals=[
-            {"modelId": "m1", "availableDate": "2026-05-01T00:00:00-04:00", "availability": "Now"},
-            {"modelId": "m1", "availableDate": "2026-04-15T00:00:00-04:00", "availability": "Now"},
+            {"modelId": "m1", "availableDate": "2099-05-01T00:00:00-04:00", "availability": "Now"},
+            {"modelId": "m1", "availableDate": "2099-04-15T00:00:00-04:00", "availability": "Now"},
         ],
     )
     listing = scraper._normalize_apartments_com_listing(raw)
     assert listing is not None
-    assert listing.available_date == "2026-04-15"
+    assert listing.available_date == "2099-04-15"
 
 
 # --- Test 2: All units "Now" (no ISO dates) → returns "Now" ---
@@ -81,14 +83,14 @@ def test_mixed_availability(scraper):
             {"modelId": "m2", "availability": "1 Available units", "availabilityInfo": "Now"},
         ],
         rentals=[
-            {"modelId": "m1", "availableDate": "2026-04-01T00:00:00-04:00"},
-            {"modelId": "m2", "availableDate": "2026-06-01T00:00:00-04:00"},
+            {"modelId": "m1", "availableDate": "2099-04-01T00:00:00-04:00"},
+            {"modelId": "m2", "availableDate": "2099-06-01T00:00:00-04:00"},
         ],
     )
     listing = scraper._normalize_apartments_com_listing(raw)
     assert listing is not None
     # m1 has no availability, so its rental is ignored; only m2's date is used
-    assert listing.available_date == "2026-06-01"
+    assert listing.available_date == "2099-06-01"
 
 
 # --- Test 5: No models/rentals arrays → returns None ---
@@ -124,13 +126,13 @@ def test_multiple_rentals_picks_earliest(scraper):
             {"modelId": "m1", "availability": "3 Available units"},
         ],
         rentals=[
-            {"modelId": "m1", "availableDate": "2026-07-01T00:00:00-04:00"},
-            {"modelId": "m1", "availableDate": "2026-05-15T00:00:00-04:00"},
-            {"modelId": "m1", "availableDate": "2026-06-01T00:00:00-04:00"},
+            {"modelId": "m1", "availableDate": "2099-07-01T00:00:00-04:00"},
+            {"modelId": "m1", "availableDate": "2099-05-15T00:00:00-04:00"},
+            {"modelId": "m1", "availableDate": "2099-06-01T00:00:00-04:00"},
         ],
     )
     listing = scraper._normalize_apartments_com_listing(raw)
-    assert listing.available_date == "2026-05-15"
+    assert listing.available_date == "2099-05-15"
 
 
 # --- Test 14: Rental modelId not in models array → ignored ---
