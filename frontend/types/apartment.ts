@@ -94,6 +94,35 @@ export interface Apartment {
   first_seen_at?: string;
   times_seen?: number;
   distance_miles?: number | null;
+  /** Commute times to the user's saved work/school locations. Populated on
+   * demand by the commute endpoint on shortlist views (tour/compare/favorites). */
+  commute_times?: CommuteTime[] | null;
+}
+
+/**
+ * A saved work/school address used by the commute calculator.
+ * Matches backend UserLocation model.
+ */
+export interface UserLocation {
+  id: string;
+  location_type: 'work' | 'school';
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  created_at?: string | null;
+}
+
+/**
+ * Commute from an apartment to one saved location.
+ * Matches backend CommuteTime model. Any mode may be null when unroutable.
+ */
+export interface CommuteTime {
+  label: string;
+  location_type: string;
+  minutes_drive?: number | null;
+  minutes_transit?: number | null;
+  minutes_walk?: number | null;
 }
 
 /**

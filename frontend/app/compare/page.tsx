@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import UpgradePrompt from '@/components/UpgradePrompt'
 import { compareApartments, ApiError, CompareResponse } from '@/lib/api'
 import { Apartment, ComparisonAnalysis, SearchContext } from '@/types/apartment'
+import { commuteModeLine } from '@/components/CommutePanel'
+import { useCommuteTimes } from '@/lib/useCommuteTimes'
 
 const formatRent = (rent: number): string =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(rent)
@@ -34,6 +36,9 @@ export default function ComparePage() {
   const [error, setError] = useState<string | null>(null)
   const [preferences, setPreferences] = useState('')
   const [analysis, setAnalysis] = useState<ComparisonAnalysis | null>(null)
+
+  // Commute times to the user's saved work/school addresses.
+  const { byApt: commuteByApt, hasLocations } = useCommuteTimes(apartments.map((a) => a.id))
 
   // Pre-fill preferences from search context
   useEffect(() => {
@@ -651,11 +656,37 @@ export default function ComparePage() {
                       <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Distance</td>
                       {apartments.map((apt) => (
                         <td key={`dist-${apt.id}`} className="px-6 py-4 text-center border-l border-gray-200 text-gray-700">
-                          {(apt as any).distance_miles != null
-                            ? `${(apt as any).distance_miles} mi`
+                          {apt.distance_miles != null
+                            ? `${apt.distance_miles} mi`
                             : '—'}
                         </td>
                       ))}
+                    </tr>
+                  )}
+
+                  {/* Commute Row (saved work/school addresses) */}
+                  {hasLocations && (
+                    <tr>
+                      <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900 align-top">Commute</td>
+                      {apartments.map((apt) => {
+                        const rows = commuteByApt[apt.id]
+                        return (
+                          <td key={`commute-${apt.id}`} className="px-6 py-4 border-l border-gray-200 align-top">
+                            {rows && rows.length > 0 ? (
+                              <ul className="space-y-2 text-left inline-block">
+                                {rows.map((c) => (
+                                  <li key={`${c.location_type}-${c.label}`}>
+                                    <span className="block text-sm font-medium text-gray-800">{c.label}</span>
+                                    <span className="block text-xs text-gray-500">{commuteModeLine(c)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                        )
+                      })}
                     </tr>
                   )}
 
@@ -781,7 +812,7 @@ function AvailabilityCell({ availableDate, sourceUrl }: { availableDate?: string
     )
   }
 
-  const ViewUnitsLink = () => sourceUrl ? (
+  const viewUnitsLink = sourceUrl ? (
     <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="block text-xs text-[var(--color-primary)] hover:underline mt-0.5">
       View units &rarr;
     </a>
@@ -791,7 +822,7 @@ function AvailabilityCell({ availableDate, sourceUrl }: { availableDate?: string
     return (
       <div>
         <span className="text-sm text-green-600 font-medium">Available now</span>
-        <ViewUnitsLink />
+        {viewUnitsLink}
       </div>
     )
   }
@@ -806,7 +837,7 @@ function AvailabilityCell({ availableDate, sourceUrl }: { availableDate?: string
     return (
       <div>
         <span className="text-sm text-green-600 font-medium">Available now</span>
-        <ViewUnitsLink />
+        {viewUnitsLink}
       </div>
     )
   }
@@ -816,7 +847,7 @@ function AvailabilityCell({ availableDate, sourceUrl }: { availableDate?: string
       <span className="text-sm text-gray-700">
         {parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
       </span>
-      <ViewUnitsLink />
+      {viewUnitsLink}
     </div>
   )
 }

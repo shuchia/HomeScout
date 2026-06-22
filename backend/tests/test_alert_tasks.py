@@ -16,12 +16,30 @@ SAMPLE_SEARCH = {
     "is_active": True,
     "notify_new_matches": True,
     "last_alerted_at": None,
-    "profiles": {
-        "user_tier": "pro",
-        "email": "jane@example.com",
-        "name": "Jane",
-    },
 }
+
+
+def _make_supabase(searches, profiles):
+    """Build a Supabase admin mock for the task's two-step fetch:
+      1. saved_searches:  table("saved_searches").select().eq().eq().execute()
+      2. profiles:        table("profiles").select().in_().eq().execute()
+      3. update:          table("saved_searches").update().eq().execute()
+    `table` is keyed by name via side_effect so the two reads don't collide.
+    """
+    searches_tbl = MagicMock()
+    searches_tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=searches)
+    searches_tbl.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{}])
+
+    profiles_tbl = MagicMock()
+    profiles_tbl.select.return_value.in_.return_value.eq.return_value.execute.return_value = MagicMock(data=profiles)
+
+    mock_sb = MagicMock()
+    mock_sb.table.side_effect = lambda name: searches_tbl if name == "saved_searches" else profiles_tbl
+    return mock_sb, searches_tbl
+
+
+# Profile row as returned by the separate profiles query (Pro tier).
+SAMPLE_PROFILE = {"id": "user-123", "user_tier": "pro", "email": "jane@example.com", "name": "Jane"}
 
 SAMPLE_APARTMENT = {
     "id": "apt-001",
@@ -44,10 +62,7 @@ class TestSendDailyAlertsNoSearches:
 
     def test_empty_result(self):
         """Returns 0 when query returns no rows."""
-        mock_sb = MagicMock()
-        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[]
-        )
+        mock_sb, _ = _make_supabase([], [])
 
         with patch("app.services.tier_service.supabase_admin", mock_sb):
             result = send_daily_alerts()
@@ -58,13 +73,7 @@ class TestSendDailyAlertsWithMatches:
     """When searches exist with matching apartments, sends email and updates last_alerted_at."""
 
     def test_sends_email_and_updates(self):
-        mock_sb = MagicMock()
-        # Query returns one saved search
-        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[SAMPLE_SEARCH]
-        )
-        # Update call chain
-        mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{}])
+        mock_sb, searches_tbl = _make_supabase([SAMPLE_SEARCH], [SAMPLE_PROFILE])
 
         mock_service = MagicMock()
         mock_service.search_apartments.return_value = [SAMPLE_APARTMENT]
@@ -88,7 +97,7 @@ class TestSendDailyAlertsWithMatches:
         assert "123 Main St" in call_args["text"]
 
         # Verify last_alerted_at was updated
-        mock_sb.table.return_value.update.assert_called_once()
+        searches_tbl.update.assert_called_once()
 
 
 class TestSendDailyAlertsFiltering:
@@ -100,10 +109,7 @@ class TestSendDailyAlertsFiltering:
             "last_alerted_at": "2026-02-23T00:00:00+00:00",  # After apartment first_seen_at
         }
 
-        mock_sb = MagicMock()
-        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[search_with_recent_alert]
-        )
+        mock_sb, _ = _make_supabase([search_with_recent_alert], [SAMPLE_PROFILE])
 
         mock_service = MagicMock()
         # Apartment was first seen before last_alerted_at, so it should be filtered out
@@ -126,15 +132,10 @@ class TestSendDailyAlertsResendFailure:
     """When resend fails, logs error and continues to next search."""
 
     def test_continues_on_failure(self):
-        search2 = {**SAMPLE_SEARCH, "id": "ss-002", "profiles": {
-            "user_tier": "pro", "email": "bob@example.com", "name": "Bob",
-        }}
+        search2 = {**SAMPLE_SEARCH, "id": "ss-002", "user_id": "user-456"}
+        profile2 = {"id": "user-456", "user_tier": "pro", "email": "bob@example.com", "name": "Bob"}
 
-        mock_sb = MagicMock()
-        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[SAMPLE_SEARCH, search2]
-        )
-        mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{}])
+        mock_sb, _ = _make_supabase([SAMPLE_SEARCH, search2], [SAMPLE_PROFILE, profile2])
 
         mock_service = MagicMock()
         mock_service.search_apartments.return_value = [SAMPLE_APARTMENT]

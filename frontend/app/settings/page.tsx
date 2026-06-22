@@ -3,6 +3,7 @@ import { Suspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { createBillingPortalSession } from '@/lib/api'
+import CommuteAddresses from '@/components/CommuteAddresses'
 
 function SettingsContent() {
   const { user, profile, loading, profileLoading, isPro, tier, signOut, refreshProfile } = useAuth()
@@ -113,6 +114,9 @@ function SettingsContent() {
           )}
         </div>
       </section>
+
+      {/* Commute Addresses */}
+      <CommuteAddresses />
 
       {/* Data Section */}
       <section className="bg-white rounded-lg border p-6 mb-6">

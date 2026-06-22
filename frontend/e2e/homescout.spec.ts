@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import type { SearchResponse } from '../types/apartment';
 
 // ─── Mock Data ───────────────────────────────────────────────────────
 
@@ -202,7 +203,7 @@ async function mockAuth(page: Page, options?: { favorites?: object[] }) {
 }
 
 /** Intercept search API and return mock data */
-async function mockSearchApi(page: Page, response = MOCK_SEARCH_RESPONSE) {
+async function mockSearchApi(page: Page, response: SearchResponse = MOCK_SEARCH_RESPONSE) {
   await page.route('**/api/search', async (route) => {
     await route.fulfill({
       status: 200,
