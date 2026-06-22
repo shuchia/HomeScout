@@ -109,6 +109,16 @@ async def redeem_invite_code(
             "user_id": user.user_id,
         }).execute()
 
+        # Funnel signal: code-redemption is the entry point into the Pro
+        # cohort. Logged here vs in the analytics bridge endpoint because
+        # this server-side handler is the canonical "happened" moment.
+        from app.services.analytics_service import AnalyticsService
+        await AnalyticsService.log_event(
+            "redeem",
+            user_id=user.user_id,
+            metadata={"code": code},
+        )
+
         logger.info(f"User {user.user_id} redeemed invite code {code}")
         return RedeemResponse(
             success=True,
