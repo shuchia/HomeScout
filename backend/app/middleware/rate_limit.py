@@ -14,7 +14,7 @@ GLOBAL_LIMIT = 120      # requests per minute per user
 EXPENSIVE_LIMIT = 20    # requests per minute for search/compare
 ANON_LIMIT = 30         # requests per minute for anonymous
 
-EXPENSIVE_PATHS = {"/api/search", "/api/apartments/compare"}
+EXPENSIVE_PATHS = {"/api/search", "/api/apartments/compare", "/api/apartments/commute"}
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

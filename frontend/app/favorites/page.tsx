@@ -4,6 +4,8 @@ import { useFavorites } from '@/hooks/useFavorites'
 import { useAuth } from '@/contexts/AuthContext'
 import ApartmentCard from '@/components/ApartmentCard'
 import { TourPrompt } from '@/components/TourPrompt'
+import CommutePanel, { CommutePrompt } from '@/components/CommutePanel'
+import { useCommuteTimes } from '@/lib/useCommuteTimes'
 import Link from 'next/link'
 import { Apartment, ApartmentWithScore } from '@/types/apartment'
 import { listTours } from '@/lib/api'
@@ -22,6 +24,9 @@ export default function FavoritesPage() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth()
   const { favorites, loading } = useFavorites()
   const [touringApartmentIds, setTouringApartmentIds] = useState<Set<string>>(new Set())
+  const { byApt: commuteByApt, hasLocations } = useCommuteTimes(
+    favorites.filter(f => f.apartment).map(f => f.apartment_id)
+  )
 
   useEffect(() => {
     if (!user) return
@@ -68,6 +73,12 @@ export default function FavoritesPage() {
     <div className="max-w-6xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">My Favorites</h1>
 
+      {!loading && favorites.length > 0 && hasLocations === false && (
+        <div className="mb-4">
+          <CommutePrompt />
+        </div>
+      )}
+
       {loading ? (
         <div className="grid gap-6 sm:grid-cols-2">
           {[1, 2, 3].map(i => (
@@ -109,6 +120,11 @@ export default function FavoritesPage() {
               {fav.apartment ? (
                 <>
                   <ApartmentCard apartment={toApartmentWithScore(fav.apartment)} />
+                  {commuteByApt[fav.apartment_id]?.length ? (
+                    <div className="mt-2">
+                      <CommutePanel commutes={commuteByApt[fav.apartment_id]} />
+                    </div>
+                  ) : null}
                   <div className="mt-2">
                     <TourPrompt
                       apartmentId={fav.apartment_id}

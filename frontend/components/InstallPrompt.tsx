@@ -53,6 +53,8 @@ export function InstallPrompt() {
 
   useEffect(() => {
     if (isStandalone() || recentlyDismissed()) {
+      // Intentional one-time mount check; pre-existing pattern (react-hooks v6).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDismissed(true)
       return
     }

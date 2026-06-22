@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import StarRating from '@/components/StarRating'
 import TagPicker, { TagSuggestion } from '@/components/TagPicker'
 import { TourScheduler } from '@/components/TourScheduler'
+import CommutePanel, { CommutePrompt } from '@/components/CommutePanel'
+import { useCommuteTimes } from '@/lib/useCommuteTimes'
 import {
   getTour,
   updateTour,
@@ -444,6 +446,10 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
   const [phoneValue, setPhoneValue] = useState(tour.contact_phone || '')
   const [emailValue, setEmailValue] = useState(tour.contact_email || '')
 
+  // Commute times to the user's saved work/school addresses (hook must run
+  // before the early return below).
+  const { byApt, hasLocations } = useCommuteTimes(apartment ? [apartment.id] : [])
+
   async function savePhone(value: string) {
     const trimmed = value.trim()
     try {
@@ -464,8 +470,11 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
 
   // Sync local state when tour updates externally
   useEffect(() => {
+    // Intentional prop→state sync; pre-existing pattern flagged by react-hooks v6.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setPhoneValue(tour.contact_phone || '')
     setEmailValue(tour.contact_email || '')
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [tour.contact_phone, tour.contact_email])
 
   if (!apartment) {
@@ -483,6 +492,13 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
         <Stat label="Type" value={apartment.property_type || 'N/A'} />
         <Stat label="Available" value={apartment.available_date || 'N/A'} />
       </div>
+
+      {/* Commute times to saved work/school addresses */}
+      {byApt[apartment.id]?.length ? (
+        <CommutePanel commutes={byApt[apartment.id]} />
+      ) : hasLocations === false ? (
+        <CommutePrompt />
+      ) : null}
 
       {/* Contact Info */}
       <section>

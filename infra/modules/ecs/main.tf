@@ -44,6 +44,12 @@ locals {
     "SCRAPINGBEE_API_KEY",
     "OPENAI_API_KEY",
     "ADMIN_API_KEY",
+    # PREREQUISITE: GOOGLE_MAPS_API_KEY must exist in the env's Secrets Manager
+    # secret BEFORE this applies — ECS fails to start a task that references a
+    # missing secret key. Provision `snugd/{env}/secrets:GOOGLE_MAPS_API_KEY`
+    # first. The backend fails open if it's absent, so the feature just stays
+    # dormant until provisioned.
+    "GOOGLE_MAPS_API_KEY",
   ]
 
   secrets = [

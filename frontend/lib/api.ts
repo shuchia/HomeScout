@@ -3,7 +3,7 @@
  * Handles all communication with the FastAPI server
  */
 
-import { SearchParams, SearchResponse, HealthResponse, Apartment, SearchContext, ComparisonAnalysis } from '@/types/apartment';
+import { SearchParams, SearchResponse, HealthResponse, Apartment, SearchContext, ComparisonAnalysis, UserLocation, CommuteTime } from '@/types/apartment';
 import { Tour, TourTag, TourNote } from '@/types/tour';
 import { getAccessToken, isTokenExpiringSoon, refreshAccessToken } from './auth-store';
 
@@ -107,6 +107,79 @@ export async function searchApartments(params: SearchParams & { page?: number; p
       error instanceof Error ? error.message : 'Unknown error'
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Commute calculator
+// ---------------------------------------------------------------------------
+
+/**
+ * List the current user's saved work/school locations.
+ * Calls GET /api/user/locations (auth required). Returns [] if not signed in.
+ */
+export async function listUserLocations(): Promise<UserLocation[]> {
+  const response = await fetchWithAuth(`${API_URL}/api/user/locations`);
+  if (!response.ok) return [];
+  const data = await response.json();
+  return data.locations ?? [];
+}
+
+/**
+ * Save a new work/school location (geocoded client-side via geocodeSearch).
+ * Calls POST /api/user/locations (auth required).
+ * @throws ApiError on failure (e.g. 409 duplicate label)
+ */
+export async function createUserLocation(input: {
+  location_type: 'work' | 'school';
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+}): Promise<UserLocation> {
+  const response = await fetchWithAuth(`${API_URL}/api/user/locations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new ApiError(err.detail || 'Failed to save location', response.status);
+  }
+  const data = await response.json();
+  return data.location;
+}
+
+/**
+ * Delete a saved location by id.
+ * Calls DELETE /api/user/locations/{id} (auth required).
+ */
+export async function deleteUserLocation(locationId: string): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/api/user/locations/${locationId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new ApiError(err.detail || 'Failed to delete location', response.status);
+  }
+}
+
+/**
+ * Fetch commute times for a set of apartments to the user's saved locations.
+ * Calls POST /api/apartments/commute. Returns a map of apartment_id -> rows.
+ * Returns {} for anonymous users or users with no saved locations (no error).
+ */
+export async function getCommuteTimes(
+  apartmentIds: string[]
+): Promise<Record<string, CommuteTime[]>> {
+  if (apartmentIds.length === 0) return {};
+  const response = await fetchWithAuth(`${API_URL}/api/apartments/commute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apartment_ids: apartmentIds }),
+  });
+  if (!response.ok) return {};
+  const data = await response.json();
+  return data.commute_times ?? {};
 }
 
 /**

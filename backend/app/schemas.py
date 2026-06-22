@@ -60,6 +60,41 @@ class CostBreakdown(BaseModel):
     sources: CostSources = Field(default_factory=CostSources)
 
 
+class CommuteTime(BaseModel):
+    """Commute from an apartment to one saved work/school location.
+
+    Any mode may be None when Google can't route it (e.g. no transit available).
+    Computed on demand for the shortlist views (tour detail, compare, favorites).
+    """
+    label: str
+    location_type: str  # 'work' | 'school'
+    minutes_drive: Optional[int] = None
+    minutes_transit: Optional[int] = None
+    minutes_walk: Optional[int] = None
+
+
+class UserLocationCreate(BaseModel):
+    """Request body for saving a work/school address (geocoded client-side)."""
+    location_type: str = Field(..., description="'work' or 'school'")
+    label: str = Field(..., min_length=1, max_length=80)
+    address: str = Field(..., min_length=1, max_length=300)
+    latitude: float
+    longitude: float
+
+    @field_validator("location_type")
+    @classmethod
+    def _valid_type(cls, v: str) -> str:
+        if v not in ("work", "school"):
+            raise ValueError("location_type must be 'work' or 'school'")
+        return v
+
+
+class UserLocation(UserLocationCreate):
+    """A saved work/school address as returned to the client."""
+    id: str
+    created_at: Optional[str] = None
+
+
 class Apartment(BaseModel):
     """Model for apartment listing"""
     id: str
@@ -90,6 +125,9 @@ class Apartment(BaseModel):
     pricing_model: Optional[str] = None
     # Proximity (populated when near_lat/near_lng provided in search)
     distance_miles: Optional[float] = None
+    # Commute times to the user's saved work/school locations (populated by the
+    # commute endpoint on the shortlist views; like distance_miles, lazy).
+    commute_times: Optional[List[CommuteTime]] = None
 
     class Config:
         json_schema_extra = {

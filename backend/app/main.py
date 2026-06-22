@@ -32,6 +32,8 @@ from app.routers.tours import router as tours_router
 from app.routers.invite import router as invite_router
 from app.routers.feedback import router as feedback_router
 from app.routers.waitlist import router as waitlist_router
+from app.routers.commute import router as commute_router
+from app.routers.beta_admin import router as beta_admin_router
 from app.database import is_database_enabled, init_db, close_db
 
 # Configure logging
@@ -108,6 +110,10 @@ app.include_router(tours_router)
 app.include_router(invite_router)
 app.include_router(feedback_router)
 app.include_router(waitlist_router)
+app.include_router(beta_admin_router)
+# Commute router before apartments_router: its POST /api/apartments/commute must
+# be matched ahead of apartments_router's GET /{apartment_id} catch-all.
+app.include_router(commute_router)
 
 # Initialize services
 apartment_service = ApartmentService()
