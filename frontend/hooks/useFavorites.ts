@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase, Favorite } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { getApartmentsBatch } from '@/lib/api'
+import { getApartmentsBatch, logAnalyticsEvent } from '@/lib/api'
 import { Apartment } from '@/types/apartment'
 
 interface FavoriteWithApartment extends Favorite {
@@ -138,6 +138,10 @@ export function useFavorites() {
       return false
     }
 
+    // Fire-and-forget analytics event. Never blocks the user's action
+    // or surfaces an error if the bridge endpoint is down.
+    logAnalyticsEvent('favorite-add', { apartment_id: apartmentId })
+
     // Refresh to get full data including apartment details
     await loadFavorites()
     return true
@@ -164,6 +168,9 @@ export function useFavorites() {
       setFavorites(previousFavorites)
       return false
     }
+
+    // Fire-and-forget analytics event (favorite-remove).
+    logAnalyticsEvent('favorite-remove', { apartment_id: apartmentId })
 
     return true
   }

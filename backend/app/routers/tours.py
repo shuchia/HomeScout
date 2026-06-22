@@ -490,6 +490,19 @@ async def create_tour(
             .execute()
         )
         tour = result.data[0] if result.data else row
+
+        # Funnel signal: tour-add is a strong-intent step (user has
+        # committed to physically visiting). Track for conversion analysis.
+        from app.services.analytics_service import AnalyticsService
+        await AnalyticsService.log_event(
+            "tour-add",
+            user_id=user.user_id,
+            metadata={
+                "apartment_id": body.apartment_id,
+                "tour_id": tour.get("id"),
+            },
+        )
+
         return {"tour": _build_tour_response(tour)}
     except HTTPException:
         raise
@@ -769,6 +782,16 @@ async def generate_inquiry_email(
         supabase_admin.table("tour_pipeline").update(
             {"inquiry_email_draft": draft_text}
         ).eq("id", tour_id).eq("user_id", user.user_id).execute()
+
+        # Funnel signal: message-generated is the last AI step before the
+        # user actually reaches out. Tracking it lets us see the
+        # tour-add → message → outreach-sent conversion in the beta report.
+        from app.services.analytics_service import AnalyticsService
+        await AnalyticsService.log_event(
+            "message-generated",
+            user_id=user.user_id,
+            metadata={"tour_id": tour_id, "apartment_id": apartment_id},
+        )
 
         return {
             "subject": email_result["subject"],

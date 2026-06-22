@@ -719,6 +719,28 @@ export async function createBillingPortalSession(): Promise<{ url: string }> {
   return res.json();
 }
 
+/**
+ * Fire-and-forget analytics event logger. Never throws and never blocks
+ * the user's primary action — if the bridge endpoint is down the event
+ * just doesn't land. Allowed event types are whitelisted server-side in
+ * routers/analytics.py (currently favorite-add, favorite-remove). Other
+ * actions (redeem, tour-add, message-generated) log server-side at the
+ * route that performs them — don't call this for those.
+ */
+export function logAnalyticsEvent(
+  eventType: string,
+  metadata?: Record<string, unknown>,
+): void {
+  // Don't await; don't surface errors.
+  void fetchWithAuth(`${API_URL}/api/analytics/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_type: eventType, metadata: metadata || {} }),
+  }).catch(() => {
+    // Swallow — analytics failures should never affect the user.
+  });
+}
+
 // Feedback endpoint
 export async function submitFeedback(data: {
   type: 'bug' | 'suggestion' | 'general';
