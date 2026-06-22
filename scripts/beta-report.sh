@@ -36,15 +36,18 @@ JSON=$(curl -sS -fL --max-time 30 \
   -H "X-Admin-Key: $ADMIN_KEY" \
   "${BASE_URL}/api/admin/beta-report?days=${DAYS}&top_n=${TOP_N}")
 
-# Pipe through Python for markdown formatting. Inlined here (vs a separate
-# .py file) so the script is one self-contained deliverable.
-echo "$JSON" | python3 - "$ENV" "$DAYS" <<'PYEOF'
-import json, sys
+# Pass JSON to Python via env var (not stdin) because `python3 - <<EOF`
+# binds the heredoc to stdin, leaving no channel for the JSON. Env vars
+# are byte-safe and keep this self-contained — no temp file or .py file.
+export _REPORT_JSON="$JSON"
+
+python3 - "$ENV" "$DAYS" <<'PYEOF'
+import json, os, sys
 from datetime import datetime
 
 env = sys.argv[1]
 days = sys.argv[2]
-data = json.load(sys.stdin)
+data = json.loads(os.environ["_REPORT_JSON"])
 
 def fmt_dt(s):
     if not s:
