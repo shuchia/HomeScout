@@ -14,7 +14,6 @@
 
 ## Planned
 
-- **Neighborhood insights** — walkability, transit, safety scores via a third-party API on apartment detail pages.
 - **Commute calculator** — Google Distance Matrix or Mapbox; user adds work/school addresses, listings show transit/drive time.
 - **Tour pipeline polish from beta feedback** — `FeedbackWidget` is collecting beta signal; triage and ship the high-value fixes once volume warrants.
 - **Weekly + price-drop email digests** — extend the existing daily Pro alert task to add weekly summaries and price-drop notifications on saved searches.
@@ -31,6 +30,7 @@
 
 ## Dropped / Done Differently
 
+- **Neighborhood safety / crime scores** — shelved 2026-06-23 over fair-housing risk. Walkability + transit shipped via apartments.com enrichment (`walk_score`/`transit_score`), and the commute calculator covers the "is it well-connected" need. Crime/safety scores deliberately dropped: Redfin/Trulia/Realtor.com pulled crime data, HUD warns of disparate-impact liability, and the underlying data is noisy. Revisit only after a fair-housing legal review.
 - **Milestone 3 polish** (image carousel refinement, transitions, cross-browser) — folded into ongoing UI work; embla carousel is stable.
 - **Notes per apartment** — shipped as part of the touring pipeline (`tour_notes`).
 - **Viewing appointment scheduler** — shipped as `TourScheduler` + `tour_pipeline.scheduled_at`.
