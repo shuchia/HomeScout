@@ -230,6 +230,28 @@ async def beta_report(
         if uid:
             saved_by_user[uid] += 1
 
+    # ── Per-user event funnel (analytics_events split by user × type) ──
+    # Lets the report answer "Bharath searched 12 times but never added a
+    # tour" — the kind of post-redemption friction signal you can't see
+    # from the tour_pipeline aggregates alone (which only show tours that
+    # WERE created, not what happened before that).
+    events_per_user: Dict[str, Counter] = defaultdict(Counter)
+    try:
+        per_user_events_resp = (
+            supabase_admin.table("analytics_events")
+            .select("event_type,user_id,created_at")
+            .gte("created_at", cutoff_iso)
+            .in_("user_id", user_filter)
+            .execute()
+        )
+        for ev in (per_user_events_resp.data or []):
+            uid = ev.get("user_id")
+            etype = ev.get("event_type") or "unknown"
+            if uid:
+                events_per_user[uid][etype] += 1
+    except Exception as e:
+        logger.warning(f"per-user analytics_events aggregation skipped: {e}")
+
     # ── Top N most-active users (by tours + notes + photos + saved) ───
     activity_score: Dict[str, int] = {}
     for uid in redeemer_ids:
@@ -241,9 +263,24 @@ async def beta_report(
         )
     ranked = sorted(activity_score.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
 
+    # Event types we surface in the per-user funnel — keeps the report
+    # focused on the actual funnel steps (vs every analytics_events key).
+    # Any other event type still shows in the cohort-wide
+    # analytics_events.by_type_in_window aggregate below.
+    FUNNEL_EVENT_TYPES = (
+        "search",
+        "compare",
+        "favorite-add",
+        "tour-add",
+        "message-generated",
+        "redeem",
+    )
+
     top_users: List[Dict[str, Any]] = []
     for uid, score in ranked:
         p = profiles_by_id.get(uid, {})
+        ev_counts = events_per_user.get(uid, Counter())
+        funnel = {etype: ev_counts.get(etype, 0) for etype in FUNNEL_EVENT_TYPES}
         top_users.append({
             "user_id": uid,
             "email": p.get("email"),
@@ -255,6 +292,7 @@ async def beta_report(
             "saved_searches": saved_by_user.get(uid, 0),
             "activity_score": score,
             "last_active": most_recent_by_user.get(uid),
+            "funnel_events": funnel,
         })
 
     # ── Beta feedback (recent first) ──────────────────────────────────
