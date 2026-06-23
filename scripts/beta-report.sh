@@ -111,7 +111,7 @@ print(f"- Analytics events in window: **{ev.get('total_in_window', 0)}** "
       f"({', '.join(f'{k}={v}' for k, v in (ev.get('by_type_in_window') or {}).items()) or '—'})")
 print()
 
-# ─── Top users ─────────────────────────────────────────────────────
+# ─── Top users (engagement quality) ────────────────────────────────
 top = data.get("top_users") or []
 print(f"## Top {len(top)} most-active beta users\n")
 if not top:
@@ -123,6 +123,24 @@ else:
         label = u.get("email") or u.get("name") or (u.get("user_id") or "—")[:8] + "…"
         tier = u.get("tier") or "?"
         print(f"| {label} _(t:{tier})_ | {u['tours']} | {u['notes']} | {u['photos']} | {u['saved_searches']} | **{u['activity_score']}** | {fmt_dt(u.get('last_active'))} |")
+    print()
+
+# ─── Per-user funnel (event counts in lookback window) ─────────────
+# Different signal than the engagement table above: engagement counts
+# what got *created* (tour rows, notes, photos); funnel counts what
+# got *attempted* (search, compare, favorite, tour-add). A redeemer
+# with 12 searches and 0 tour-adds is a different story than one with
+# 0 of everything.
+print(f"## Per-user funnel (event counts, last {days} days)\n")
+if not top:
+    print("_(no users)_\n")
+else:
+    print("| User | 🔍 Search | ⚖️ Compare | ❤️ Fav | 🏠 Tour-add | ✉️ Msg | 🎟 Redeem |")
+    print("|---|---:|---:|---:|---:|---:|---:|")
+    for u in top:
+        label = u.get("email") or u.get("name") or (u.get("user_id") or "—")[:8] + "…"
+        f = u.get("funnel_events") or {}
+        print(f"| {label} | {f.get('search', 0)} | {f.get('compare', 0)} | {f.get('favorite-add', 0)} | {f.get('tour-add', 0)} | {f.get('message-generated', 0)} | {f.get('redeem', 0)} |")
     print()
 
 # ─── Feedback ──────────────────────────────────────────────────────
