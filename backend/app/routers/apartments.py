@@ -415,11 +415,13 @@ async def compare_apartments(
                             search_context=search_ctx,
                             model=selected_model,
                         ),
-                        # Haiku finishes in ~15s typical; Sonnet in ~35s.
-                        # Keep the timeout generous to absorb tail latency
-                        # but tighter than the previous 45s since Haiku
-                        # shouldn't approach that.
-                        timeout=50.0 if selected_model == claude.MODEL_DEEP else 25.0,
+                        # Haiku first-call median ~18-19s, Sonnet ~35s — but
+                        # LLM tail latency runs 1.5-2x the median, so the prior
+                        # 25s Haiku cap silently dropped slow first-calls (and
+                        # never cached them, so retries re-paid). Generous
+                        # ceilings absorb the tail and let results get cached;
+                        # both stay under the ALB idle_timeout (120s).
+                        timeout=90.0 if selected_model == claude.MODEL_DEEP else 45.0,
                     )
                 comparison_analysis = ComparisonAnalysis(**raw_analysis)
 

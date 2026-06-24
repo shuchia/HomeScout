@@ -5,6 +5,10 @@ resource "aws_lb" "main" {
   security_groups    = [var.security_group_id]
   subnets            = var.public_subnet_ids
 
+  # Default is 60s; AI compare/score calls (Claude) can run ~45-90s on a
+  # first uncached hit, so give them room rather than letting the LB 504.
+  idle_timeout = 120
+
   tags = {
     Name        = "snugd-${var.environment}"
     Environment = var.environment
