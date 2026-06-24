@@ -18,6 +18,14 @@ from app.services.scrapers.base_scraper import (
 
 logger = logging.getLogger(__name__)
 
+# NYC covers 5 boroughs across these zip prefixes:
+#   100-102 Manhattan, 103 Staten Island, 104 Bronx,
+#   110-111+113-114 Queens, 112 Brooklyn.
+# 115-119 are Long Island (Nassau/Suffolk) — NOT NYC, intentionally
+# excluded so suburban listings don't get mis-tagged as NYC.
+_NYC_ZIP_PREFIXES = frozenset({"100", "101", "102", "103", "104",
+                               "110", "111", "112", "113", "114"})
+
 
 class ApifyService(BaseScraper):
     """
@@ -544,6 +552,26 @@ class ApifyService(BaseScraper):
         state = location.get("state", "") or raw.get("state", "")
         zip_code = location.get("postalCode", "") or raw.get("zipCode", "")
         neighborhood = location.get("neighborhood", "") or raw.get("neighborhood", "")
+
+        # Normalize NYC borough / neighborhood city values to "New York" so
+        # users searching "New York, NY" find all 5 boroughs. apartments.com
+        # surfaces 14+ distinct city values for what's all NYC (Brooklyn,
+        # Bronx, Astoria, Long Island City, Jamaica, Flushing, ...) — without
+        # this normalization, ~half of NYC listings are invisible to the
+        # search filter `ApartmentModel.city ILIKE 'New York'`. The clean
+        # signal is the zip prefix: NYC covers 100-104 + 110-114.
+        # Original city is preserved as `neighborhood` so display still
+        # shows "Brooklyn, NY" / "Astoria, NY" on the card.
+        if (
+            state == "NY"
+            and zip_code
+            and zip_code[:3] in _NYC_ZIP_PREFIXES
+            and city
+            and city.strip().lower() != "new york"
+        ):
+            if not neighborhood:
+                neighborhood = city
+            city = "New York"
 
         # Handle coordinates
         coords = raw.get("coordinates", {})
