@@ -3,7 +3,7 @@ Celery tasks for maintenance and cleanup operations.
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Any, Dict, List
 
 from app.celery_app import celery_app
 from app.database import get_session_context, is_database_enabled
@@ -700,4 +700,79 @@ async def _backfill_extended_fields(batch_size: int, only_missing: bool) -> Dict
         "scanned": scanned,
         "updated": updated,
         "skipped_no_raw": skipped_no_raw,
+    }
+
+
+# NYC covers these zip prefixes (5 boroughs). Mirrors the constant in
+# apify_service.py; duplicated here so the backfill is self-contained
+# and doesn't pull in the scraper module.
+_NYC_ZIP_PREFIXES = ("100", "101", "102", "103", "104",
+                     "110", "111", "112", "113", "114")
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=600)
+def backfill_nyc_city_normalization(self) -> Dict[str, Any]:
+    """One-shot fix for the borough city-name issue.
+
+    apartments.com tags NYC listings with 14+ distinct city values
+    (Brooklyn, Bronx, Astoria, Long Island City, Jamaica, Flushing, ...)
+    — only "New York" matches the search filter, so ~half of NYC was
+    invisible to users searching the city. The scraper now normalizes
+    on write (apify_service.py); this task fixes existing rows.
+
+    Logic: for every active listing with state=NY and zip prefix in
+    the NYC set AND city != "New York", move the current city into
+    `neighborhood` (if neighborhood is empty) and set city="New York".
+    """
+    if not is_database_enabled():
+        return {"status": "skipped", "reason": "Database not enabled"}
+
+    return run_async(_backfill_nyc_city_normalization())
+
+
+async def _backfill_nyc_city_normalization() -> Dict[str, Any]:
+    from sqlalchemy import select, func
+    from app.models.apartment import ApartmentModel
+
+    updated = 0
+    scanned = 0
+    sample_moves: List[Dict[str, str]] = []  # first few for the response
+
+    async with get_session_context() as session:
+        stmt = select(ApartmentModel).where(
+            ApartmentModel.is_active == 1,
+            ApartmentModel.state == "NY",
+            ApartmentModel.zip_code.isnot(None),
+            func.lower(ApartmentModel.city) != "new york",
+        )
+        result = await session.execute(stmt)
+
+        for apt in result.scalars():
+            scanned += 1
+            zp = (apt.zip_code or "")[:3]
+            if zp not in _NYC_ZIP_PREFIXES:
+                continue
+            original_city = apt.city
+            if not apt.neighborhood:
+                apt.neighborhood = original_city
+            apt.city = "New York"
+            if len(sample_moves) < 10:
+                sample_moves.append({
+                    "id": apt.id,
+                    "zip": apt.zip_code,
+                    "was_city": original_city,
+                    "now_neighborhood": apt.neighborhood,
+                })
+            updated += 1
+
+        await session.commit()
+
+    logger.info(
+        f"backfill_nyc_city_normalization: scanned={scanned} updated={updated}"
+    )
+    return {
+        "status": "completed",
+        "scanned": scanned,
+        "updated": updated,
+        "sample_moves": sample_moves,
     }

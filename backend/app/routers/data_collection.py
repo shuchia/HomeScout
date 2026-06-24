@@ -645,6 +645,21 @@ async def backfill_fees():
     return {"status": "dispatched", "task_id": task.id, "message": "Backfill running in background"}
 
 
+@router.post("/normalize-nyc-cities")
+async def normalize_nyc_cities():
+    """One-shot fix for existing rows where the apartments.com city
+    is a borough or NYC neighborhood (Brooklyn, Bronx, Astoria, etc.)
+    instead of "New York". Mirrors the on-write normalization in
+    apify_service.py that catches all future scrapes.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import backfill_nyc_city_normalization
+    task = backfill_nyc_city_normalization.apply_async(queue="maintenance")
+    return {"status": "dispatched", "task_id": task.id}
+
+
 @router.post("/backfill-extended-fields")
 async def backfill_extended_fields_endpoint(only_missing: bool = True, batch_size: int = 200):
     """Populate the nearby_schools + floor_plans columns from existing
