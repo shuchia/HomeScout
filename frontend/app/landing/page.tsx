@@ -53,7 +53,7 @@ const FEATURES = [
   },
   {
     title: 'Side-by-Side Compare',
-    desc: 'Pick 2-3 apartments and get an instant breakdown — rent, space, amenities, commute — with an AI-picked winner.',
+    desc: 'Can\u2019t decide which listings to favorite? Pick 2-3 from search results for an instant AI breakdown across rent, space, amenities, and commute.',
     icon: (
       <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
@@ -62,7 +62,7 @@ const FEATURES = [
   },
   {
     title: 'AI Decision Brief',
-    desc: 'When you are down to your finalists, get a personalized report weighing trade-offs against your exact priorities.',
+    desc: 'After touring your finalists, AI synthesizes your ratings, notes, tags, and tour data into a final recommendation — your top pick with reasoning.',
     icon: (
       <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -79,30 +79,29 @@ const FEATURES = [
     ),
   },
   {
-    title: 'Proximity Search',
-    desc: 'Search near your campus or workplace. Drop a pin or type an address, set a radius, and results are ranked by distance.',
+    title: 'Commute Calculator',
+    desc: 'Save your work or school address in settings. Every listing shows drive, transit, and walking times via Google Maps.',
     icon: (
       <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
       </svg>
     ),
   },
 ];
 
 const HOW_IT_WORKS = [
-  { step: 1, title: 'Search & Favorite', desc: 'Browse listings across 23 cities. Heart the ones that catch your eye.' },
-  { step: 2, title: 'Start Touring', desc: 'Move favorites into your tour pipeline. Each apartment gets its own stage tracker.' },
+  { step: 1, title: 'Search, Compare & Favorite', desc: 'Browse listings with AI match scores and commute times. Compare any 2-3 side-by-side and heart the ones you like — both at the same time.' },
+  { step: 2, title: 'Start Touring', desc: 'Move favorites into your 5-stage tour pipeline with one tap. Each apartment tracks its own stage from here.' },
   { step: 3, title: 'Reach Out', desc: 'AI drafts your inquiry. Call, text, or paste into the listing\'s contact form — one tap for each channel.' },
-  { step: 4, title: 'Tour & Capture', desc: 'Visit in person. Record voice notes and snap photos that AI organizes automatically.' },
-  { step: 5, title: 'Get Your Top Pick', desc: 'AI weighs everything — scores, notes, priorities — and recommends your best match.' },
+  { step: 4, title: 'Tour & Capture', desc: 'Visit in person. Record voice notes and snap photos that AI organizes. Add star ratings and pro/con tags.' },
+  { step: 5, title: 'Get Your Top Pick', desc: 'After touring, AI synthesizes your ratings, notes, and costs into a Decision Brief that names your best match.' },
 ];
 
 const STATS = [
-  { value: '23', label: 'Cities covered' },
-  { value: '92%', label: 'Match accuracy' },
-  { value: '<60 sec', label: 'AI scoring time' },
-  { value: '20-40 hrs', label: 'Saved per search' },
+  { value: '6', label: 'Cities live' },
+  { value: '8', label: 'AI-powered tools' },
+  { value: '5', label: 'Stage tour pipeline' },
+  { value: 'Free', label: 'Tier to start' },
 ];
 
 const FREE_FEATURES = [
@@ -116,14 +115,15 @@ const FREE_FEATURES = [
 
 const PRO_FEATURES = [
   'Unlimited AI searches',
-  'Claude head-to-head analysis',
+  'Claude side-by-side comparison',
   'Unlimited favorites & tours',
   'AI inquiry messages (call, text, form)',
   'AI day planner',
   'Voice capture + transcription',
   'Tour photo uploads',
   'Full true cost breakdown',
-  'AI decision brief + top pick',
+  'Commute times (drive, transit, walk)',
+  'AI decision brief — picks your top match',
   'Daily email alerts',
 ];
 
@@ -138,16 +138,9 @@ const COMING_SOON = [
     tagColor: 'bg-amber-100 text-amber-700',
   },
   {
-    title: 'Neighborhood Insights',
-    desc: 'Walkability, transit scores, and safety data baked into every listing detail page.',
-    icon: '🏘️',
-    tag: 'Planned',
-    tagColor: 'bg-indigo-100 text-indigo-600',
-  },
-  {
-    title: 'Commute Calculator',
-    desc: 'Add your work or school address. Every listing shows estimated drive and transit time.',
-    icon: '🚗',
+    title: 'Floor Plan Explorer',
+    desc: 'Browse available floor plans with pricing, sqft, and availability for multi-unit properties — data already captured, UI coming soon.',
+    icon: '📐',
     tag: 'Planned',
     tagColor: 'bg-indigo-100 text-indigo-600',
   },
@@ -350,9 +343,9 @@ function CompareMockup() {
       <div className="p-3 rounded-lg bg-gradient-to-br from-emerald-50 to-amber-50 border border-emerald-200 mb-4">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-amber-500 text-lg">&#9733;</span>
-          <span className="text-sm font-bold text-[var(--color-text)]">Winner: Haverford Court</span>
+          <span className="text-sm font-bold text-[var(--color-text)]">Best Match: Haverford Court</span>
         </div>
-        <p className="text-xs text-[var(--color-text-secondary)]">Best overall value with largest space and top amenities for the price.</p>
+        <p className="text-xs text-[var(--color-text-secondary)]">Highest value for your budget with the best space and amenities combination.</p>
       </div>
       <div className="space-y-2.5">
         {[
@@ -525,7 +518,7 @@ export default function LandingPage() {
           <div>
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold mb-6">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Beta live across 23 cities
+              Beta live in 6 cities
             </span>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--color-text)] leading-tight tracking-tight mb-6">
               Stop apartment hunting with{' '}
@@ -598,12 +591,12 @@ export default function LandingPage() {
               Heart it. Tour it. Decide.
             </h2>
             <p className="text-[var(--color-text-secondary)] leading-relaxed mb-6">
-              Every apartment you heart goes into your favorites. When you are ready, move them into
-              the touring pipeline with one click. Each listing tracks its own stage&nbsp;&mdash; from
-              initial interest through to your final decision.
+              While browsing, heart any apartment that catches your eye and compare any you&apos;re torn
+              between &mdash; both happen in parallel from search results. When you&apos;re ready, move favorites
+              into the touring pipeline with one click. Each listing tracks its own stage from there.
             </p>
             <ul className="space-y-3">
-              {['Heart apartments as you browse', 'Batch-move favorites to touring pipeline', 'Track each apartment through 5 stages'].map((item) => (
+              {['Heart and compare in parallel while browsing', 'Batch-move favorites into the touring pipeline', 'Each apartment tracks its own 5-stage journey'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-[var(--color-text)]">
                   <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" />
                   {item}
@@ -628,14 +621,15 @@ export default function LandingPage() {
               AI Compare
             </span>
             <h2 className="text-3xl md:text-4xl font-bold text-[var(--color-text)] mb-4">
-              Let AI pick the winner
+              Compare while you browse
             </h2>
             <p className="text-[var(--color-text-secondary)] leading-relaxed mb-6">
-              Select 2-3 apartments and get an instant head-to-head analysis. Claude AI scores each
-              across Value, Space, Amenities, and Location&nbsp;&mdash; then picks a winner with detailed reasoning.
+              See two listings that both look great? Select them for an instant AI head-to-head while you&apos;re still browsing.
+              Claude scores each across Value, Space, Amenities, and Location. Heart the ones you like, compare the ones
+              you&apos;re torn on &mdash; both happen right from search results.
             </p>
             <ul className="space-y-3">
-              {['Category-by-category scoring', 'Personalized to your priorities', 'Winner with detailed reasoning'].map((item) => (
+              {['Compare any 2-3 listings without leaving your search', 'Category scores personalized to your priorities', 'Favorite and compare in parallel — no fixed order'].map((item) => (
                 <li key={item} className="flex items-center gap-3 text-sm text-[var(--color-text)]">
                   <CheckIcon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" />
                   {item}
@@ -817,7 +811,7 @@ export default function LandingPage() {
               The touring pipeline is the foundation. Here&apos;s what&apos;s coming next.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {COMING_SOON.map((item) => (
               <div
                 key={item.title}
@@ -894,23 +888,6 @@ export default function LandingPage() {
             {TECH_STACK.map((tech) => (
               <span key={tech} className="text-sm font-medium text-[var(--color-text-secondary)]">{tech}</span>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── TESTIMONIAL ─── */}
-      <section className="py-20">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <svg className="w-10 h-10 text-[var(--color-primary)]/20 mx-auto mb-6" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z" />
-          </svg>
-          <blockquote className="text-xl md:text-2xl text-[var(--color-text)] leading-relaxed mb-6">
-            &ldquo;I used to have a Google Sheet with 40 tabs and still forgot what I liked about half the places.
-            Snugd replaced all of that in one afternoon. The AI scoring is scarily accurate.&rdquo;
-          </blockquote>
-          <div>
-            <p className="font-semibold text-[var(--color-text)]">Sarah K.</p>
-            <p className="text-sm text-[var(--color-text-secondary)]">Early beta tester &middot; Found her apartment in 2 weeks</p>
           </div>
         </div>
       </section>
