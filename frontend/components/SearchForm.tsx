@@ -65,16 +65,54 @@ interface SearchFormProps {
   onSearchParams?: (params: SearchParams) => void;
 }
 
+// Default move-in date — first of next month. Rentals almost always start
+// on the 1st, and using "today + N days" would make the default a moving
+// target that doesn't align with what tenants actually request. Previously
+// hardcoded to 2026-03-01 which became a date-in-the-past after launch
+// slipped a quarter.
+function getDefaultMoveInDate(): string {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  // Use local-date YYYY-MM-DD (not UTC) so users in PT don't see "yesterday"
+  const y = next.getFullYear();
+  const m = String(next.getMonth() + 1).padStart(2, '0');
+  const d = String(next.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Today as YYYY-MM-DD (local) — used as the `min` attribute on the date
+// input so the picker won't let users select past dates.
+function todayISO(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Budget input bounds. Used by both the <input> attributes and the
+// onBlur clamp.
+const BUDGET_MIN = 500;
+const BUDGET_MAX = 15000;
+const BUDGET_DEFAULT = 2000;
+
 export default function SearchForm({ onResults, onLoading, onError, onSearchMeta, onSearchParams }: SearchFormProps) {
   const { searchContext, setSearchContext } = useComparison();
   const { isPro } = useAuth();
 
   // Form state — restore from persisted searchContext if available
   const [city, setCity] = useState(searchContext?.city || 'Arlington, VA');
-  const [budget, setBudget] = useState(searchContext?.budget || 2000);
+  // Budget is held as a string so the field can be transiently empty
+  // (when the user backspaces the value before retyping). Numeric state
+  // would coerce empty input to 0 and produce the "leading-zero" glitch
+  // where typing "5" after the value cleared briefly shows "05".
+  const [budgetInput, setBudgetInput] = useState<string>(
+    String(searchContext?.budget || BUDGET_DEFAULT)
+  );
+  const budget = Number(budgetInput) || BUDGET_DEFAULT;
   const [bedrooms, setBedrooms] = useState(searchContext?.bedrooms ?? 1);
   const [bathrooms, setBathrooms] = useState(searchContext?.bathrooms ?? 1);
-  const [moveInDate, setMoveInDate] = useState(searchContext?.move_in_date || '2026-03-01');
+  const [moveInDate, setMoveInDate] = useState(searchContext?.move_in_date || getDefaultMoveInDate());
   const [otherPreferences, setOtherPreferences] = useState(searchContext?.other_preferences || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nearLocation, setNearLocation] = useState<{ lat: number; lng: number; label: string } | null>(
@@ -182,10 +220,25 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         <input
           type="number"
           id="budget"
-          value={budget}
-          onChange={(e) => setBudget(Number(e.target.value))}
-          min={500}
-          max={15000}
+          value={budgetInput}
+          onChange={(e) => {
+            // Allow only digits — strip everything else as the user types.
+            // Also strip a leading '0' so "0500" doesn't show up after the
+            // user clears the field and starts retyping. Pure-empty is
+            // allowed (transient state); onBlur restores a sane default.
+            const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '')
+            setBudgetInput(cleaned)
+          }}
+          onBlur={() => {
+            // Clamp to [BUDGET_MIN, BUDGET_MAX] on blur. If the user left
+            // the field empty or out of range, snap back to a valid value.
+            const n = Number(budgetInput)
+            if (!Number.isFinite(n) || n < BUDGET_MIN) setBudgetInput(String(BUDGET_MIN))
+            else if (n > BUDGET_MAX) setBudgetInput(String(BUDGET_MAX))
+          }}
+          inputMode="numeric"
+          min={BUDGET_MIN}
+          max={BUDGET_MAX}
           step={100}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition"
           required
@@ -242,6 +295,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
           type="date"
           id="moveInDate"
           value={moveInDate}
+          min={todayISO()}
           onChange={(e) => setMoveInDate(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition"
           required
