@@ -98,10 +98,10 @@ const HOW_IT_WORKS = [
 ];
 
 const STATS = [
-  { value: '15', label: 'Cities covered' },
-  { value: '92%', label: 'Match accuracy' },
-  { value: '<60 sec', label: 'AI scoring time' },
-  { value: '20-40 hrs', label: 'Saved per search' },
+  { value: '6', label: 'Cities live' },
+  { value: '8', label: 'AI-powered tools' },
+  { value: '5', label: 'Stage tour pipeline' },
+  { value: 'Free', label: 'Tier to start' },
 ];
 
 const FREE_FEATURES = [
@@ -123,7 +123,6 @@ const PRO_FEATURES = [
   'Tour photo uploads',
   'Full true cost breakdown',
   'Commute times (drive, transit, walk)',
-  'Nearby schools & floor plans',
   'AI decision brief — picks your top match',
   'Daily email alerts',
 ];
@@ -137,13 +136,6 @@ const COMING_SOON = [
     icon: '📨',
     tag: 'Next up',
     tagColor: 'bg-amber-100 text-amber-700',
-  },
-  {
-    title: 'Neighborhood Insights',
-    desc: 'Walkability, transit scores, and safety data baked into every listing detail page.',
-    icon: '🏘️',
-    tag: 'Planned',
-    tagColor: 'bg-indigo-100 text-indigo-600',
   },
   {
     title: 'Floor Plan Explorer',
@@ -526,7 +518,7 @@ export default function LandingPage() {
           <div>
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold mb-6">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Beta live across 15 cities
+              Beta live in 6 cities
             </span>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--color-text)] leading-tight tracking-tight mb-6">
               Stop apartment hunting with{' '}
@@ -819,7 +811,7 @@ export default function LandingPage() {
               The touring pipeline is the foundation. Here&apos;s what&apos;s coming next.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {COMING_SOON.map((item) => (
               <div
                 key={item.title}
@@ -896,23 +888,6 @@ export default function LandingPage() {
             {TECH_STACK.map((tech) => (
               <span key={tech} className="text-sm font-medium text-[var(--color-text-secondary)]">{tech}</span>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── TESTIMONIAL ─── */}
-      <section className="py-20">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <svg className="w-10 h-10 text-[var(--color-primary)]/20 mx-auto mb-6" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z" />
-          </svg>
-          <blockquote className="text-xl md:text-2xl text-[var(--color-text)] leading-relaxed mb-6">
-            &ldquo;I used to have a Google Sheet with 40 tabs and still forgot what I liked about half the places.
-            Snugd replaced all of that in one afternoon. The AI scoring is scarily accurate.&rdquo;
-          </blockquote>
-          <div>
-            <p className="font-semibold text-[var(--color-text)]">Sarah K.</p>
-            <p className="text-sm text-[var(--color-text-secondary)]">Early beta tester &middot; Found her apartment in 2 weeks</p>
           </div>
         </div>
       </section>
