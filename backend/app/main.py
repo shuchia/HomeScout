@@ -307,7 +307,13 @@ async def score_batch(
         # Check cache
         ids_key = ",".join(sorted(request.apartment_ids))
         ctx = request.search_context
-        raw = f"{ids_key}:{ctx.city}:{ctx.budget}:{ctx.bedrooms}:{ctx.bathrooms}:{ctx.property_type}:{ctx.move_in_date}"
+        # Preferences and proximity change the scoring output, so they must be
+        # part of the cache key — otherwise a pref-blind result gets served to a
+        # later search that did specify preferences.
+        raw = (
+            f"{ids_key}:{ctx.city}:{ctx.budget}:{ctx.bedrooms}:{ctx.bathrooms}:"
+            f"{ctx.property_type}:{ctx.move_in_date}:{ctx.other_preferences or ''}:{ctx.near_label or ''}"
+        )
         cache_key = f"score_batch:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
         if apartment_service._redis:
@@ -330,8 +336,9 @@ async def score_batch(
             bathrooms=ctx.bathrooms,
             property_type=ctx.property_type,
             move_in_date=ctx.move_in_date,
-            other_preferences="",
+            other_preferences=ctx.other_preferences or "",
             apartments=apartments,
+            near_label=ctx.near_label,
         )
 
         # Cache for 1 hour

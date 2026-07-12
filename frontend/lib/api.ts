@@ -193,7 +193,7 @@ export async function getCommuteTimes(
 export async function scoreBatch(
   apartmentIds: string[],
   searchContext: { city: string; budget: number; bedrooms: number; bathrooms: number; property_type: string; move_in_date: string; other_preferences?: string }
-): Promise<{ scores: Array<{ apartment_id: string; match_score: number; reasoning: string; highlights: string[] }> }> {
+): Promise<{ scores: Array<{ apartment_id: string; match_score: number; reasoning: string; highlights: string[]; concerns?: string[] }> }> {
   try {
     const response = await fetchWithAuth(`${API_URL}/api/search/score-batch`, {
       method: 'POST',

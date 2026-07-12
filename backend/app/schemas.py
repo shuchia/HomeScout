@@ -204,6 +204,7 @@ class SearchContext(BaseModel):
     bathrooms: int
     property_type: str
     move_in_date: str
+    other_preferences: Optional[str] = None
     near_label: Optional[str] = None
 
 

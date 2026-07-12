@@ -83,7 +83,7 @@ export default function Home() {
         setResults(prev => {
           const merged = prev.map(apt => {
             const score = scores.find(s => s.apartment_id === apt.id);
-            return score ? { ...apt, match_score: score.match_score, reasoning: score.reasoning, highlights: score.highlights } : apt;
+            return score ? { ...apt, match_score: score.match_score, reasoning: score.reasoning, highlights: score.highlights, concerns: score.concerns ?? [] } : apt;
           });
           // Re-sort by AI match_score (highest first); apartments without scores fall to bottom
           return merged.sort((a, b) => {
