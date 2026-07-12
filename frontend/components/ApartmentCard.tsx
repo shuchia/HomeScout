@@ -73,6 +73,7 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
     match_score,
     reasoning,
     highlights = [],
+    concerns = [],
   } = apartment;
 
   return (
@@ -379,6 +380,28 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
                 </li>
               ))}
             </ul>
+            {concerns.length > 0 && (
+              <ul className="space-y-1">
+                {concerns.map((concern, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
+                    <svg
+                      className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                    {concern}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ) : tier === 'free' && !profileLoading && apartment.heuristic_score != null ? (
           <a href="/pricing" className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 hover:bg-amber-100 transition">

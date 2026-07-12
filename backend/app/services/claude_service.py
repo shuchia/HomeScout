@@ -64,6 +64,11 @@ class ClaudeService:
             "data_quality_score": apt.get("data_quality_score"),
             "heuristic_score": apt.get("heuristic_score"),
         }
+        # Aggregate renter rating from the source listing (e.g. apartments.com),
+        # if present. Lets scoring factor in what other tenants think — but it's
+        # only the star average, not review text, so treat it as one weak signal.
+        if apt.get("apartments_com_rating") is not None:
+            data["renter_rating"] = apt["apartments_com_rating"]
         # Include true cost data if available
         if apt.get("true_cost_monthly"):
             data["true_cost_monthly"] = apt["true_cost_monthly"]
@@ -171,8 +176,9 @@ class ClaudeService:
 Please return a JSON array with match scores for each apartment. For each apartment, include:
 - apartment_id: The unique ID of the apartment
 - match_score: A percentage from 0-100
-- reasoning: A brief explanation (1-2 sentences)
-- highlights: An array of 2-3 key features that match my preferences
+- reasoning: A brief explanation (1-2 sentences), leading with the most decision-relevant fact
+- highlights: An array of 2-3 points that add interpretation (comparison to my budget, a preference met, a tradeoff) — not a restatement of facts already on the listing
+- concerns: An array of 1-2 honest tradeoffs, risks, or preferences this listing cannot meet. Include at least one unless the match is near-perfect; use an empty array only when there is genuinely nothing to flag.
 
 Format your response as valid JSON only, with no additional text."""
 
@@ -202,7 +208,17 @@ Analyze each apartment based on:
 For each apartment, provide:
 - A match score (0-100%)
 - A brief explanation (1-2 sentences) of why this score was assigned, addressing the renter directly
-- Key highlights that align with the search preferences
+- Highlights that add interpretation the renter can't already see on the listing
+- Concerns: honest tradeoffs, risks, or preferences the listing cannot meet
+
+Assess every criterion and preference the renter provided, not just the ones that happen to match. If the listing lacks the data to judge one of their preferences, say it's unknown rather than assuming it's satisfied.
+
+OBJECTIVITY RULES (renters have told us AI praise feels untrustworthy — follow these strictly):
+- Do not use promotional or subjective language (superlatives, hype words). Back every claim with a concrete number or a specific criterion the renter gave.
+- Do not restate facts the renter already sees on the listing (amenity tags, bed/bath counts, square footage). A point earns its place only if it adds interpretation: how it compares to their budget, whether it meets a stated preference, or a tradeoff it creates.
+- Lead the reasoning with the most decision-relevant fact. If there is a dealbreaker — no availability, over budget, move-in date mismatch, or a required preference the listing can't meet — state it first, not after positives. Do not praise the value of a unit that cannot currently be rented.
+- Stay balanced: surface at least one genuine concern unless the match is near-perfect.
+- When a renter_rating is provided, factor it in and attribute it as the listing's rating, but do not treat it as decisive on its own.
 
 When a listing has pricing_model "per_person", the rent shown is per-occupant, not per-unit. For budget comparison, compare the per-person cost against the search budget. Flag per-person pricing prominently in highlights: "Per-person pricing — $X is per bed, not for the whole unit."
 
@@ -263,6 +279,10 @@ Be honest and practical in scoring. A perfect 100% match is rare. Most good matc
                 for field in required_fields:
                     if field not in score:
                         raise ValueError(f"Missing required field: {field}")
+                # concerns is newer and optional in the response — default it so
+                # downstream consumers (API/frontend) always get a list.
+                if not isinstance(score.get("concerns"), list):
+                    score["concerns"] = []
 
             return scores
 
