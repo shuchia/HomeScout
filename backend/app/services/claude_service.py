@@ -655,15 +655,38 @@ Return valid JSON only, no additional text."""
             "multiple apartments and captured star ratings, notes, photos, and "
             "pro/con tags. Synthesize everything into a clear, actionable "
             "recommendation. Write as if speaking directly to the renter using "
-            "\"you\" and \"your\". Respect their star ratings and notes — these "
-            "reflect firsthand impressions from the tour.\n\n"
+            "\"you\" and \"your\". Respect their star ratings, notes, and tags — "
+            "these reflect firsthand impressions from the tour.\n\n"
             "When analyzing costs, use true_cost_monthly (not just rent) for "
             "budget comparisons — this includes utilities, fees, and insurance. "
             "Highlight move-in cost differences (application fee, admin fee, "
             "security deposit). When pricing_model is 'per_person', note that "
             "the rent is per bed, not per unit.\n\n"
             "Consider all available data: square footage, property type, "
-            "available date, amenities, and any search preferences provided."
+            "available date, amenities, and any search preferences provided.\n\n"
+            "GROUND EVERY CLAIM IN THE PROVIDED DATA (renters have told us AI "
+            "praise feels untrustworthy — follow strictly):\n"
+            "- The renter's own firsthand signals — tour_rating, notes, and "
+            "pro/con tags — are the primary evidence. Weight them above listing "
+            "marketing, and cite them specifically when they drive a point. "
+            "photo_count only indicates how much they documented a place (a weak "
+            "secondary signal); the photos themselves are not provided, so do "
+            "not infer what they show.\n"
+            "- Do not use promotional or subjective language (superlatives, "
+            "hype words). Back every claim with a concrete number, a stated "
+            "preference, or a specific piece of their tour data.\n"
+            "- Do not restate raw listing facts the renter already sees "
+            "(amenity tags, bed/bath counts, square footage) unless you are "
+            "interpreting them — how they compare to budget, meet a preference, "
+            "or trade off against another option.\n"
+            "- Stay balanced: every apartment, including the one you recommend, "
+            "must have at least one honest concern called out. Lead the "
+            "recommendation with the single most decisive factor, including any "
+            "dealbreaker.\n"
+            "- renter_rating is the listing's aggregate score — factor it in "
+            "but treat it as secondary to the renter's own tour_rating. If the "
+            "data to judge a stated preference is missing, say it's unknown "
+            "rather than assuming it's met."
         )
 
         preferences_section = ""
@@ -677,12 +700,13 @@ Return valid JSON only, no additional text."""
 
 Instructions:
 - For each apartment, provide an AI take (1-2 sentence summary), strengths, and concerns.
-- Weight star ratings and tour notes/tags heavily — these reflect firsthand impressions.
-- Compare true monthly costs (true_cost_monthly) not just advertised rent. Highlight hidden fees.
+- Weight star ratings and tour notes/tags heavily — these are firsthand impressions and outweigh listing marketing. Cite them specifically. (photo_count is only a weak signal of how much they documented a place; the photos aren't provided.)
+- Every apartment must have at least one honest concern, including the one you recommend.
+- Compare true monthly costs (true_cost_monthly) not just advertised rent. Highlight hidden fees with concrete numbers.
 - Consider move-in costs (application fee, admin fee, security deposit) as a practical factor.
-- Factor in the search preferences if provided — does this apartment match what matters most?
-- Pick a recommended apartment with clear reasoning covering cost, space, amenities, and tour impressions.
-- Be practical, specific, and actionable.
+- Factor in the search preferences if provided — does this apartment match what matters most? If data to judge a preference is missing, say so rather than assuming.
+- Pick a recommended apartment with clear reasoning that leads with the single most decisive factor and covers cost, space, amenities, and tour impressions.
+- Be practical, specific, and actionable. No hype — back every claim with a number, a stated preference, or a piece of their tour data.
 
 Return ONLY a JSON object with this structure:
 {{
