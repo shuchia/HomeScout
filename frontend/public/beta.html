@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snugd Beta Access</title>
+  <meta name="description" content="Get free Pro access to Snugd — AI-powered apartment hunting for students and young professionals.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Design tokens from globals.css ── */
+    :root {
+      --color-primary: #2D6A4F;
+      --color-primary-light: #40916C;
+      --color-primary-dark: #1B4332;
+      --color-accent: #E76F51;
+      --color-accent-light: #F4A261;
+      --color-bg: #FAFAF8;
+      --color-surface: #FFFFFF;
+      --color-border: #E8E5E0;
+      --color-text: #1A1A1A;
+      --color-text-secondary: #6B7280;
+      --color-text-muted: #9CA3AF;
+      --color-success: #10B981;
+      --color-error: #EF4444;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .container { max-width: 480px; width: 100%; }
+
+    .card {
+      background: var(--color-surface);
+      border-radius: 20px;
+      padding: 40px 32px;
+      text-align: center;
+      border: 1px solid var(--color-border);
+      box-shadow: 0 4px 24px rgba(0,0,0,.06);
+    }
+
+    /* ── Logo ── */
+    .logo { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
+    .logo-heart { color: var(--color-accent); }
+    .logo-text { font-weight: 700; font-size: 28px; color: var(--color-text); }
+    .logo-dot { font-weight: 700; font-size: 28px; color: var(--color-primary); }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #2D6A4F15; border: 1px solid #2D6A4F30;
+      border-radius: 100px; padding: 4px 14px; margin: 16px 0 24px;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-primary); animation: pulse 2s infinite; }
+    .badge-text { color: var(--color-primary); font-size: 12px; font-weight: 600; }
+    @keyframes pulse { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+
+    /* ── Typography ── */
+    h1 { font-size: 28px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; line-height: 1.2; }
+    .subtitle { color: var(--color-text-secondary); font-size: 15px; margin-bottom: 32px; line-height: 1.6; }
+
+    /* ── Steps ── */
+    .steps { text-align: left; margin-bottom: 32px; }
+    .step { display: flex; gap: 14px; margin-bottom: 20px; align-items: flex-start; }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #2D6A4F15; color: var(--color-primary);
+      font-weight: 700; font-size: 14px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .step-content { padding-top: 4px; }
+    .step-title { font-weight: 600; color: var(--color-text); font-size: 15px; margin-bottom: 2px; }
+    .step-desc { color: var(--color-text-secondary); font-size: 13px; line-height: 1.5; }
+
+    /* ── Code box ── */
+    .code-box {
+      background: var(--color-primary-dark); border: 2px solid var(--color-primary);
+      border-radius: 12px; padding: 20px; margin: 20px 0;
+      cursor: pointer; transition: all .2s; position: relative;
+    }
+    .code-box:hover { border-color: var(--color-primary-light); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(45,106,79,.2); }
+    .code-label { font-size: 11px; color: var(--color-primary-light); font-weight: 600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    .code-value { font-family: monospace; font-size: 32px; font-weight: 700; color: #fff; letter-spacing: 3px; }
+    .code-hint { font-size: 12px; color: rgba(255,255,255,.5); margin-top: 8px; }
+    .copied {
+      position: absolute; top: -10px; right: 16px;
+      background: var(--color-success); color: #fff;
+      font-size: 12px; font-weight: 600; padding: 3px 12px; border-radius: 100px;
+      opacity: 0; transition: opacity .3s; pointer-events: none;
+    }
+    .copied.show { opacity: 1; }
+
+    /* ── Channel tag ── */
+    .channel-tag {
+      display: none; font-size: 11px; color: var(--color-text-muted);
+      margin-top: 4px;
+    }
+    .channel-tag.visible { display: block; }
+
+    /* ── CTA ── */
+    .cta-btn {
+      display: block; width: 100%; padding: 14px; border-radius: 12px;
+      background: var(--color-primary); color: #fff;
+      font-size: 16px; font-weight: 600; text-decoration: none; text-align: center;
+      border: none; cursor: pointer; transition: all .2s; margin-bottom: 12px;
+    }
+    .cta-btn:hover { background: var(--color-primary-light); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(45,106,79,.25); }
+
+    .secondary-link { color: var(--color-text-secondary); font-size: 13px; text-decoration: none; }
+    .secondary-link:hover { color: var(--color-primary); }
+
+    .divider { height: 1px; background: var(--color-border); margin: 28px 0; }
+
+    /* ── Features grid ── */
+    .features-label { color: var(--color-text-secondary); font-size: 13px; margin-bottom: 12px; font-weight: 600; }
+    .features { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left; }
+    .feature { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
+    .feature svg { color: var(--color-primary); flex-shrink: 0; }
+
+    /* ── Cities ── */
+    .cities { margin-top: 24px; padding: 16px; background: #FAFAF8; border-radius: 10px; border: 1px solid var(--color-border); }
+    .cities-label { font-size: 11px; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+    .cities-list { font-size: 12px; color: var(--color-text-secondary); line-height: 1.6; }
+
+    /* ── Footer ── */
+    .footer { text-align: center; margin-top: 20px; }
+    .footer p { color: var(--color-text-muted); font-size: 11px; margin-top: 8px; }
+    .footer a { color: var(--color-primary); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <!-- Logo -->
+      <div class="logo">
+        <svg class="logo-heart" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span class="logo-text">snugd</span>
+        <span class="logo-dot">.ai</span>
+      </div>
+
+      <div class="badge">
+        <span class="badge-dot"></span>
+        <span class="badge-text">Beta Access — Free Pro for 90 Days</span>
+      </div>
+
+      <h1>Welcome to the Snugd Beta</h1>
+      <p class="subtitle">You're getting full Pro access — every AI feature unlocked. All we ask is honest feedback on what works and what doesn't.</p>
+
+      <!-- Steps -->
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">Copy your invite code</div>
+            <div class="step-desc">Tap the code below to copy it to your clipboard</div>
+          </div>
+        </div>
+
+        <!-- Code box -->
+        <div id="codeBox" class="code-box" onclick="copyCode()">
+          <div class="code-label">Your Invite Code</div>
+          <div class="code-value" id="codeValue">BETA-XXXXX</div>
+          <div class="code-hint">Tap to copy</div>
+          <div class="copied" id="copiedBadge">Copied!</div>
+        </div>
+        <div class="channel-tag" id="channelTag"></div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">Open the app & sign in with Google</div>
+            <div class="step-desc">Takes 10 seconds — one tap</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">Paste your invite code</div>
+            <div class="step-desc">You'll see an invite code banner on the search page — paste your code and tap Redeem</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-title">Start hunting</div>
+            <div class="step-desc">Search a city, compare apartments, add to your tour pipeline. All AI features are unlocked for 90 days.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <a href="https://qa.snugd.ai" class="cta-btn" id="ctaBtn">Open Snugd Beta →</a>
+      <a href="https://snugd.ai" class="secondary-link">Learn more at snugd.ai</a>
+
+      <div class="divider"></div>
+
+      <!-- Pro features -->
+      <p class="features-label">What you get with Pro:</p>
+      <div class="features">
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Unlimited AI searches
+        </div>
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          AI match scoring
+        </div>
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Side-by-side AI comparison
+        </div>
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          AI inquiry drafts
+        </div>
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Voice notes + transcription
+        </div>
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          True cost calculator
+        </div>
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Commute calculator
+        </div>
+        <div class="feature">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          AI Decision Brief
+        </div>
+      </div>
+
+      <!-- Cities -->
+      <div class="cities">
+        <div class="cities-label">Live in 15 cities</div>
+        <div class="cities-list">Philadelphia · NYC · Boston · DC · Pittsburgh · Baltimore · Newark · Jersey City · Cambridge · Arlington · Bryn Mawr · Charleston · New Orleans · Towson · State College</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>Questions or feedback? <a href="mailto:founders@snugd.ai">founders@snugd.ai</a></p>
+      <p>Built by <a href="https://www.linkedin.com/in/shuchi-agarwal-18a851" target="_blank">Shuchi Agarwal</a></p>
+    </div>
+  </div>
+
+  <script>
+    // ── URL parameter handling for channel-specific codes ──
+    // Usage:
+    //   snugd.ai/beta.html?code=LINKEDIN-A3F2B1
+    //   snugd.ai/beta.html?code=GIRLHACKS-7C4E9D
+    //   snugd.ai/beta.html?code=PNC-8B2D4F
+    //   snugd.ai/beta.html?code=REDDIT-5E9A1C
+    //
+    // If no ?code= param, shows the default BETA-XXXXX (replace below)
+
+    const DEFAULT_CODE = 'BETA-XXXXX';  // ← REPLACE with your default invite code
+
+    const params = new URLSearchParams(window.location.search);
+    const codeParam = params.get('code');
+
+    if (codeParam) {
+      document.getElementById('codeValue').textContent = codeParam;
+      // Show channel tag for transparency
+      const prefix = codeParam.split('-')[0];
+      const channelNames = {
+        'LINKEDIN': 'via LinkedIn',
+        'GIRLHACKS': 'via GirlHacks',
+        'PNC': 'via PNC',
+        'REDDIT': 'via Reddit',
+        'BETA': 'General beta',
+        'WOMENTECH': 'via Women in Tech',
+        'FACEBOOK': 'via Facebook',
+        'TWITTER': 'via Twitter',
+      };
+      const tag = document.getElementById('channelTag');
+      if (channelNames[prefix]) {
+        tag.textContent = channelNames[prefix];
+        tag.classList.add('visible');
+      }
+    } else {
+      document.getElementById('codeValue').textContent = DEFAULT_CODE;
+    }
+
+    // ── Copy to clipboard ──
+    function copyCode() {
+      const code = document.getElementById('codeValue').textContent;
+      navigator.clipboard.writeText(code).then(showCopied).catch(() => {
+        // Fallback for older browsers / non-HTTPS
+        const el = document.createElement('textarea');
+        el.value = code;
+        el.style.position = 'fixed';
+        el.style.opacity = '0';
+        document.body.appendChild(el);
+        el.select();
+        try { document.execCommand('copy'); showCopied(); } catch(e) {}
+        document.body.removeChild(el);
+      });
+    }
+
+    function showCopied() {
+      const badge = document.getElementById('copiedBadge');
+      badge.classList.add('show');
+      setTimeout(() => badge.classList.remove('show'), 2000);
+    }
+  </script>
+</body>
+</html>
