@@ -98,7 +98,7 @@ const HOW_IT_WORKS = [
 ];
 
 const STATS = [
-  { value: '6', label: 'Cities live' },
+  { value: '7', label: 'Cities live' },
   { value: '8', label: 'AI-powered tools' },
   { value: '5', label: 'Stage tour pipeline' },
   { value: 'Free', label: 'Tier to start' },
@@ -518,7 +518,7 @@ export default function LandingPage() {
           <div>
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold mb-6">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Beta live in 6 cities
+              Beta live in 7 cities
             </span>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--color-text)] leading-tight tracking-tight mb-6">
               Stop apartment hunting with{' '}

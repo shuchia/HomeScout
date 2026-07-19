@@ -593,11 +593,21 @@ async def get_tour(
 
         photos_result = (
             supabase_admin.table("tour_photos")
-            .select("id, thumbnail_url, caption, created_at")
+            .select("id, thumbnail_s3_key, caption, created_at")
             .eq("tour_pipeline_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
+        # Regenerate a fresh presigned thumbnail URL on read. The stored
+        # thumbnail_url is presigned at upload time and expires after 1 hour
+        # (PRESIGNED_URL_EXPIRY), so returning it verbatim left thumbnails
+        # broken whenever a tour was reopened more than an hour later. The
+        # image itself is safe in S3 — only the signed link expired.
+        photos = photos_result.data or []
+        for photo in photos:
+            thumb_key = photo.pop("thumbnail_s3_key", None)
+            if thumb_key:
+                photo["thumbnail_url"] = PhotoService.get_presigned_url(thumb_key)
 
         tags_result = (
             supabase_admin.table("tour_tags")
@@ -610,7 +620,7 @@ async def get_tour(
             "tour": _build_tour_response(
                 tour_row,
                 notes=notes_result.data or [],
-                photos=photos_result.data or [],
+                photos=photos,
                 tags=tags_result.data or [],
             )
         }

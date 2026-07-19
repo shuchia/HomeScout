@@ -8,32 +8,18 @@ import NearLocationInput from './NearLocationInput';
 import RadiusSlider from './RadiusSlider';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Available cities — matches market_configs in the database
+// Available cities — the markets we actively scrape (enabled in
+// market_configs) and that return fresh listings. Keep in sync with the
+// enabled markets in the backend; adding a city here without an enabled,
+// freshly-scraped market gives users an empty results page.
 const AVAILABLE_CITIES = [
-  { value: 'Arlington, VA', label: 'Arlington, VA' },
-  { value: 'Baltimore, MD', label: 'Baltimore, MD' },
   { value: 'Boston, MA', label: 'Boston, MA' },
   { value: 'Bryn Mawr, PA', label: 'Bryn Mawr, PA' },
   { value: 'Cambridge, MA', label: 'Cambridge, MA' },
-  { value: 'Charleston, SC', label: 'Charleston, SC' },
-  { value: 'Charlotte, NC', label: 'Charlotte, NC' },
-  { value: 'Hartford, CT', label: 'Hartford, CT' },
-  { value: 'Hoboken, NJ', label: 'Hoboken, NJ' },
-  { value: 'Jersey City, NJ', label: 'Jersey City, NJ' },
-  { value: 'New Haven, CT', label: 'New Haven, CT' },
-  { value: 'New Orleans, LA', label: 'New Orleans, LA' },
   { value: 'New York, NY', label: 'New York, NY' },
-  { value: 'Newark, NJ', label: 'Newark, NJ' },
   { value: 'Philadelphia, PA', label: 'Philadelphia, PA' },
   { value: 'Pittsburgh, PA', label: 'Pittsburgh, PA' },
-  { value: 'Providence, RI', label: 'Providence, RI' },
-  { value: 'Raleigh, NC', label: 'Raleigh, NC' },
-  { value: 'Richmond, VA', label: 'Richmond, VA' },
   { value: 'San Francisco, CA', label: 'San Francisco, CA' },
-  { value: 'Stamford, CT', label: 'Stamford, CT' },
-  { value: 'State College, PA', label: 'State College, PA' },
-  { value: 'Towson, MD', label: 'Towson, MD' },
-  { value: 'Washington, DC', label: 'Washington, DC' },
 ];
 
 // Property type options
@@ -101,7 +87,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
   const { isPro } = useAuth();
 
   // Form state — restore from persisted searchContext if available
-  const [city, setCity] = useState(searchContext?.city || 'Arlington, VA');
+  const [city, setCity] = useState(searchContext?.city || 'New York, NY');
   // Budget is held as a string so the field can be transiently empty
   // (when the user backspaces the value before retyping). Numeric state
   // would coerce empty input to 0 and produce the "leading-zero" glitch
