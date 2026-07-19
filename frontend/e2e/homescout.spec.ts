@@ -275,7 +275,7 @@ test.describe('Snugd E2E Tests', () => {
     test('should have default values pre-filled', async ({ page }) => {
       await page.goto('/');
 
-      await expect(page.locator('select#city')).toHaveValue('Arlington, VA');
+      await expect(page.locator('select#city')).toHaveValue('New York, NY');
       await expect(page.locator('input#budget')).toHaveValue('2000');
       await expect(page.locator('select#bedrooms')).toHaveValue('1');
       await expect(page.locator('select#bathrooms')).toHaveValue('1');
