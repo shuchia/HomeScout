@@ -5,9 +5,8 @@ Pure/synchronous — no DB, no network. The fixture mirrors the real Apify
 building our search stored as a single studio while it actually offers a
 3-bedroom under budget.
 
-Runnable two ways (the repo's pytest+pytest-asyncio combo currently mis-collects
-the tests package):
-    python3 -m pytest tests/test_floorplans.py -p no:asyncio
+Runnable via pytest, or standalone (no pytest needed):
+    python3 -m pytest tests/test_floorplans.py
     python3 -m tests.test_floorplans      # standalone runner, from backend/
 """
 
@@ -17,6 +16,7 @@ from app.services.floorplans import (
     parse_bedrooms,
     parse_rent,
     parse_sqft,
+    project_matched_floorplan,
 )
 
 
@@ -144,6 +144,62 @@ def test_availability_date_from_rentals():
     buckets = build_floorplan_buckets(models, rentals, today="2026-07-16")
     # Earliest upcoming (>= today) is 2026-08-15; the June date is past.
     assert buckets[0]["earliest_available_date"] == "2026-08-15"
+
+
+# ── Phase 2: projection of a matched floorplan onto the building dict ──
+
+# A building stored (collapsed) as a studio — what to_summary_dict() returns.
+BUILDING = {"id": "q3c2q7z", "rent": 2150, "bedrooms": 0, "bathrooms": 1, "sqft": 398}
+
+
+def test_projection_overrides_to_matched_floorplan():
+    """A 3BR match must present the 3BR's rent/beds, not the studio's."""
+    out = project_matched_floorplan(
+        BUILDING, bedrooms=3, bathrooms=2.0,
+        min_rent=4624, max_rent=4952, min_sqft=1444, max_sqft=1444,
+        available_units=3, earliest_available_date="2026-08-01",
+    )
+    assert out["rent"] == 4624
+    assert out["bedrooms"] == 3
+    assert out["bathrooms"] == 2
+    assert out["sqft"] == 1444
+    assert out["price_on_request"] is False
+    assert out["matched_floorplan"]["max_rent"] == 4952
+    assert out["matched_floorplan"]["available_units"] == 3
+    # Building identity preserved.
+    assert out["id"] == "q3c2q7z"
+
+
+def test_projection_does_not_mutate_input():
+    project_matched_floorplan(BUILDING, bedrooms=3, bathrooms=2.0,
+                              min_rent=4624, max_rent=4952, min_sqft=1444,
+                              max_sqft=1444)
+    assert BUILDING["bedrooms"] == 0 and BUILDING["rent"] == 2150
+
+
+def test_projection_price_on_request_keeps_rent_numeric():
+    """Null min_rent (D1) must still yield a numeric rent so scoring's
+    ``rent <= budget`` never hits None; falls back max_rent → building rent."""
+    # max_rent present → use it.
+    out = project_matched_floorplan(BUILDING, bedrooms=3, bathrooms=2.0,
+                                    min_rent=None, max_rent=5200, min_sqft=1400,
+                                    max_sqft=1400, available_units=1)
+    assert out["rent"] == 5200
+    assert out["price_on_request"] is True
+    assert out["matched_floorplan"]["min_rent"] is None
+    # No prices at all → fall back to the building's own rent (never None).
+    out2 = project_matched_floorplan(BUILDING, bedrooms=3, bathrooms=2.0,
+                                     min_rent=None, max_rent=None, min_sqft=None,
+                                     max_sqft=None, available_units=1)
+    assert out2["rent"] == 2150
+    assert isinstance(out2["rent"], int)
+
+
+def test_projection_half_bath_preserved():
+    out = project_matched_floorplan(BUILDING, bedrooms=2, bathrooms=1.5,
+                                    min_rent=3000, max_rent=3000, min_sqft=900,
+                                    max_sqft=900)
+    assert out["bathrooms"] == 1.5
 
 
 if __name__ == "__main__":

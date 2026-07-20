@@ -317,3 +317,55 @@ def build_floorplan_buckets(
     # Stable order: by bedrooms then bathrooms.
     buckets.sort(key=lambda b: (b["bedrooms"], b["bathrooms"]))
     return buckets
+
+
+def project_matched_floorplan(
+    apt: Dict[str, Any],
+    *,
+    bedrooms: int,
+    bathrooms: float,
+    min_rent: Optional[int],
+    max_rent: Optional[int],
+    min_sqft: Optional[int],
+    max_sqft: Optional[int],
+    available_units: Optional[int] = None,
+    earliest_available_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Overlay a matched floorplan bucket onto a building's summary dict.
+
+    A floorplan search matches a *building* on one of its buckets, but
+    ``to_summary_dict`` describes the collapsed building (studio rent/beds). This
+    projects the matched bucket's values onto a copy of that dict so scoring, the
+    card, and everything downstream reflect the unit the user actually searched
+    for — not the studio.
+
+    ``rent`` is always left numeric (scoring does ``rent <= budget``): the
+    bucket's ``min_rent`` when priced, else ``max_rent``, else the building's
+    original rent. The real bucket (including ``price_on_request``) is attached
+    as ``matched_floorplan`` for the display layer. See decision D1.
+    """
+    rent = min_rent
+    if rent is None:
+        rent = max_rent
+    if rent is None:
+        rent = apt.get("rent")
+
+    out = {**apt}
+    out["rent"] = rent
+    out["bedrooms"] = bedrooms
+    out["bathrooms"] = int(bathrooms) if float(bathrooms).is_integer() else bathrooms
+    if min_sqft or max_sqft:
+        out["sqft"] = min_sqft or max_sqft or apt.get("sqft") or 0
+    out["price_on_request"] = min_rent is None
+    out["matched_floorplan"] = {
+        "bedrooms": bedrooms,
+        "bathrooms": bathrooms,
+        "min_rent": min_rent,
+        "max_rent": max_rent,
+        "min_sqft": min_sqft,
+        "max_sqft": max_sqft,
+        "available_units": available_units,
+        "earliest_available_date": earliest_available_date,
+        "price_on_request": min_rent is None,
+    }
+    return out

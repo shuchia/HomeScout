@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 # Limit concurrent Claude API calls to prevent runaway costs
 _claude_semaphore = asyncio.Semaphore(5)
 
+# Phase 2 of docs/floorplan-search-design.md. When enabled, DB search joins
+# apartment_floorplans and matches per-floorplan bucket (so larger units in
+# mixed buildings become searchable), projecting the matched floorplan onto each
+# result. Default off — the building-level query is unchanged until buckets are
+# backfilled and this is flipped per-env.
+USE_FLOORPLAN_SEARCH = os.getenv("USE_FLOORPLAN_SEARCH", "false").lower() == "true"
+
 
 class ApartmentService:
     """Service for managing apartment search and matching"""
@@ -76,26 +83,41 @@ class ApartmentService:
         bedrooms: int,
         bathrooms: int,
         property_type: str,
-        move_in_date: str
+        move_in_date: str,
+        bedroom_mode: str = "exact",
     ) -> List[Dict]:
-        """Search apartments in PostgreSQL database."""
+        """Search apartments in PostgreSQL database.
+
+        Routes to the floorplan-aware join (per-floorplan matching, one card per
+        building) when ``USE_FLOORPLAN_SEARCH`` is enabled, else the legacy
+        building-level query. ``bedroom_mode`` is ``"exact"`` (default) or
+        ``"plus"`` (>= N); it only affects the floorplan path.
+        """
+        if USE_FLOORPLAN_SEARCH:
+            return await self._search_database_floorplan(
+                city, budget, bedrooms, bathrooms, property_type, bedroom_mode
+            )
+        return await self._search_database_building(
+            city, budget, bedrooms, bathrooms, property_type
+        )
+
+    async def _search_database_building(
+        self,
+        city: str,
+        budget: int,
+        bedrooms: int,
+        bathrooms: int,
+        property_type: str,
+    ) -> List[Dict]:
+        """Legacy building-level search: one row per building, bedroom matched on
+        the building's collapsed ``bedrooms`` value."""
         from sqlalchemy import select, and_, or_
         from app.models.apartment import ApartmentModel
 
-        # Parse property types
         property_types = [pt.strip() for pt in property_type.split(",")]
-
-        # Parse city name from "City, ST" format for column matching
         city_name = city.split(",")[0].strip() if "," in city else city.strip()
 
-        # Parse move-in date
-        try:
-            desired_move_in = datetime.strptime(move_in_date, "%Y-%m-%d")
-        except ValueError:
-            desired_move_in = None
-
         async with get_session_context() as session:
-            # Build query with filters
             stmt = select(ApartmentModel).where(
                 and_(
                     ApartmentModel.is_active == 1,
@@ -104,7 +126,6 @@ class ApartmentService:
                     ApartmentModel.bedrooms == bedrooms,
                     ApartmentModel.bathrooms >= bathrooms,
                     ApartmentModel.property_type.in_(property_types),
-                    # City filter: match on indexed city column or fallback to address
                     or_(
                         ApartmentModel.city.ilike(city_name),
                         ApartmentModel.address.ilike(f"%{city}%"),
@@ -113,12 +134,91 @@ class ApartmentService:
             )
 
             result = await session.execute(stmt)
+            apartments = [apt.to_summary_dict() for apt in result.scalars()]
+            logger.info(f"Database search (building) returned {len(apartments)} apartments")
+            return apartments
+
+    async def _search_database_floorplan(
+        self,
+        city: str,
+        budget: int,
+        bedrooms: int,
+        bathrooms: int,
+        property_type: str,
+        bedroom_mode: str = "exact",
+    ) -> List[Dict]:
+        """Floorplan-aware search (docs/floorplan-search-design.md).
+
+        Joins ``apartment_floorplans`` and matches per-floorplan bucket, so a 3BR
+        floorplan inside an otherwise-studio building is found. Returns one row
+        per building (DISTINCT ON), keeping the cheapest matching bucket, with the
+        matched floorplan projected onto the result dict.
+        """
+        from sqlalchemy import select, and_, or_
+        from app.models.apartment import ApartmentModel
+        from app.models.apartment_floorplan import ApartmentFloorplanModel as FP
+        from app.services.floorplans import project_matched_floorplan
+
+        property_types = [pt.strip() for pt in property_type.split(",")]
+        city_name = city.split(",")[0].strip() if "," in city else city.strip()
+
+        # Bedroom match mode (D3): exact N, or N+ for "3+" searches.
+        bed_cond = (
+            FP.bedrooms >= bedrooms if bedroom_mode == "plus" else FP.bedrooms == bedrooms
+        )
+
+        async with get_session_context() as session:
+            stmt = (
+                select(ApartmentModel, FP)
+                .join(FP, FP.apartment_id == ApartmentModel.id)
+                .where(
+                    and_(
+                        ApartmentModel.is_active == 1,
+                        ApartmentModel.freshness_confidence >= 40,
+                        ApartmentModel.property_type.in_(property_types),
+                        or_(
+                            ApartmentModel.city.ilike(city_name),
+                            ApartmentModel.address.ilike(f"%{city}%"),
+                        ),
+                        bed_cond,
+                        FP.bathrooms >= bathrooms,
+                        FP.available_units > 0,
+                        # Budget against the matched floorplan; keep
+                        # price-on-request (null min_rent) — decision D1.
+                        or_(
+                            FP.min_rent <= int(budget * 1.10),
+                            FP.min_rent.is_(None),
+                        ),
+                    )
+                )
+                # One card per building: keep the priced-before-unpriced,
+                # smallest-qualifying, cheapest matching bucket.
+                .distinct(ApartmentModel.id)
+                .order_by(
+                    ApartmentModel.id,
+                    FP.min_rent.is_(None),
+                    FP.bedrooms,
+                    FP.min_rent.asc().nullslast(),
+                )
+            )
+
+            result = await session.execute(stmt)
             apartments = []
+            for apt, fp in result.all():
+                projected = project_matched_floorplan(
+                    apt.to_summary_dict(),
+                    bedrooms=fp.bedrooms,
+                    bathrooms=fp.bathrooms,
+                    min_rent=fp.min_rent,
+                    max_rent=fp.max_rent,
+                    min_sqft=fp.min_sqft,
+                    max_sqft=fp.max_sqft,
+                    available_units=fp.available_units,
+                    earliest_available_date=fp.earliest_available_date,
+                )
+                apartments.append(projected)
 
-            for apt in result.scalars():
-                apartments.append(apt.to_summary_dict())
-
-            logger.info(f"Database search returned {len(apartments)} apartments")
+            logger.info(f"Database search (floorplan) returned {len(apartments)} apartments")
             return apartments
 
     def _search_json(
@@ -174,7 +274,8 @@ class ApartmentService:
         bedrooms: int,
         bathrooms: int,
         property_type: str,
-        move_in_date: str
+        move_in_date: str,
+        bedroom_mode: str = "exact",
     ) -> List[Dict]:
         """
         Filter apartments based on basic search criteria.
@@ -187,6 +288,8 @@ class ApartmentService:
             bathrooms: Number of bathrooms needed
             property_type: Comma-separated property types
             move_in_date: Desired move-in date (YYYY-MM-DD)
+            bedroom_mode: "exact" (default) or "plus" (>= N); only affects the
+                floorplan-aware DB path.
 
         Returns:
             List of filtered apartments
@@ -194,7 +297,7 @@ class ApartmentService:
         if self._use_database:
             return await self._search_database(
                 city, budget, bedrooms, bathrooms,
-                property_type, move_in_date
+                property_type, move_in_date, bedroom_mode=bedroom_mode,
             )
         else:
             return self._search_json(
