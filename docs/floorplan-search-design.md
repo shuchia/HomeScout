@@ -10,7 +10,16 @@
   1,792 buildings**. Boston 3BR ≤ $4,800 search returned **20 results (was 0)** via the join,
   with price-on-request (D1) and matched-floorplan projection confirmed on real data.
 
-### Finding: duplicate building rows (blocks true "one card per building")
+### Finding: duplicate building rows — FIXED
+
+**Resolution (2026-07-21):** the join now keys `DISTINCT ON` on
+`COALESCE(address_normalized, address, id)` instead of `apartments.id`, keeping the cheapest
+matching bucket per *physical building*. Re-validated on QA: Boston 3BR ≤ $4,800 collapsed
+**20 → 11 rows, 11 distinct addresses, zero duplicate addresses**; `24 Oyster Bay Rd` (6 rows)
+now appears once at its cheapest 3BR ($4,156). Original finding below for context.
+
+---
+
 
 QA validation, Boston 3BR ≤ $4,800: **20 result rows = 20 distinct `apartments.id`, but only
 11 distinct addresses.** Three addresses carry duplicate building rows: `24 Oyster Bay Rd` ×6,

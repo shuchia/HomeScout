@@ -151,10 +151,11 @@ class ApartmentService:
 
         Joins ``apartment_floorplans`` and matches per-floorplan bucket, so a 3BR
         floorplan inside an otherwise-studio building is found. Returns one row
-        per building (DISTINCT ON), keeping the cheapest matching bucket, with the
-        matched floorplan projected onto the result dict.
+        per physical building (DISTINCT ON normalized address), keeping the
+        cheapest matching bucket, with the matched floorplan projected onto the
+        result dict.
         """
-        from sqlalchemy import select, and_, or_
+        from sqlalchemy import select, and_, or_, func
         from app.models.apartment import ApartmentModel
         from app.models.apartment_floorplan import ApartmentFloorplanModel as FP
         from app.services.floorplans import project_matched_floorplan
@@ -165,6 +166,14 @@ class ApartmentService:
         # Bedroom match mode (D3): exact N, or N+ for "3+" searches.
         bed_cond = (
             FP.bedrooms >= bedrooms if bedroom_mode == "plus" else FP.bedrooms == bedrooms
+        )
+
+        # Collapse to one card per *physical building*. The data holds multiple
+        # `apartments` rows for the same address (scraper/dedup dupes), so keying
+        # DISTINCT ON apartments.id would show a building several times. Key on
+        # normalized address (fall back to raw address, then id) instead.
+        building_key = func.coalesce(
+            ApartmentModel.address_normalized, ApartmentModel.address, ApartmentModel.id
         )
 
         async with get_session_context() as session:
@@ -193,9 +202,9 @@ class ApartmentService:
                 )
                 # One card per building: keep the priced-before-unpriced,
                 # smallest-qualifying, cheapest matching bucket.
-                .distinct(ApartmentModel.id)
+                .distinct(building_key)
                 .order_by(
-                    ApartmentModel.id,
+                    building_key,
                     FP.min_rent.is_(None),
                     FP.bedrooms,
                     FP.min_rent.asc().nullslast(),
