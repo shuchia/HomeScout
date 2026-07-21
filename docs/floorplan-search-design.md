@@ -1,6 +1,29 @@
 # Floorplan-Aware Search — Design
 
-*2026-07-15 · status: design approved (D1–D4 decided) · pre-implementation*
+*2026-07-15 · status: design approved (D1–D4 decided) · Phase 1–2 implemented, validated on QA*
+
+## Implementation status
+
+- **Phase 1** (schema, `ApartmentFloorplanModel`, `build_floorplan_buckets`, `backfill_floorplans`): done.
+- **Phase 2** (`USE_FLOORPLAN_SEARCH`-gated join in `_search_database`, projection, D1/D3): done.
+- **QA validation (2026-07-21):** migration applied; backfill built **4,088 buckets across
+  1,792 buildings**. Boston 3BR ≤ $4,800 search returned **20 results (was 0)** via the join,
+  with price-on-request (D1) and matched-floorplan projection confirmed on real data.
+
+### Finding: duplicate building rows (blocks true "one card per building")
+
+QA validation, Boston 3BR ≤ $4,800: **20 result rows = 20 distinct `apartments.id`, but only
+11 distinct addresses.** Three addresses carry duplicate building rows: `24 Oyster Bay Rd` ×6,
+`3200 Washington St` ×4, `43 Smith St` ×2. `DISTINCT ON (apartments.id)` is working exactly as
+designed (20 distinct ids → 20 rows); the *data* holds multiple building rows per physical
+address (scraper/dedup produced them), so "one card per building" does not fully hold — ~45% of
+these rows are dupes.
+
+This is **pre-existing** (building-level search would also duplicate these once matched) and is
+surfaced more because floorplan search matches more inventory. Options for a later phase:
+collapse by `address_normalized` (or content-hash) in the query/projection, or a dedup pass
+upstream. Tracked as a follow-up; does not block the Phase 2 flag rollout, but should be fixed
+before the flag is turned on for users (duplicate cards are visible).
 
 ## Problem
 
