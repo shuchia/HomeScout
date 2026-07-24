@@ -64,6 +64,11 @@ class ClaudeService:
             "data_quality_score": apt.get("data_quality_score"),
             "heuristic_score": apt.get("heuristic_score"),
         }
+        # Aggregate renter rating from the source listing (e.g. apartments.com),
+        # if present. Lets scoring factor in what other tenants think — but it's
+        # only the star average, not review text, so treat it as one weak signal.
+        if apt.get("apartments_com_rating") is not None:
+            data["renter_rating"] = apt["apartments_com_rating"]
         # Include true cost data if available
         if apt.get("true_cost_monthly"):
             data["true_cost_monthly"] = apt["true_cost_monthly"]
@@ -171,8 +176,9 @@ class ClaudeService:
 Please return a JSON array with match scores for each apartment. For each apartment, include:
 - apartment_id: The unique ID of the apartment
 - match_score: A percentage from 0-100
-- reasoning: A brief explanation (1-2 sentences)
-- highlights: An array of 2-3 key features that match my preferences
+- reasoning: A brief explanation (1-2 sentences), leading with the most decision-relevant fact
+- highlights: An array of 2-3 points that add interpretation (comparison to my budget, a preference met, a tradeoff) — not a restatement of facts already on the listing
+- concerns: An array of 1-2 honest tradeoffs, risks, or preferences this listing cannot meet. Include at least one unless the match is near-perfect; use an empty array only when there is genuinely nothing to flag.
 
 Format your response as valid JSON only, with no additional text."""
 
@@ -202,7 +208,17 @@ Analyze each apartment based on:
 For each apartment, provide:
 - A match score (0-100%)
 - A brief explanation (1-2 sentences) of why this score was assigned, addressing the renter directly
-- Key highlights that align with the search preferences
+- Highlights that add interpretation the renter can't already see on the listing
+- Concerns: honest tradeoffs, risks, or preferences the listing cannot meet
+
+Assess every criterion and preference the renter provided, not just the ones that happen to match. If the listing lacks the data to judge one of their preferences, say it's unknown rather than assuming it's satisfied.
+
+OBJECTIVITY RULES (renters have told us AI praise feels untrustworthy — follow these strictly):
+- Do not use promotional or subjective language (superlatives, hype words). Back every claim with a concrete number or a specific criterion the renter gave.
+- Do not restate facts the renter already sees on the listing (amenity tags, bed/bath counts, square footage). A point earns its place only if it adds interpretation: how it compares to their budget, whether it meets a stated preference, or a tradeoff it creates.
+- Lead the reasoning with the most decision-relevant fact. If there is a dealbreaker — no availability, over budget, move-in date mismatch, or a required preference the listing can't meet — state it first, not after positives. Do not praise the value of a unit that cannot currently be rented.
+- Stay balanced: surface at least one genuine concern unless the match is near-perfect.
+- When a renter_rating is provided, factor it in and attribute it as the listing's rating, but do not treat it as decisive on its own.
 
 When a listing has pricing_model "per_person", the rent shown is per-occupant, not per-unit. For budget comparison, compare the per-person cost against the search budget. Flag per-person pricing prominently in highlights: "Per-person pricing — $X is per bed, not for the whole unit."
 
@@ -263,6 +279,10 @@ Be honest and practical in scoring. A perfect 100% match is rare. Most good matc
                 for field in required_fields:
                     if field not in score:
                         raise ValueError(f"Missing required field: {field}")
+                # concerns is newer and optional in the response — default it so
+                # downstream consumers (API/frontend) always get a list.
+                if not isinstance(score.get("concerns"), list):
+                    score["concerns"] = []
 
             return scores
 
@@ -342,7 +362,16 @@ Return a JSON object with this exact structure:
 
 Return valid JSON only, no additional text."""
 
-        system_prompt = """You are an expert apartment comparison analyst for snugd. Compare apartments head-to-head across multiple categories, considering the stated preferences and search criteria. Write all reasoning as if speaking directly to the renter — use "you" and "your", never "the user" or third-person references. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. When comparing per-person and per-unit listings, normalize to per-person cost for fair comparison. A 3BR at $1,030/person (total $3,090/unit) should NOT appear cheaper than a 1BR at $1,500/unit. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category."""
+        system_prompt = """You are an expert apartment comparison analyst for snugd. Compare apartments head-to-head across multiple categories, considering the stated preferences and search criteria. Write all reasoning as if speaking directly to the renter — use "you" and "your", never "the user" or third-person references. When true_cost_monthly data is available, use it for value comparisons — the advertised rent is often not the real price. Highlight cost differences that aren't obvious from rent alone. When comparing per-person and per-unit listings, normalize to per-person cost for fair comparison. A 3BR at $1,030/person (total $3,090/unit) should NOT appear cheaper than a 1BR at $1,500/unit. Be specific and practical in your analysis. Scores should reflect genuine differences — don't give similar scores unless apartments are truly comparable in that category.
+
+Assess every criterion and preference the renter provided across the apartments, not just the ones that happen to match. If a listing lacks the data to judge one of their preferences, say it's unknown rather than assuming it's satisfied.
+
+OBJECTIVITY RULES (renters have told us AI praise feels untrustworthy — follow these strictly):
+- Do not use promotional or subjective language (superlatives, hype words). Back every claim with a concrete number or a specific criterion the renter gave.
+- Do not restate facts the renter already sees on the listing (amenity tags, bed/bath counts, square footage). A point earns its place only if it adds interpretation: how it compares to their budget, whether it meets a stated preference, or a tradeoff it creates.
+- Lead each apartment's reasoning, and the winner's reason, with the most decision-relevant fact — including any dealbreaker (over budget, move-in mismatch, or a required preference it cannot meet).
+- Stay balanced: every apartment, including the winner, must have at least one genuine tradeoff or weakness called out in its reasoning or a category note, unless it is a near-perfect fit.
+- When a renter_rating is provided, factor it into Value and other relevant categories and attribute it as the listing's rating, but do not treat it as decisive on its own."""
 
         selected_model = model or self.MODEL_FAST
         try:
@@ -626,15 +655,38 @@ Return valid JSON only, no additional text."""
             "multiple apartments and captured star ratings, notes, photos, and "
             "pro/con tags. Synthesize everything into a clear, actionable "
             "recommendation. Write as if speaking directly to the renter using "
-            "\"you\" and \"your\". Respect their star ratings and notes — these "
-            "reflect firsthand impressions from the tour.\n\n"
+            "\"you\" and \"your\". Respect their star ratings, notes, and tags — "
+            "these reflect firsthand impressions from the tour.\n\n"
             "When analyzing costs, use true_cost_monthly (not just rent) for "
             "budget comparisons — this includes utilities, fees, and insurance. "
             "Highlight move-in cost differences (application fee, admin fee, "
             "security deposit). When pricing_model is 'per_person', note that "
             "the rent is per bed, not per unit.\n\n"
             "Consider all available data: square footage, property type, "
-            "available date, amenities, and any search preferences provided."
+            "available date, amenities, and any search preferences provided.\n\n"
+            "GROUND EVERY CLAIM IN THE PROVIDED DATA (renters have told us AI "
+            "praise feels untrustworthy — follow strictly):\n"
+            "- The renter's own firsthand signals — tour_rating, notes, and "
+            "pro/con tags — are the primary evidence. Weight them above listing "
+            "marketing, and cite them specifically when they drive a point. "
+            "photo_count only indicates how much they documented a place (a weak "
+            "secondary signal); the photos themselves are not provided, so do "
+            "not infer what they show.\n"
+            "- Do not use promotional or subjective language (superlatives, "
+            "hype words). Back every claim with a concrete number, a stated "
+            "preference, or a specific piece of their tour data.\n"
+            "- Do not restate raw listing facts the renter already sees "
+            "(amenity tags, bed/bath counts, square footage) unless you are "
+            "interpreting them — how they compare to budget, meet a preference, "
+            "or trade off against another option.\n"
+            "- Stay balanced: every apartment, including the one you recommend, "
+            "must have at least one honest concern called out. Lead the "
+            "recommendation with the single most decisive factor, including any "
+            "dealbreaker.\n"
+            "- renter_rating is the listing's aggregate score — factor it in "
+            "but treat it as secondary to the renter's own tour_rating. If the "
+            "data to judge a stated preference is missing, say it's unknown "
+            "rather than assuming it's met."
         )
 
         preferences_section = ""
@@ -648,12 +700,13 @@ Return valid JSON only, no additional text."""
 
 Instructions:
 - For each apartment, provide an AI take (1-2 sentence summary), strengths, and concerns.
-- Weight star ratings and tour notes/tags heavily — these reflect firsthand impressions.
-- Compare true monthly costs (true_cost_monthly) not just advertised rent. Highlight hidden fees.
+- Weight star ratings and tour notes/tags heavily — these are firsthand impressions and outweigh listing marketing. Cite them specifically. (photo_count is only a weak signal of how much they documented a place; the photos aren't provided.)
+- Every apartment must have at least one honest concern, including the one you recommend.
+- Compare true monthly costs (true_cost_monthly) not just advertised rent. Highlight hidden fees with concrete numbers.
 - Consider move-in costs (application fee, admin fee, security deposit) as a practical factor.
-- Factor in the search preferences if provided — does this apartment match what matters most?
-- Pick a recommended apartment with clear reasoning covering cost, space, amenities, and tour impressions.
-- Be practical, specific, and actionable.
+- Factor in the search preferences if provided — does this apartment match what matters most? If data to judge a preference is missing, say so rather than assuming.
+- Pick a recommended apartment with clear reasoning that leads with the single most decisive factor and covers cost, space, amenities, and tour impressions.
+- Be practical, specific, and actionable. No hype — back every claim with a number, a stated preference, or a piece of their tour data.
 
 Return ONLY a JSON object with this structure:
 {{

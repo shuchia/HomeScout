@@ -41,6 +41,27 @@ const anchor = intent === 'tour' ? '#checkAvailabilityTourBtn' : '#sendMessageBt
 window.open(sourceUrl + anchor, '_blank', 'noopener,noreferrer')
 ```
 
+## ⚠️ Mobile regression + fix (2026-06-18, same day)
+
+The above shipped behavior **blanked the apartments.com page on mobile**. The
+anchor IDs were only ever verified against the **desktop** DOM (note the
+`stickyContactRightRail` class — a desktop-only element); on mobile those IDs
+don't exist and the unresolved hash blanked the page. There were also two
+latent issues in the same function that hurt mobile specifically:
+
+1. `await navigator.clipboard.writeText(...)` ran **before** `window.open()`,
+   consuming the tap's transient activation → mobile browsers blank/block the
+   new tab.
+2. The `'noopener,noreferrer'` windowFeatures string can degrade a new tab into
+   a blank popup on mobile.
+
+**Fix:** open the window **synchronously first** (preserve activation), drop the
+windowFeatures string (use `win.opener = null` instead), and **gate the fragment
+to desktop only** (`window.matchMedia('(min-width: 768px)')`). Mobile now opens
+the bare `sourceUrl`. The clipboard write moved to fire-and-forget after the
+open. apartments.com is Akamai-fenced and mobile-only-failing, so this was
+fixed defensively rather than via headless repro (which isn't possible).
+
 ## What this gets us and what it doesn't
 
 | | Result |

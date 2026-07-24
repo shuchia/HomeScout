@@ -327,6 +327,22 @@ async def generate_decision_brief(
                 {"tag": tg["tag"], "sentiment": tg["sentiment"]}
             )
 
+        # Photos: pass how many the renter took per apartment. The image bytes
+        # aren't sent (this is a text call) and there's no caption-entry UI yet,
+        # so count is the honest signal — it conveys how much they documented
+        # each place. (AI-derived room type/condition from the pixels is a
+        # planned follow-up that will replace this weak count with real content.)
+        photos_result = (
+            supabase_admin.table("tour_photos")
+            .select("tour_pipeline_id")
+            .in_("tour_pipeline_id", tour_ids)
+            .execute()
+        )
+        photo_count_by_tour: dict[str, int] = {}
+        for p in (photos_result.data or []):
+            tid = p["tour_pipeline_id"]
+            photo_count_by_tour[tid] = photo_count_by_tour.get(tid, 0) + 1
+
         # Build user preferences string — prefer request body (current search
         # context from frontend), fall back to most recent saved search
         user_preferences = None
@@ -387,6 +403,9 @@ async def generate_decision_brief(
                 "property_type": apt.get("property_type"),
                 "available_date": apt.get("available_date"),
                 "amenities": apt.get("amenities", []),
+                # Aggregate renter rating from the source listing (secondary to
+                # the user's own firsthand tour_rating below).
+                "renter_rating": apt.get("apartments_com_rating"),
                 # True cost data
                 "true_cost_monthly": apt.get("true_cost_monthly"),
                 "true_cost_move_in": apt.get("true_cost_move_in"),
@@ -404,6 +423,7 @@ async def generate_decision_brief(
                 "tour_decision": t.get("decision"),
                 "tags": tags_by_tour.get(t["id"], []),
                 "notes": notes_by_tour.get(t["id"], []),
+                "photo_count": photo_count_by_tour.get(t["id"], 0),
             }
             # Add pricing context for per-person listings
             if apt.get("pricing_model") == "per_person":
@@ -573,11 +593,21 @@ async def get_tour(
 
         photos_result = (
             supabase_admin.table("tour_photos")
-            .select("id, thumbnail_url, caption, created_at")
+            .select("id, thumbnail_s3_key, caption, created_at")
             .eq("tour_pipeline_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
+        # Regenerate a fresh presigned thumbnail URL on read. The stored
+        # thumbnail_url is presigned at upload time and expires after 1 hour
+        # (PRESIGNED_URL_EXPIRY), so returning it verbatim left thumbnails
+        # broken whenever a tour was reopened more than an hour later. The
+        # image itself is safe in S3 — only the signed link expired.
+        photos = photos_result.data or []
+        for photo in photos:
+            thumb_key = photo.pop("thumbnail_s3_key", None)
+            if thumb_key:
+                photo["thumbnail_url"] = PhotoService.get_presigned_url(thumb_key)
 
         tags_result = (
             supabase_admin.table("tour_tags")
@@ -590,7 +620,7 @@ async def get_tour(
             "tour": _build_tour_response(
                 tour_row,
                 notes=notes_result.data or [],
-                photos=photos_result.data or [],
+                photos=photos,
                 tags=tags_result.data or [],
             )
         }
