@@ -776,3 +776,116 @@ async def _backfill_nyc_city_normalization() -> Dict[str, Any]:
         "updated": updated,
         "sample_moves": sample_moves,
     }
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def backfill_floorplans(self, batch_size: int = 200, only_missing: bool = True) -> Dict[str, Any]:
+    """Populate apartment_floorplans buckets from apartments.floor_plans.
+
+    Phase 1 of docs/floorplan-search-design.md. apartments.com stores one row
+    per building with the bedroom range collapsed to its low end, hiding larger
+    units from ``bedrooms == N`` search. This parses the ``floor_plans`` (models)
+    JSONB the scrape already captured into per-(bedrooms, bathrooms) buckets — no
+    Apify cost, no re-scrape.
+
+    Idempotent: rebuilds each building's buckets wholesale (delete + reinsert).
+    With ``only_missing`` (default) it skips buildings that already have buckets,
+    so re-runs are cheap; pass ``only_missing=False`` to rebuild everything.
+    """
+    if not is_database_enabled():
+        return {"status": "skipped", "reason": "Database not enabled"}
+
+    return run_async(_backfill_floorplans(batch_size=batch_size, only_missing=only_missing))
+
+
+async def _backfill_floorplans(batch_size: int, only_missing: bool) -> Dict[str, Any]:
+    import re
+    import uuid
+
+    from sqlalchemy import select, delete, exists
+    from app.models.apartment import ApartmentModel
+    from app.models.apartment_floorplan import ApartmentFloorplanModel
+    from app.services.floorplans import build_floorplan_buckets
+
+    _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    scanned = 0
+    buildings_with_buckets = 0
+    buckets_created = 0
+    last_id = ""
+
+    while True:
+        async with get_session_context() as session:
+            stmt = select(ApartmentModel).where(ApartmentModel.is_active == 1)
+            if only_missing:
+                stmt = stmt.where(
+                    ~exists().where(ApartmentFloorplanModel.apartment_id == ApartmentModel.id)
+                )
+            if last_id:
+                stmt = stmt.where(ApartmentModel.id > last_id)
+            stmt = stmt.order_by(ApartmentModel.id).limit(batch_size)
+
+            rows = (await session.execute(stmt)).scalars().all()
+            if not rows:
+                break
+
+            for apt in rows:
+                scanned += 1
+                last_id = apt.id
+
+                # Only carry a real date forward; building-level "Now"/"Unavailable"
+                # tokens aren't dates.
+                fallback_date = (
+                    apt.available_date
+                    if (apt.available_date and _DATE_RE.match(apt.available_date))
+                    else None
+                )
+
+                buckets = build_floorplan_buckets(
+                    apt.floor_plans,
+                    apt.available_units,
+                    fallback_bedrooms=apt.bedrooms,
+                    fallback_bathrooms=apt.bathrooms,
+                    fallback_rent=apt.rent,
+                    fallback_sqft=apt.sqft,
+                    fallback_available_date=fallback_date,
+                )
+
+                # Idempotent rebuild: clear this building's existing buckets first.
+                await session.execute(
+                    delete(ApartmentFloorplanModel).where(
+                        ApartmentFloorplanModel.apartment_id == apt.id
+                    )
+                )
+                for b in buckets:
+                    session.add(
+                        ApartmentFloorplanModel(
+                            id=uuid.uuid4().hex,
+                            apartment_id=apt.id,
+                            bedrooms=b["bedrooms"],
+                            bathrooms=b["bathrooms"],
+                            min_rent=b["min_rent"],
+                            max_rent=b["max_rent"],
+                            min_sqft=b["min_sqft"],
+                            max_sqft=b["max_sqft"],
+                            available_units=b["available_units"],
+                            earliest_available_date=b["earliest_available_date"],
+                            model_ids=b["model_ids"],
+                        )
+                    )
+                    buckets_created += 1
+                if buckets:
+                    buildings_with_buckets += 1
+
+            await session.commit()
+
+    logger.info(
+        f"backfill_floorplans: scanned={scanned} "
+        f"buildings_with_buckets={buildings_with_buckets} buckets_created={buckets_created}"
+    )
+    return {
+        "status": "completed",
+        "scanned": scanned,
+        "buildings_with_buckets": buildings_with_buckets,
+        "buckets_created": buckets_created,
+    }

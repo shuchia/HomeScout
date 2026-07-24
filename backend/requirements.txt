@@ -60,5 +60,9 @@ stripe==11.4.1
 resend==2.5.1
 
 # Development
-pytest==8.0.0
-pytest-asyncio==0.23.8
+# pytest 8.2+ required by pytest-asyncio 0.24.0 (which pins pytest<9,>=8.2).
+pytest==8.3.4
+# 0.24.0: fixes the pytest 8 package-collection crash ("'Package' object has no
+# attribute 'obj'") present in <=0.23.3, and recognizes the
+# asyncio_default_fixture_loop_scope option set in pytest.ini.
+pytest-asyncio==0.24.0
