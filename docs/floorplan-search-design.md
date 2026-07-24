@@ -6,6 +6,12 @@
 
 - **Phase 1** (schema, `ApartmentFloorplanModel`, `build_floorplan_buckets`, `backfill_floorplans`): done.
 - **Phase 2** (`USE_FLOORPLAN_SEARCH`-gated join in `_search_database`, projection, D1/D3): done.
+- **Phase 3** (scoring on the matched floorplan): done. Heuristic drops the budget term and
+  renormalizes for price-on-request (null rent) instead of scoring a fabricated fallback; and
+  the Claude AI path (`score_batch` → `get_apartments_by_ids`) now projects each building onto
+  its matching floorplan bucket when the flag is on, so the AI scores the searched unit, not the
+  collapsed studio. Building-level dedup: IDs reaching `score_batch` are already deduped by
+  search, so DISTINCT ON id suffices there.
 - **QA validation (2026-07-21):** migration applied; backfill built **4,088 buckets across
   1,792 buildings**. Boston 3BR ≤ $4,800 search returned **20 results (was 0)** via the join,
   with price-on-request (D1) and matched-floorplan projection confirmed on real data.

@@ -389,9 +389,27 @@ class ApartmentService:
 
         return page_results, total_count, has_more
 
-    async def get_apartments_by_ids(self, apartment_ids: List[str]) -> List[Dict]:
-        """Fetch apartments by their IDs."""
+    async def get_apartments_by_ids(
+        self,
+        apartment_ids: List[str],
+        *,
+        bedrooms: Optional[int] = None,
+        bathrooms: Optional[int] = None,
+        budget: Optional[int] = None,
+        bedroom_mode: str = "exact",
+    ) -> List[Dict]:
+        """Fetch apartments by their IDs.
+
+        When ``USE_FLOORPLAN_SEARCH`` is on and ``bedrooms`` is given, each
+        apartment is projected onto its matching floorplan bucket (same as the
+        search), so downstream AI scoring judges the searched unit — not the
+        collapsed studio. Without those, returns building-level summaries.
+        """
         if self._use_database:
+            if USE_FLOORPLAN_SEARCH and bedrooms is not None:
+                return await self._get_by_ids_floorplan(
+                    apartment_ids, bedrooms, bathrooms or 1, budget, bedroom_mode
+                )
             from sqlalchemy import select
             from app.models.apartment import ApartmentModel
             async with get_session_context() as session:
@@ -406,6 +424,66 @@ class ApartmentService:
                 self._apartments_data = self._load_apartments_from_json()
             id_set = set(apartment_ids)
             return [apt for apt in self._apartments_data if apt["id"] in id_set]
+
+    async def _get_by_ids_floorplan(
+        self,
+        apartment_ids: List[str],
+        bedrooms: int,
+        bathrooms: int,
+        budget: Optional[int],
+        bedroom_mode: str,
+    ) -> List[Dict]:
+        """Fetch the given buildings projected onto their matching floorplan
+        bucket (cheapest matching). Mirrors ``_search_database_floorplan``'s
+        projection so AI scoring sees the same unit the search matched. IDs are
+        already building-deduped by search, so DISTINCT ON id is sufficient here.
+        """
+        from sqlalchemy import select, and_, or_
+        from app.models.apartment import ApartmentModel
+        from app.models.apartment_floorplan import ApartmentFloorplanModel as FP
+        from app.services.floorplans import project_matched_floorplan
+
+        bed_cond = (
+            FP.bedrooms >= bedrooms if bedroom_mode == "plus" else FP.bedrooms == bedrooms
+        )
+        conds = [
+            ApartmentModel.id.in_(apartment_ids),
+            ApartmentModel.is_active == 1,
+            bed_cond,
+            FP.bathrooms >= bathrooms,
+            FP.available_units > 0,
+        ]
+        if budget:
+            conds.append(or_(FP.min_rent <= int(budget * 1.10), FP.min_rent.is_(None)))
+
+        async with get_session_context() as session:
+            stmt = (
+                select(ApartmentModel, FP)
+                .join(FP, FP.apartment_id == ApartmentModel.id)
+                .where(and_(*conds))
+                .distinct(ApartmentModel.id)
+                .order_by(
+                    ApartmentModel.id,
+                    FP.min_rent.is_(None),
+                    FP.bedrooms,
+                    FP.min_rent.asc().nullslast(),
+                )
+            )
+            result = await session.execute(stmt)
+            return [
+                project_matched_floorplan(
+                    apt.to_summary_dict(),
+                    bedrooms=fp.bedrooms,
+                    bathrooms=fp.bathrooms,
+                    min_rent=fp.min_rent,
+                    max_rent=fp.max_rent,
+                    min_sqft=fp.min_sqft,
+                    max_sqft=fp.max_sqft,
+                    available_units=fp.available_units,
+                    earliest_available_date=fp.earliest_available_date,
+                )
+                for apt, fp in result.all()
+            ]
 
     async def get_top_apartments(
         self,
