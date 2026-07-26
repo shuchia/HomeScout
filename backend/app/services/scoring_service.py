@@ -163,13 +163,19 @@ class ScoringService:
         bathrooms: float,
         requested_bathrooms: float,
         sqft: Optional[int],
+        price_on_request: bool = False,
     ) -> int:
         """Compute weighted overall heuristic score (0-100).
 
         Weights: budget 30%, freshness 20%, quality 15%,
         amenity 20%, space 15%.
+
+        ``price_on_request`` (a floorplan with no listed rent — decision D1):
+        the price is unknown, so scoring it against ``rent`` would be
+        fabricated (``rent`` is only a fallback). Drop the budget term and
+        renormalize the remaining weights so such a listing is judged on its
+        other merits, neither rewarded nor penalized on an unknown price.
         """
-        budget_s = ScoringService.budget_fit_score(rent, budget)
         fresh_s = ScoringService.freshness_score(freshness_confidence, last_seen_at)
         quality_s = ScoringService.data_quality_score(data_quality)
         amenity_s = ScoringService.amenity_match_score(other_preferences, amenities)
@@ -177,6 +183,17 @@ class ScoringService:
             bedrooms, requested_bedrooms, bathrooms, requested_bathrooms, sqft
         )
 
+        if price_on_request:
+            # Renormalize the non-budget weights (0.20+0.15+0.20+0.15 = 0.70) to 1.0.
+            total = (
+                fresh_s * (0.20 / 0.70)
+                + quality_s * (0.15 / 0.70)
+                + amenity_s * (0.20 / 0.70)
+                + space_s * (0.15 / 0.70)
+            )
+            return int(total)
+
+        budget_s = ScoringService.budget_fit_score(rent, budget)
         total = (
             budget_s * 0.30
             + fresh_s * 0.20
@@ -226,6 +243,7 @@ class ScoringService:
                 bathrooms=apt.get("bathrooms", 0),
                 requested_bathrooms=bathrooms,
                 sqft=apt.get("sqft"),
+                price_on_request=apt.get("price_on_request", False),
             )
             apt_with_score = {
                 **apt,
