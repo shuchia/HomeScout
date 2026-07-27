@@ -57,7 +57,7 @@ class TestAnonymousSearch:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT], 1, False),
+                return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 
@@ -86,7 +86,7 @@ class TestAnonymousSearch:
                 patch(
                     "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([SAMPLE_APARTMENT], 1, False),
+                    return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
                 ),
                 patch(
                     "app.services.claude_service.ClaudeService.score_apartments",
@@ -125,7 +125,7 @@ class TestFreeUserSearch:
                 patch(
                     "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([SAMPLE_APARTMENT], 1, False),
+                    return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
                 ),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
@@ -185,7 +185,7 @@ class TestFreeUserSearch:
                 patch(
                     "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([], 0, False),
+                    return_value=([], 0, False, "none"),
                 ),
                 patch(
                     "app.services.claude_service.ClaudeService.score_apartments",
@@ -216,7 +216,7 @@ class TestProUserSearch:
                 patch(
                     "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([SAMPLE_APARTMENT], 1, False),
+                    return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
                 ),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
@@ -257,7 +257,7 @@ class TestProUserSearch:
                 patch(
                     "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([], 0, False),
+                    return_value=([], 0, False, "none"),
                 ),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
@@ -281,7 +281,7 @@ class TestProUserSearch:
                 patch(
                     "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
-                    return_value=([], 0, False),
+                    return_value=([], 0, False, "none"),
                 ) as mock_paginated,
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
@@ -301,7 +301,7 @@ class TestSearchResponseShape:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([], 0, False),
+                return_value=([], 0, False, "none"),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 
@@ -322,7 +322,7 @@ class TestSearchResponseShape:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT], 25, True),
+                return_value=([SAMPLE_APARTMENT], 25, True, "exact"),
             ):
                 response = client.post("/api/search", json=SEARCH_BODY)
 

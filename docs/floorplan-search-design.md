@@ -4,6 +4,11 @@
 
 ## Implementation status
 
+- **Phase 4** (near-miss fallback + `match_type`): done. When floorplan search finds 0 buildings
+  for the requested size, it widens bedrooms to the nearest sizes (N±1, then N±2, N±3), same
+  city/budget/bath filters, and tags results `match_type="near_miss"`. The `/api/search` response
+  carries `match_type` ("exact" | "plus" | "near_miss" | "none"); the UI labels near-miss results
+  ("no exact NBR — nearby options"). Frontend rendering lands in Phase 5.
 - **Phase 1** (schema, `ApartmentFloorplanModel`, `build_floorplan_buckets`, `backfill_floorplans`): done.
 - **Phase 2** (`USE_FLOORPLAN_SEARCH`-gated join in `_search_database`, projection, D1/D3): done.
 - **Phase 3** (scoring on the matched floorplan): done. Heuristic drops the budget term and

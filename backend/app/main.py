@@ -199,7 +199,7 @@ async def search_apartments(
             )
 
     try:
-        page_results, total_count, has_more = await apartment_service.get_apartments_paginated(
+        page_results, total_count, has_more, match_type = await apartment_service.get_apartments_paginated(
             city=request.city,
             budget=request.budget,
             bedrooms=request.bedrooms,
@@ -269,6 +269,9 @@ async def search_apartments(
             "has_more": has_more,
             "tier": tier,
             "searches_remaining": searches_remaining,
+            # "exact" | "plus" | "near_miss" | "none" — when "near_miss", the UI
+            # shows "no exact NBR — nearby options" (results are other sizes).
+            "match_type": match_type,
         }
 
     except ValueError as e:

@@ -56,7 +56,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT], 1, False),
+                return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
             ):
                 response = client.post(
                     "/api/search",
@@ -102,7 +102,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT], 1, False),
+                return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
             ):
                 response = client.post(
                     "/api/search",
@@ -132,7 +132,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT_2], 1, False),
+                return_value=([SAMPLE_APARTMENT_2], 1, False, "exact"),
             ):
                 response = client.post(
                     "/api/search",
@@ -161,7 +161,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT], 1, False),
+                return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
             ):
                 response = client.post(
                     "/api/search",
@@ -190,7 +190,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT], 1, False),
+                return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
             ):
                 response = client.post(
                     "/api/search",
@@ -222,7 +222,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([SAMPLE_APARTMENT], 1, False),
+                return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
             ):
                 response = client.post(
                     "/api/search",
@@ -250,7 +250,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=([], 0, False),
+                return_value=([], 0, False, "none"),
             ):
                 response = client.post(
                     "/api/search",
@@ -283,7 +283,7 @@ class TestSearchEndpoint:
             with patch(
                 "app.main.apartment_service.get_apartments_paginated",
                 new_callable=AsyncMock,
-                return_value=(apartments, 25, True),
+                return_value=(apartments, 25, True, "exact"),
             ):
                 response = client.post(
                     "/api/search",
