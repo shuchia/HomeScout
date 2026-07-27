@@ -118,3 +118,9 @@ variable "log_level" {
   type    = string
   default = "INFO"
 }
+
+variable "use_floorplan_search" {
+  description = "Enable floorplan-aware apartment search. Set per-env in *.tfvars."
+  type        = string
+  default     = "false"
+}
