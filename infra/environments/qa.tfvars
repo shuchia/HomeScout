@@ -3,6 +3,7 @@ vpc_cidr             = "10.1.0.0/16"
 enable_redundant_nat = false
 frontend_url         = "https://qa.snugd.ai"
 log_level            = "INFO"
+use_floorplan_search = "true"
 
 # Initial image. CI pushes :qa-latest alongside each :qa-{sha} so this
 # stays pullable. Subsequent revisions belong to CI — the ECS module
