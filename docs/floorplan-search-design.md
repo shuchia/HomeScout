@@ -40,7 +40,19 @@ collapse by `address_normalized` (or content-hash) in the query/projection, or a
 upstream. Tracked as a follow-up; does not block the Phase 2 flag rollout, but should be fixed
 before the flag is turned on for users (duplicate cards are visible).
 
-### Finding: buckets don't capture per-bedroom (by-the-bed) pricing — MUST FIX before flag-on
+### Finding: buckets don't capture per-bedroom (by-the-bed) pricing — FIXED
+
+**Resolution (2026-07-27, decision: keep per-bed matching + label):** `pricing_model` is now
+detected **per bucket** (using the bucket's real beds/baths + building description via
+`detect_pricing_model`) and stored on `apartment_floorplans` — the building-level value is
+unreliable because it's computed on the collapsed `bedrooms=0`. Matching/scoring stay on the
+per-bed price (students pay per bed, so a $1,792/bed room stays an affordable in-budget option),
+but the projection now exposes `matched_floorplan.{pricing_model, per_bed_rent, whole_unit_rent}`
+(whole_unit = per-bed × bedrooms) so the card can label it "$1,792/bed · $5,376/unit total", and
+the correct per-bucket `pricing_model` reaches Claude scoring (previously the unreliable
+building-level value). Frontend label lands in Phase 5. Original finding below.
+
+
 
 Phase 3 QA check surfaced this: a "3 Beds" bucket for a by-the-bed listing (e.g. 217 Albany St)
 had `min_rent=$1,792` — the *per-bedroom* share, not the ~$5,376 whole-unit cost — with

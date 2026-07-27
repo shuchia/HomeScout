@@ -190,6 +190,8 @@ def build_floorplan_buckets(
     fallback_rent: Optional[int] = None,
     fallback_sqft: Optional[int] = None,
     fallback_available_date: Optional[str] = None,
+    description: Optional[str] = None,
+    city: Optional[str] = None,
     today: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Collapse a building's floorplans into ``(bedrooms, bathrooms)`` buckets.
@@ -201,6 +203,10 @@ def build_floorplan_buckets(
             non-apartments.com sources (zillow/craigslist/manual) and single-unit
             listings get exactly one implicit bucket so every building has >=1
             bucket and the search join is uniform.
+        description, city: building-level context for per-bucket pricing-model
+            detection (per_unit vs per_person / by-the-bed). Detected per bucket
+            using the bucket's real beds/baths — the building's own pricing_model
+            is unreliable because it's computed on the collapsed bedroom count.
         today: ``YYYY-MM-DD`` reference for "earliest upcoming"; defaults to
             ``date.today()``. Injectable for tests.
 
@@ -279,10 +285,12 @@ def build_floorplan_buckets(
     # building genuinely has no current inventory and must not match a search.
     if not groups:
         if not had_any_model and fallback_bedrooms is not None:
+            beds = int(fallback_bedrooms)
+            baths = float(fallback_bathrooms) if fallback_bathrooms is not None else 1.0
             return [
                 {
-                    "bedrooms": int(fallback_bedrooms),
-                    "bathrooms": float(fallback_bathrooms) if fallback_bathrooms is not None else 1.0,
+                    "bedrooms": beds,
+                    "bathrooms": baths,
                     "min_rent": fallback_rent,
                     "max_rent": fallback_rent,
                     "min_sqft": fallback_sqft,
@@ -290,6 +298,9 @@ def build_floorplan_buckets(
                     "available_units": 1,
                     "earliest_available_date": fallback_available_date,
                     "model_ids": [],
+                    "pricing_model": _detect_bucket_pricing(
+                        description, city, beds, baths, fallback_rent
+                    ),
                 }
             ]
         return []
@@ -300,23 +311,57 @@ def build_floorplan_buckets(
         rents_high = g["rents_high"]
         sqfts = g["sqfts"]
         earliest = _earliest_upcoming(g["dates"], today) or fallback_available_date
+        min_rent = min(rents) if rents else None
         buckets.append(
             {
                 "bedrooms": g["bedrooms"],
                 "bathrooms": g["bathrooms"],
-                "min_rent": min(rents) if rents else None,
+                "min_rent": min_rent,
                 "max_rent": max(rents_high) if rents_high else None,
                 "min_sqft": min(sqfts) if sqfts else None,
                 "max_sqft": max(sqfts) if sqfts else None,
                 "available_units": g["available_units"],
                 "earliest_available_date": earliest,
                 "model_ids": g["model_ids"],
+                # Per-bucket pricing model (per_unit vs per_person / by-the-bed),
+                # detected on the bucket's real beds/baths — not the building's
+                # collapsed pricing_model (which is computed on bedrooms=0).
+                "pricing_model": _detect_bucket_pricing(
+                    description, city, g["bedrooms"], g["bathrooms"], min_rent
+                ),
             }
         )
 
     # Stable order: by bedrooms then bathrooms.
     buckets.sort(key=lambda b: (b["bedrooms"], b["bathrooms"]))
     return buckets
+
+
+def _detect_bucket_pricing(
+    description: Optional[str],
+    city: Optional[str],
+    bedrooms: int,
+    bathrooms: float,
+    rent: Optional[int],
+) -> Optional[str]:
+    """Detect per_unit vs per_person for one bucket. Returns None when there's no
+    signal to run on (no description and studio), leaving it unlabeled."""
+    # Studios are never per-person; skip the detector's building-level call when
+    # we have nothing to go on.
+    if not description and bedrooms == 0:
+        return None
+    try:
+        from app.services.pricing_model_detector import detect_pricing_model
+
+        return detect_pricing_model(
+            description=description or "",
+            bedrooms=int(bedrooms),
+            bathrooms=float(bathrooms),
+            rent=int(rent) if rent else 0,
+            city=city or "",
+        )["pricing_model"]
+    except Exception:
+        return None
 
 
 def project_matched_floorplan(
@@ -330,6 +375,7 @@ def project_matched_floorplan(
     max_sqft: Optional[int],
     available_units: Optional[int] = None,
     earliest_available_date: Optional[str] = None,
+    pricing_model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Overlay a matched floorplan bucket onto a building's summary dict.
 
@@ -343,12 +389,23 @@ def project_matched_floorplan(
     bucket's ``min_rent`` when priced, else ``max_rent``, else the building's
     original rent. The real bucket (including ``price_on_request``) is attached
     as ``matched_floorplan`` for the display layer. See decision D1.
+
+    For ``per_person`` (by-the-bed) floorplans, ``min_rent`` is the per-bedroom
+    share; matching/scoring stays on that per-bed price (students pay per bed),
+    but ``matched_floorplan`` also carries ``per_bed_rent`` and an estimated
+    ``whole_unit_rent`` (= per-bed × bedrooms) so the card can label it clearly.
     """
     rent = min_rent
     if rent is None:
         rent = max_rent
     if rent is None:
         rent = apt.get("rent")
+
+    per_person = pricing_model == "per_person"
+    per_bed_rent = min_rent if per_person else None
+    whole_unit_rent = (
+        min_rent * max(int(bedrooms), 1) if (per_person and min_rent is not None) else None
+    )
 
     out = {**apt}
     out["rent"] = rent
@@ -357,6 +414,9 @@ def project_matched_floorplan(
     if min_sqft or max_sqft:
         out["sqft"] = min_sqft or max_sqft or apt.get("sqft") or 0
     out["price_on_request"] = min_rent is None
+    # Surface the per-bucket pricing model (overrides the building-level value,
+    # which is unreliable for buckets) so Claude scoring and the card use it.
+    out["pricing_model"] = pricing_model or apt.get("pricing_model")
     out["matched_floorplan"] = {
         "bedrooms": bedrooms,
         "bathrooms": bathrooms,
@@ -367,5 +427,8 @@ def project_matched_floorplan(
         "available_units": available_units,
         "earliest_available_date": earliest_available_date,
         "price_on_request": min_rent is None,
+        "pricing_model": pricing_model,
+        "per_bed_rent": per_bed_rent,
+        "whole_unit_rent": whole_unit_rent,
     }
     return out

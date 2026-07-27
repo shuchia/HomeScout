@@ -224,6 +224,7 @@ class ApartmentService:
                     max_sqft=fp.max_sqft,
                     available_units=fp.available_units,
                     earliest_available_date=fp.earliest_available_date,
+                    pricing_model=fp.pricing_model,
                 )
                 apartments.append(projected)
 
@@ -481,6 +482,7 @@ class ApartmentService:
                     max_sqft=fp.max_sqft,
                     available_units=fp.available_units,
                     earliest_available_date=fp.earliest_available_date,
+                    pricing_model=fp.pricing_model,
                 )
                 for apt, fp in result.all()
             ]

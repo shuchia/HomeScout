@@ -62,6 +62,11 @@ class ApartmentFloorplanModel(Base):
     # Provenance: the source modelIds that rolled up into this bucket.
     model_ids = Column(JSONB, nullable=True)
 
+    # "per_unit" (min_rent is whole-unit) or "per_person" (min_rent is the
+    # by-the-bed share; whole-unit ≈ min_rent × bedrooms). Detected per bucket,
+    # not from the building's collapsed pricing_model.
+    pricing_model = Column(String(20), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -86,4 +91,5 @@ class ApartmentFloorplanModel(Base):
             "available_units": self.available_units,
             "earliest_available_date": self.earliest_available_date,
             "price_on_request": self.min_rent is None,
+            "pricing_model": self.pricing_model,
         }

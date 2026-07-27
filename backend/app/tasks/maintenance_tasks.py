@@ -849,6 +849,8 @@ async def _backfill_floorplans(batch_size: int, only_missing: bool) -> Dict[str,
                     fallback_rent=apt.rent,
                     fallback_sqft=apt.sqft,
                     fallback_available_date=fallback_date,
+                    description=apt.description,
+                    city=apt.city,
                 )
 
                 # Idempotent rebuild: clear this building's existing buckets first.
@@ -871,6 +873,7 @@ async def _backfill_floorplans(batch_size: int, only_missing: bool) -> Dict[str,
                             available_units=b["available_units"],
                             earliest_available_date=b["earliest_available_date"],
                             model_ids=b["model_ids"],
+                            pricing_model=b.get("pricing_model"),
                         )
                     )
                     buckets_created += 1
