@@ -202,6 +202,62 @@ def test_projection_half_bath_preserved():
     assert out["bathrooms"] == 1.5
 
 
+# ── Per-bedroom (by-the-bed) pricing ──
+
+def test_bucket_detects_per_person_from_description():
+    """A by-the-bed 3BR description → the 3BR bucket is flagged per_person,
+    even though the building is stored collapsed as a studio."""
+    models = [
+        _model(["Studio", "1 Bath"], "$1,769", "236", "2 Available units", "s1"),
+        _model(["3 Beds", "3 Baths"], "$1,792", "236", "3 Available units", "c1"),
+    ]
+    buckets = build_floorplan_buckets(
+        models, description="Off-campus student housing leased by the bed.",
+        city="Boston",
+    )
+    b3 = _bucket(buckets, 3, 3.0)
+    assert b3["pricing_model"] == "per_person"
+    # Studio bucket is never per-person.
+    assert _bucket(buckets, 0, 1.0)["pricing_model"] == "per_unit"
+
+
+def test_bucket_per_unit_without_signals():
+    models = [_model(["3 Beds", "2 Baths"], "$4,624", "1,444", "2 Available units", "c1")]
+    buckets = build_floorplan_buckets(
+        models, description="Spacious 3 bedroom luxury apartment.", city="Boston",
+    )
+    assert _bucket(buckets, 3, 2.0)["pricing_model"] == "per_unit"
+
+
+def test_projection_per_person_exposes_per_bed_and_whole_unit():
+    """Per-person 3BR: matching/scoring stays on the $1,792 per-bed price, but
+    the card gets per_bed_rent + whole_unit_rent (1792×3) for labeling."""
+    out = project_matched_floorplan(
+        BUILDING, bedrooms=3, bathrooms=3.0,
+        min_rent=1792, max_rent=1792, min_sqft=236, max_sqft=236,
+        pricing_model="per_person",
+    )
+    # rent stays the per-bed price (decision: keep per-bed matching).
+    assert out["rent"] == 1792
+    assert out["pricing_model"] == "per_person"
+    mf = out["matched_floorplan"]
+    assert mf["pricing_model"] == "per_person"
+    assert mf["per_bed_rent"] == 1792
+    assert mf["whole_unit_rent"] == 1792 * 3
+
+
+def test_projection_per_unit_has_no_per_bed_fields():
+    out = project_matched_floorplan(
+        BUILDING, bedrooms=3, bathrooms=2.0,
+        min_rent=4624, max_rent=4952, min_sqft=1444, max_sqft=1444,
+        pricing_model="per_unit",
+    )
+    mf = out["matched_floorplan"]
+    assert mf["pricing_model"] == "per_unit"
+    assert mf["per_bed_rent"] is None
+    assert mf["whole_unit_rent"] is None
+
+
 if __name__ == "__main__":
     # Standalone runner so the suite works even when pytest mis-collects the
     # tests package. Runs every test_* function in this module.
