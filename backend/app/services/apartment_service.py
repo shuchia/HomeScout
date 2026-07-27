@@ -362,6 +362,7 @@ class ApartmentService:
         other_preferences: str = None,
         page: int = 1,
         page_size: int = 10,
+        bedroom_mode: str = "exact",
     ) -> Tuple[List[Dict], int, bool, str]:
         """
         Get paginated heuristic-scored apartments.
@@ -374,8 +375,9 @@ class ApartmentService:
         """
         from app.services.scoring_service import ScoringService
 
-        # Build cache key from search params (excluding page)
-        raw = f"{city}:{budget}:{bedrooms}:{bathrooms}:{property_type}:{move_in_date}:{other_preferences or ''}"
+        # Build cache key from search params (excluding page). bedroom_mode is
+        # included so a "3+" search doesn't reuse an "exact 3" cached page.
+        raw = f"{city}:{budget}:{bedrooms}:{bathrooms}:{property_type}:{move_in_date}:{other_preferences or ''}:{bedroom_mode}"
         cache_key = f"search_pages:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
         # Try cache first (for page 2+ or even page 1 re-hits)
@@ -399,7 +401,7 @@ class ApartmentService:
             filtered = await self.search_apartments(
                 city=city, budget=budget, bedrooms=bedrooms,
                 bathrooms=bathrooms, property_type=property_type,
-                move_in_date=move_in_date,
+                move_in_date=move_in_date, bedroom_mode=bedroom_mode,
             )
 
             if not filtered:

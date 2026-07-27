@@ -43,11 +43,16 @@ const BATHROOM_OPTIONS = [
   { value: 3, label: '3 Bath' },
 ];
 
+// Mirrors the backend USE_FLOORPLAN_SEARCH flag. The "N+" bedroom mode only has
+// an effect once floorplan-aware search is enabled, so keep the toggle hidden
+// until then to avoid an inert control.
+const FLOORPLAN_SEARCH_ENABLED = process.env.NEXT_PUBLIC_FLOORPLAN_SEARCH === 'true';
+
 interface SearchFormProps {
   onResults: (results: ApartmentWithScore[]) => void;
   onLoading: (loading: boolean) => void;
   onError: (error: string | null) => void;
-  onSearchMeta?: (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string; has_more?: boolean; page?: number }) => void;
+  onSearchMeta?: (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string; has_more?: boolean; page?: number; match_type?: string }) => void;
   onSearchParams?: (params: SearchParams) => void;
 }
 
@@ -97,6 +102,8 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
   );
   const budget = Number(budgetInput) || BUDGET_DEFAULT;
   const [bedrooms, setBedrooms] = useState(searchContext?.bedrooms ?? 1);
+  // "exact" or "plus" (N+). When on, matches the selected bedroom count or more.
+  const [bedroomPlus, setBedroomPlus] = useState(false);
   const [bathrooms, setBathrooms] = useState(searchContext?.bathrooms ?? 1);
   const [moveInDate, setMoveInDate] = useState(searchContext?.move_in_date || getDefaultMoveInDate());
   const [otherPreferences, setOtherPreferences] = useState(searchContext?.other_preferences || '');
@@ -131,6 +138,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         property_type: DEFAULT_PROPERTY_TYPE,
         move_in_date: moveInDate,
         other_preferences: otherPreferences.trim() || undefined,
+        bedroom_mode: bedroomPlus ? 'plus' : 'exact',
         near_lat: nearLocation?.lat,
         near_lng: nearLocation?.lng,
         near_label: nearLocation?.label,
@@ -139,7 +147,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
 
       const response = await searchApartments(params);
       onResults(response.apartments);
-      onSearchMeta?.({ tier: response.tier, searches_remaining: response.searches_remaining, move_in_date: moveInDate, has_more: response.has_more, page: response.page });
+      onSearchMeta?.({ tier: response.tier, searches_remaining: response.searches_remaining, move_in_date: moveInDate, has_more: response.has_more, page: response.page, match_type: response.match_type });
       onSearchParams?.(params);
 
       // Save search context for comparison page + form persistence
@@ -250,6 +258,19 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
               </option>
             ))}
           </select>
+          {/* N+ mode: include larger floorplans too (e.g. "3+ bedrooms").
+              Hidden until floorplan-aware search is enabled (else it's inert). */}
+          {FLOORPLAN_SEARCH_ENABLED && (
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={bedroomPlus}
+                onChange={(e) => setBedroomPlus(e.target.checked)}
+                className="rounded border-gray-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+              />
+              {bedrooms === 0 ? 'or larger' : `${bedrooms}+ (or more bedrooms)`}
+            </label>
+          )}
         </div>
 
         {/* Bathrooms */}

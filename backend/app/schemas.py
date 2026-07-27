@@ -12,6 +12,9 @@ class SearchRequest(BaseModel):
     property_type: str = Field(..., description="Comma-separated property types (e.g., 'Apartment, Condo')")
     move_in_date: str = Field(..., description="Desired move-in date (YYYY-MM-DD format)")
     other_preferences: Optional[str] = Field(None, description="Additional preferences and requirements")
+    # Bedroom match mode: "exact" (default) or "plus" (>= N, i.e. "3+"). Only
+    # affects the floorplan-aware search path.
+    bedroom_mode: str = Field("exact", description='"exact" or "plus" (N+)')
     # Proximity search (optional)
     near_lat: Optional[float] = Field(None, description="Latitude of reference location")
     near_lng: Optional[float] = Field(None, description="Longitude of reference location")

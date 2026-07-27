@@ -4,6 +4,14 @@
 
 ## Implementation status
 
+- **Phase 5** (card UX + N+ wiring): done. `bedroom_mode` ("exact"/"plus") is wired
+  SearchForm → SearchRequest → paginated search (cache key includes it). ApartmentCard renders
+  the matched floorplan: price-on-request affordance, per-bed price + estimated whole-unit total
+  for by-the-bed listings, and a "By the bed" badge. The results page shows a near-miss banner
+  when `match_type === "near_miss"`. Frontend types gained `MatchedFloorplan`, `matched_floorplan`,
+  `match_type`, `bedroom_mode`. The N+ toggle is gated behind `NEXT_PUBLIC_FLOORPLAN_SEARCH` (the
+  card/banner are naturally gated — they only render when floorplan data is present). Verified:
+  tsc + lint clean, backend suite 320.
 - **Phase 4** (near-miss fallback + `match_type`): done. When floorplan search finds 0 buildings
   for the requested size, it widens bedrooms to the nearest sizes (N±1, then N±2, N±3), same
   city/budget/bath filters, and tags results `match_type="near_miss"`. The `/api/search` response

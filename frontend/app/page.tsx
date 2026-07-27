@@ -32,6 +32,8 @@ export default function Home() {
   const [moveInDate, setMoveInDate] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(() => loadSessionResults().currentPage);
   const [hasMore, setHasMore] = useState(() => loadSessionResults().hasMore);
+  // "near_miss" when no building had the requested bedroom size (floorplan search).
+  const [matchType, setMatchType] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [aiLoadingIds, setAiLoadingIds] = useState<Set<string>>(new Set());
   const [lastSearchParams, setLastSearchParams] = useState<(SearchParams & { page?: number }) | null>(null);
@@ -117,11 +119,13 @@ export default function Home() {
   };
 
   // Handle search metadata (tier, remaining searches, pagination)
-  const handleSearchMeta = (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string; has_more?: boolean; page?: number }) => {
+  const handleSearchMeta = (meta: { tier?: string; searches_remaining?: number | null; move_in_date?: string; has_more?: boolean; page?: number; match_type?: string }) => {
     setSearchesRemaining(meta.searches_remaining ?? null);
     if (meta.move_in_date) setMoveInDate(meta.move_in_date);
     if (meta.has_more !== undefined) setHasMore(meta.has_more);
     if (meta.page !== undefined) setCurrentPage(meta.page);
+    // Only page 1 carries the authoritative match_type for the search.
+    if (meta.page === undefined || meta.page <= 1) setMatchType(meta.match_type ?? null);
   };
 
   // Load more results
@@ -291,6 +295,19 @@ export default function Home() {
               {/* Results Grid */}
               {!isLoading && !error && results.length > 0 && (
                 <div>
+                  {/* Near-miss: no building had the exact requested bedroom size;
+                      these are the nearest available sizes instead. */}
+                  {matchType === 'near_miss' && (
+                    <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      <svg className="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>
+                        No exact matches for your bedroom count in this area. Showing the
+                        closest available sizes &mdash; check each card&apos;s bed count.
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">
                       {results.length} Apartment{results.length !== 1 ? 's' : ''} Found
