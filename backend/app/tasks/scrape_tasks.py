@@ -231,10 +231,13 @@ async def _get_existing_data(city: str):
 
     try:
         async with get_session_context() as session:
-            # Get ALL content hashes globally (content_hash has a UNIQUE constraint)
+            # Get ALL content hashes globally (content_hash has a UNIQUE constraint).
+            # Must include is_active=0 rows too: the constraint spans every row, so a
+            # re-seen listing whose earlier row has decayed to inactive still collides
+            # on insert. Matching it here routes it to the update path (which now
+            # reactivates it) instead of a doomed INSERT that fails the whole scrape.
             stmt = select(ApartmentModel.content_hash, ApartmentModel.id).where(
                 ApartmentModel.content_hash.isnot(None),
-                ApartmentModel.is_active == 1,
             )
             result = await session.execute(stmt)
             for row in result:
@@ -552,6 +555,10 @@ async def _update_reseen_listings(updates: List[Dict[str, Any]]):
                 "last_seen_at": datetime.utcnow(),
                 "freshness_confidence": 100,
                 "times_seen": ApartmentModel.times_seen + 1,
+                # Reactivate: a re-seen listing may have decayed to is_active=0
+                # since the last scrape. Seeing it live again means it's back on
+                # the market, so restore it to search results.
+                "is_active": 1,
             }
             # Merge richer data if available
             if upd.get("images"):
