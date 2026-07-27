@@ -63,3 +63,34 @@ async def test_search_apartments_passes_mode_through(service):
             "Boston, MA", 4800, 3, 1, "Apartment", "2026-08-01", bedroom_mode="plus"
         )
     assert inner.await_args.kwargs.get("bedroom_mode") == "plus"
+
+
+# ── Phase 3: AI-scoring path projects the matched floorplan ──
+
+@pytest.mark.asyncio
+async def test_get_by_ids_projects_floorplan_when_flag_on(service):
+    """With the flag on and bedrooms given, get_apartments_by_ids routes to the
+    floorplan-projecting variant so AI scores the searched unit, not the studio."""
+    fp = AsyncMock(return_value=[{"id": "x", "bedrooms": 3}])
+    with patch("app.services.apartment_service.USE_FLOORPLAN_SEARCH", True), \
+         patch.object(service, "_get_by_ids_floorplan", fp):
+        out = await service.get_apartments_by_ids(
+            ["x"], bedrooms=3, bathrooms=1, budget=4800
+        )
+    fp.assert_awaited_once()
+    assert out[0]["bedrooms"] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_by_ids_building_level_when_flag_off(service):
+    """Flag off → no floorplan projection, even with bedrooms given."""
+    fp = AsyncMock(return_value=[{"id": "proj"}])
+    with patch("app.services.apartment_service.USE_FLOORPLAN_SEARCH", False), \
+         patch.object(service, "_get_by_ids_floorplan", fp):
+        # DB path with flag off hits the plain query; patch the session out by
+        # forcing JSON mode so no DB is needed.
+        service._use_database = False
+        service._apartments_data = [{"id": "x", "bedrooms": 0}]
+        out = await service.get_apartments_by_ids(["x"], bedrooms=3)
+    fp.assert_not_awaited()
+    assert out[0]["id"] == "x"

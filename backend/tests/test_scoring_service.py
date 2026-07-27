@@ -201,6 +201,34 @@ class TestOverallScore:
         )
         assert score <= 40
 
+    def test_price_on_request_drops_budget_term(self):
+        """Price-on-request (floorplan with no rent) must not be scored on the
+        fabricated fallback rent — the budget term is dropped and the remaining
+        weights renormalized, so an over-budget-looking rent doesn't penalize it."""
+        common = dict(
+            budget=2000,
+            freshness_confidence=95, last_seen_at=datetime.utcnow().isoformat(),
+            data_quality=90,
+            other_preferences="gym", amenities=["Fitness Center"],
+            bedrooms=3, requested_bedrooms=3,
+            bathrooms=2, requested_bathrooms=1,
+            sqft=1200,
+        )
+        # With a wildly-over-budget fallback rent, normal scoring tanks the
+        # budget term; price_on_request should ignore rent entirely.
+        normal = ScoringService.compute_heuristic_score(rent=9999, **common)
+        por = ScoringService.compute_heuristic_score(
+            rent=9999, price_on_request=True, **common
+        )
+        assert por > normal
+        # And it must match scoring with the budget term removed + renormalized:
+        # a rent AT budget (budget term = 100) is the ceiling; por should be
+        # independent of the rent value.
+        por_other_rent = ScoringService.compute_heuristic_score(
+            rent=1, price_on_request=True, **common
+        )
+        assert por == por_other_rent
+
     def test_score_to_label_excellent(self):
         assert ScoringService.score_to_label(92) == "Excellent Match"
 

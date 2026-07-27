@@ -6,6 +6,12 @@
 
 - **Phase 1** (schema, `ApartmentFloorplanModel`, `build_floorplan_buckets`, `backfill_floorplans`): done.
 - **Phase 2** (`USE_FLOORPLAN_SEARCH`-gated join in `_search_database`, projection, D1/D3): done.
+- **Phase 3** (scoring on the matched floorplan): done. Heuristic drops the budget term and
+  renormalizes for price-on-request (null rent) instead of scoring a fabricated fallback; and
+  the Claude AI path (`score_batch` → `get_apartments_by_ids`) now projects each building onto
+  its matching floorplan bucket when the flag is on, so the AI scores the searched unit, not the
+  collapsed studio. Building-level dedup: IDs reaching `score_batch` are already deduped by
+  search, so DISTINCT ON id suffices there.
 - **QA validation (2026-07-21):** migration applied; backfill built **4,088 buckets across
   1,792 buildings**. Boston 3BR ≤ $4,800 search returned **20 results (was 0)** via the join,
   with price-on-request (D1) and matched-floorplan projection confirmed on real data.
@@ -33,6 +39,18 @@ surfaced more because floorplan search matches more inventory. Options for a lat
 collapse by `address_normalized` (or content-hash) in the query/projection, or a dedup pass
 upstream. Tracked as a follow-up; does not block the Phase 2 flag rollout, but should be fixed
 before the flag is turned on for users (duplicate cards are visible).
+
+### Finding: buckets don't capture per-bedroom (by-the-bed) pricing — MUST FIX before flag-on
+
+Phase 3 QA check surfaced this: a "3 Beds" bucket for a by-the-bed listing (e.g. 217 Albany St)
+had `min_rent=$1,792` — the *per-bedroom* share, not the ~$5,376 whole-unit cost — with
+`sqft=236` (one room). `build_floorplan_buckets` reads `models[].totalPrice`/`details` without
+consulting the building's `pricing_model` (per-bed vs per-unit, which the app already tracks).
+So by-the-bed 3BRs look like impossibly cheap whole units. Claude's AI scoring *caught* it via
+reasoning ("per-bedroom pricing… your share only"), but the **heuristic budget term would not** —
+it would score $1,792 as a great fit for a $4,800 3BR budget. Fix before enabling the flag:
+carry `pricing_model` (and per-unit vs per-bed rent) onto the bucket, and either normalize to
+whole-unit cost for budget filtering/scoring or label it. Tracked as a follow-up.
 
 ## Problem
 

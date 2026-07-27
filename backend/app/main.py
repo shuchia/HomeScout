@@ -298,15 +298,23 @@ async def score_batch(
     if len(request.apartment_ids) > 10:
         raise HTTPException(status_code=400, detail="Maximum 10 apartments per batch.")
 
+    ctx = request.search_context
+
     try:
-        # Fetch apartment data by IDs
-        apartments = await apartment_service.get_apartments_by_ids(request.apartment_ids)
+        # Fetch apartment data by IDs. Pass the search context so, when
+        # floorplan search is on, each building is projected onto its matching
+        # floorplan bucket — the AI must score the searched unit, not the studio.
+        apartments = await apartment_service.get_apartments_by_ids(
+            request.apartment_ids,
+            bedrooms=ctx.bedrooms,
+            bathrooms=ctx.bathrooms,
+            budget=ctx.budget,
+        )
         if not apartments:
             return {"scores": []}
 
         # Check cache
         ids_key = ",".join(sorted(request.apartment_ids))
-        ctx = request.search_context
         # Preferences and proximity change the scoring output, so they must be
         # part of the cache key — otherwise a pref-blind result gets served to a
         # later search that did specify preferences.
