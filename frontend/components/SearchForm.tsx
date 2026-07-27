@@ -87,7 +87,11 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
   const { isPro } = useAuth();
 
   // Form state — restore from persisted searchContext if available
-  const [city, setCity] = useState(searchContext?.city || 'New York, NY');
+  // Default to Pittsburgh — it's the healthiest market by live inventory
+  // (~8 results/search, 89% non-empty), so first-time users land on results
+  // instead of an empty page. New York averaged ~3 and was empty 63% of the
+  // time, which was the top activation cliff for new redeemers.
+  const [city, setCity] = useState(searchContext?.city || 'Pittsburgh, PA');
   // Budget is held as a string so the field can be transiently empty
   // (when the user backspaces the value before retyping). Numeric state
   // would coerce empty input to 0 and produce the "leading-zero" glitch
