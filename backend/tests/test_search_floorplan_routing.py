@@ -94,3 +94,56 @@ async def test_get_by_ids_building_level_when_flag_off(service):
         out = await service.get_apartments_by_ids(["x"], bedrooms=3)
     fp.assert_not_awaited()
     assert out[0]["id"] == "x"
+
+
+# ── Phase 4: near-miss fallback + match_type ──
+
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _fake_session():
+    yield object()
+
+
+@pytest.mark.asyncio
+async def test_exact_match_tags_match_type(service):
+    """Primary (exact) query returns rows → tagged match_type='exact', no near-miss."""
+    rows = AsyncMock(return_value=[("apt", "fp")])
+    proj = lambda r, match_type: [{"match_type": match_type}]
+    with patch("app.services.apartment_service.get_session_context", lambda: _fake_session()), \
+         patch.object(ApartmentService, "_floorplan_rows", rows), \
+         patch.object(ApartmentService, "_project_floorplan_rows", side_effect=proj):
+        out = await service._search_database_floorplan(
+            "Boston, MA", 4800, 3, 1, "Apartment", bedroom_mode="exact"
+        )
+    assert rows.await_count == 1          # primary only, no near-miss
+    assert out[0]["match_type"] == "exact"
+
+
+@pytest.mark.asyncio
+async def test_near_miss_fires_when_primary_empty(service):
+    """Primary empty → widen bedrooms; first non-empty near-miss tagged 'near_miss'."""
+    # primary → [], first near-miss delta → [], second → rows
+    rows = AsyncMock(side_effect=[[], [], [("apt", "fp")]])
+    proj = lambda r, match_type: [{"match_type": match_type}]
+    with patch("app.services.apartment_service.get_session_context", lambda: _fake_session()), \
+         patch.object(ApartmentService, "_floorplan_rows", rows), \
+         patch.object(ApartmentService, "_project_floorplan_rows", side_effect=proj):
+        out = await service._search_database_floorplan(
+            "Boston, MA", 4800, 3, 1, "Apartment", bedroom_mode="exact"
+        )
+    assert rows.await_count == 3          # primary + 2 near-miss widenings
+    assert out[0]["match_type"] == "near_miss"
+
+
+@pytest.mark.asyncio
+async def test_no_results_returns_empty(service):
+    """Neither exact nor any near-miss matches → empty."""
+    rows = AsyncMock(return_value=[])
+    with patch("app.services.apartment_service.get_session_context", lambda: _fake_session()), \
+         patch.object(ApartmentService, "_floorplan_rows", rows):
+        out = await service._search_database_floorplan(
+            "Boston, MA", 4800, 3, 1, "Apartment", bedroom_mode="exact"
+        )
+    assert out == []

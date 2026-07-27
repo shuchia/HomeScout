@@ -155,81 +155,117 @@ class ApartmentService:
         cheapest matching bucket, with the matched floorplan projected onto the
         result dict.
         """
-        from sqlalchemy import select, and_, or_, func
-        from app.models.apartment import ApartmentModel
+        from sqlalchemy import and_, or_
+
         from app.models.apartment_floorplan import ApartmentFloorplanModel as FP
-        from app.services.floorplans import project_matched_floorplan
 
         property_types = [pt.strip() for pt in property_type.split(",")]
         city_name = city.split(",")[0].strip() if "," in city else city.strip()
 
-        # Bedroom match mode (D3): exact N, or N+ for "3+" searches.
-        bed_cond = (
-            FP.bedrooms >= bedrooms if bedroom_mode == "plus" else FP.bedrooms == bedrooms
-        )
+        async with get_session_context() as session:
+            # Primary match: exact N, or N+ for "3+" searches (D3).
+            primary_cond = (
+                FP.bedrooms >= bedrooms if bedroom_mode == "plus" else FP.bedrooms == bedrooms
+            )
+            rows = await self._floorplan_rows(
+                session, city, city_name, property_types, budget, bathrooms, primary_cond
+            )
+            if rows:
+                apartments = self._project_floorplan_rows(rows, match_type=bedroom_mode)
+                logger.info(f"Database search (floorplan/{bedroom_mode}) returned {len(apartments)}")
+                return apartments
 
-        # Collapse to one card per *physical building*. The data holds multiple
-        # `apartments` rows for the same address (scraper/dedup dupes), so keying
-        # DISTINCT ON apartments.id would show a building several times. Key on
-        # normalized address (fall back to raw address, then id) instead.
+            # Near-miss fallback (D3): nothing matched the requested size. Widen
+            # bedrooms to the nearest sizes (N±1, then N±2 …), same city/budget/
+            # bath filters, and tag results so the UI can label "no exact NBR —
+            # showing nearby options." Fires only when the primary is empty.
+            for delta in range(1, 4):
+                near = sorted({b for b in (bedrooms - delta, bedrooms + delta) if b >= 0})
+                if not near:
+                    continue
+                rows = await self._floorplan_rows(
+                    session, city, city_name, property_types, budget, bathrooms,
+                    FP.bedrooms.in_(near),
+                )
+                if rows:
+                    apartments = self._project_floorplan_rows(rows, match_type="near_miss")
+                    logger.info(
+                        f"Database search (floorplan/near_miss beds={near}) returned {len(apartments)}"
+                    )
+                    return apartments
+
+            logger.info("Database search (floorplan) returned 0 (no exact or near-miss)")
+            return []
+
+    async def _floorplan_rows(
+        self, session, city, city_name, property_types, budget, bathrooms, bed_cond
+    ):
+        """Run the floorplan join for a bedroom condition; return (apt, fp) rows,
+        one per physical building (DISTINCT ON normalized address, cheapest
+        matching bucket)."""
+        from sqlalchemy import select, and_, or_, func
+        from app.models.apartment import ApartmentModel
+        from app.models.apartment_floorplan import ApartmentFloorplanModel as FP
+
+        # One card per physical building — the data holds duplicate `apartments`
+        # rows per address, so key on normalized address (fall back to raw
+        # address, then id) rather than apartments.id.
         building_key = func.coalesce(
             ApartmentModel.address_normalized, ApartmentModel.address, ApartmentModel.id
         )
-
-        async with get_session_context() as session:
-            stmt = (
-                select(ApartmentModel, FP)
-                .join(FP, FP.apartment_id == ApartmentModel.id)
-                .where(
-                    and_(
-                        ApartmentModel.is_active == 1,
-                        ApartmentModel.freshness_confidence >= 40,
-                        ApartmentModel.property_type.in_(property_types),
-                        or_(
-                            ApartmentModel.city.ilike(city_name),
-                            ApartmentModel.address.ilike(f"%{city}%"),
-                        ),
-                        bed_cond,
-                        FP.bathrooms >= bathrooms,
-                        FP.available_units > 0,
-                        # Budget against the matched floorplan; keep
-                        # price-on-request (null min_rent) — decision D1.
-                        or_(
-                            FP.min_rent <= int(budget * 1.10),
-                            FP.min_rent.is_(None),
-                        ),
-                    )
-                )
-                # One card per building: keep the priced-before-unpriced,
-                # smallest-qualifying, cheapest matching bucket.
-                .distinct(building_key)
-                .order_by(
-                    building_key,
-                    FP.min_rent.is_(None),
-                    FP.bedrooms,
-                    FP.min_rent.asc().nullslast(),
+        stmt = (
+            select(ApartmentModel, FP)
+            .join(FP, FP.apartment_id == ApartmentModel.id)
+            .where(
+                and_(
+                    ApartmentModel.is_active == 1,
+                    ApartmentModel.freshness_confidence >= 40,
+                    ApartmentModel.property_type.in_(property_types),
+                    or_(
+                        ApartmentModel.city.ilike(city_name),
+                        ApartmentModel.address.ilike(f"%{city}%"),
+                    ),
+                    bed_cond,
+                    FP.bathrooms >= bathrooms,
+                    FP.available_units > 0,
+                    # Budget against the matched floorplan; keep price-on-request
+                    # (null min_rent) — decision D1.
+                    or_(FP.min_rent <= int(budget * 1.10), FP.min_rent.is_(None)),
                 )
             )
+            .distinct(building_key)
+            .order_by(
+                building_key,
+                FP.min_rent.is_(None),
+                FP.bedrooms,
+                FP.min_rent.asc().nullslast(),
+            )
+        )
+        result = await session.execute(stmt)
+        return result.all()
 
-            result = await session.execute(stmt)
-            apartments = []
-            for apt, fp in result.all():
-                projected = project_matched_floorplan(
-                    apt.to_summary_dict(),
-                    bedrooms=fp.bedrooms,
-                    bathrooms=fp.bathrooms,
-                    min_rent=fp.min_rent,
-                    max_rent=fp.max_rent,
-                    min_sqft=fp.min_sqft,
-                    max_sqft=fp.max_sqft,
-                    available_units=fp.available_units,
-                    earliest_available_date=fp.earliest_available_date,
-                    pricing_model=fp.pricing_model,
-                )
-                apartments.append(projected)
+    @staticmethod
+    def _project_floorplan_rows(rows, match_type: str) -> List[Dict]:
+        """Project (apt, fp) rows onto their matched floorplan and tag match_type."""
+        from app.services.floorplans import project_matched_floorplan
 
-            logger.info(f"Database search (floorplan) returned {len(apartments)} apartments")
-            return apartments
+        out = []
+        for apt, fp in rows:
+            projected = project_matched_floorplan(
+                apt.to_summary_dict(),
+                bedrooms=fp.bedrooms,
+                bathrooms=fp.bathrooms,
+                min_rent=fp.min_rent,
+                max_rent=fp.max_rent,
+                min_sqft=fp.min_sqft,
+                max_sqft=fp.max_sqft,
+                available_units=fp.available_units,
+                earliest_available_date=fp.earliest_available_date,
+                pricing_model=fp.pricing_model,
+            )
+            projected["match_type"] = match_type
+            out.append(projected)
+        return out
 
     def _search_json(
         self,
@@ -326,7 +362,7 @@ class ApartmentService:
         other_preferences: str = None,
         page: int = 1,
         page_size: int = 10,
-    ) -> Tuple[List[Dict], int, bool]:
+    ) -> Tuple[List[Dict], int, bool, str]:
         """
         Get paginated heuristic-scored apartments.
 
@@ -367,7 +403,7 @@ class ApartmentService:
             )
 
             if not filtered:
-                return [], 0, False
+                return [], 0, False, "none"
 
             all_scored = ScoringService.score_apartments_list(
                 apartments=filtered, budget=budget,
@@ -388,7 +424,12 @@ class ApartmentService:
         page_results = all_scored[start:end]
         has_more = end < total_count
 
-        return page_results, total_count, has_more
+        # All results of a search share a match_type (near-miss only fires when
+        # the exact/plus match is empty). Building-level (flag-off) results carry
+        # no tag → "exact".
+        match_type = all_scored[0].get("match_type", "exact") if all_scored else "none"
+
+        return page_results, total_count, has_more, match_type
 
     async def get_apartments_by_ids(
         self,

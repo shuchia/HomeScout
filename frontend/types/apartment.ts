@@ -183,6 +183,10 @@ export interface SearchResponse {
   has_more: boolean;
   tier?: string;
   searches_remaining?: number;
+  // "exact" | "plus" | "near_miss" | "none" — floorplan search only. "near_miss"
+  // means no building had the requested bedroom size; results are nearby sizes
+  // and the UI should label them (e.g. "No exact 3-bedroom — nearby options").
+  match_type?: 'exact' | 'plus' | 'near_miss' | 'none';
 }
 
 /**

@@ -244,6 +244,9 @@ class SearchResponse(BaseModel):
     has_more: bool = False
     tier: Optional[str] = None
     searches_remaining: Optional[int] = None
+    # "exact" | "plus" | "near_miss" | "none" — floorplan search only; near_miss
+    # means no building had the requested bedroom size, results are nearby sizes.
+    match_type: Optional[str] = None
 
 
 class ScoreBatchRequest(BaseModel):
