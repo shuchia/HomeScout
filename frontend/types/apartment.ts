@@ -15,6 +15,8 @@ export interface SearchParams {
   property_type: string;
   move_in_date: string;
   other_preferences?: string;
+  /** "exact" (default) or "plus" (N+ / "3+"). Floorplan search only. */
+  bedroom_mode?: 'exact' | 'plus';
   // Proximity search
   near_lat?: number;
   near_lng?: number;
@@ -90,6 +92,12 @@ export interface Apartment {
   true_cost_move_in?: number | null;
   cost_breakdown?: CostBreakdown | null;
   pricing_model?: 'per_unit' | 'per_person' | null;
+  /** Floorplan-aware search: the matched floorplan bucket for this building. */
+  matched_floorplan?: MatchedFloorplan | null;
+  /** True when the matched floorplan has no listed rent (D1). */
+  price_on_request?: boolean;
+  /** Per-result match tag; "near_miss" when it's a nearby-size fallback. */
+  match_type?: 'exact' | 'plus' | 'near_miss' | 'none';
   freshness_confidence?: number;
   first_seen_at?: string;
   times_seen?: number;
@@ -147,6 +155,31 @@ export interface ApartmentUnit {
   sqft?: number | null;
   price?: number | string | null;
   availableDate?: string | null;
+}
+
+/**
+ * The specific floorplan a search matched inside a building (floorplan-aware
+ * search). Present only when USE_FLOORPLAN_SEARCH is on and the result came
+ * from a bedroom-filtered search. The card's rent/beds/baths/sqft are already
+ * projected onto this floorplan; this carries the extra display nuance.
+ * Matches backend project_matched_floorplan / apartment_floorplans.
+ */
+export interface MatchedFloorplan {
+  bedrooms: number;
+  bathrooms: number;
+  min_rent: number | null;
+  max_rent: number | null;
+  min_sqft: number | null;
+  max_sqft: number | null;
+  available_units?: number | null;
+  earliest_available_date?: string | null;
+  /** No listed rent — show "Price on request" (decision D1). */
+  price_on_request: boolean;
+  pricing_model?: 'per_unit' | 'per_person' | null;
+  /** For per_person (by-the-bed): the per-bedroom share (= min_rent). */
+  per_bed_rent?: number | null;
+  /** For per_person: estimated whole-unit cost (per-bed × bedrooms). */
+  whole_unit_rent?: number | null;
 }
 
 /**

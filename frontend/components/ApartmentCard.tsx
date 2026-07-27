@@ -130,22 +130,56 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
           </div>
         )}
 
-        {/* Rent and Property Type */}
+        {/* Rent and Property Type. With floorplan-aware search, prefer the
+            matched floorplan's per-bucket pricing over the building-level value. */}
         <div className="flex justify-between items-start">
           <div>
-            <p className="text-2xl font-bold text-gray-900">
-              {formatRent(rent)}
-              <span className="text-sm font-normal text-gray-500">/mo</span>
-            </p>
+            {(() => {
+              const mf = apartment.matched_floorplan;
+              const perPerson = (mf?.pricing_model ?? apartment.pricing_model) === 'per_person';
+              if (mf?.price_on_request) {
+                return (
+                  <p className="text-2xl font-bold text-gray-900">
+                    Price on request
+                  </p>
+                );
+              }
+              if (perPerson) {
+                const perBed = mf?.per_bed_rent ?? rent;
+                const wholeUnit = mf?.whole_unit_rent;
+                return (
+                  <>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {formatRent(perBed)}
+                      <span className="text-sm font-normal text-gray-500">/bed</span>
+                    </p>
+                    {wholeUnit != null && (
+                      <p className="text-xs text-gray-500">&asymp; {formatRent(wholeUnit)}/unit total</p>
+                    )}
+                  </>
+                );
+              }
+              return (
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatRent(rent)}
+                  <span className="text-sm font-normal text-gray-500">/mo</span>
+                </p>
+              );
+            })()}
             <p className="text-sm text-gray-600">{property_type}</p>
           </div>
         </div>
 
-        {/* Per Person Pricing Badge */}
-        {apartment.pricing_model === 'per_person' && (
+        {/* By-the-bed / per-person badge */}
+        {((apartment.matched_floorplan?.pricing_model ?? apartment.pricing_model) === 'per_person') && (
           <span className="inline-block bg-purple-100 text-purple-700 text-xs font-medium px-2 py-0.5 rounded">
-            Per Person Pricing
+            {apartment.matched_floorplan ? 'By the bed' : 'Per Person Pricing'}
           </span>
+        )}
+
+        {/* Price-on-request contact affordance */}
+        {apartment.matched_floorplan?.price_on_request && (
+          <p className="text-xs text-gray-500">Contact the property for pricing on this floor plan.</p>
         )}
 
         {/* True Cost Estimate — excludes optional pet & parking (opt-in in panel) */}

@@ -209,6 +209,7 @@ async def search_apartments(
             other_preferences=request.other_preferences,
             page=request.page,
             page_size=request.page_size,
+            bedroom_mode=request.bedroom_mode,
         )
 
         # Set heuristic scores, null out AI fields (AI backfilled by score-batch)
