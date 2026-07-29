@@ -1,6 +1,11 @@
 # Floorplan-Aware Search — Design
 
-*2026-07-15 · status: design approved (D1–D4 decided) · Phase 1–2 implemented, validated on QA*
+*2026-07-15 · status: design approved (D1–D4 decided) · Phases 1–5 shipped, live on QA*
+
+> This is the **design/decision record** (the "why" and the tradeoffs). For how
+> the shipped system works end to end — data flow, projection, and how it
+> interlocks with per-person pricing (with cross-city data) — see the companion
+> [`floorplan-search-architecture.md`](floorplan-search-architecture.md).
 
 ## Implementation status
 
