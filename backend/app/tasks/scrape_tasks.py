@@ -457,6 +457,15 @@ async def _scrape_market(task, market_id: str) -> Dict[str, Any]:
             if updates:
                 await _update_reseen_listings(updates)
 
+            # Rebuild floorplan buckets for everything this scrape touched, so
+            # new/updated listings are immediately matchable under floorplan-aware
+            # search (USE_FLOORPLAN_SEARCH). Buckets used to be built only by the
+            # separate backfill_floorplans task, so a freshly-enabled market
+            # returned zero search results until that ran. Building them inline
+            # makes every new city work end-to-end straight from the scrape.
+            affected_ids = [l["id"] for l in new_listings] + [u["matched_id"] for u in updates]
+            await _rebuild_floorplan_buckets(affected_ids)
+
         # Update job and market
         await _update_job(job_id, "completed",
             listings_found=found, listings_new=new_count,
@@ -579,3 +588,84 @@ async def _update_reseen_listings(updates: List[Dict[str, Any]]):
             )
         await session.commit()
         logger.info(f"Updated {len(updates)} re-seen listings")
+
+
+async def _rebuild_floorplan_buckets(apartment_ids: List[str]) -> int:
+    """Rebuild floorplan buckets for the apartments a scrape just touched.
+
+    Delete + reinsert per building (idempotent), mirroring _backfill_floorplans
+    so behavior stays identical — but scoped to just this scrape's listings and
+    run inline. This makes a freshly-scraped/enabled market immediately
+    searchable under floorplan-aware search instead of waiting for the separate
+    backfill task. Building buckets is harmless when the flag is off — they just
+    sit ready.
+    """
+    if not apartment_ids:
+        return 0
+
+    import re
+    import uuid
+    from sqlalchemy import select, delete
+    from app.models.apartment import ApartmentModel
+    from app.models.apartment_floorplan import ApartmentFloorplanModel
+    from app.services.floorplans import build_floorplan_buckets
+
+    _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    buckets_created = 0
+
+    async with get_session_context() as session:
+        rows = (
+            await session.execute(
+                select(ApartmentModel).where(ApartmentModel.id.in_(apartment_ids))
+            )
+        ).scalars().all()
+
+        for apt in rows:
+            fallback_date = (
+                apt.available_date
+                if (apt.available_date and _DATE_RE.match(apt.available_date))
+                else None
+            )
+            buckets = build_floorplan_buckets(
+                apt.floor_plans,
+                apt.available_units,
+                fallback_bedrooms=apt.bedrooms,
+                fallback_bathrooms=apt.bathrooms,
+                fallback_rent=apt.rent,
+                fallback_sqft=apt.sqft,
+                fallback_available_date=fallback_date,
+                description=apt.description,
+                city=apt.city,
+            )
+
+            await session.execute(
+                delete(ApartmentFloorplanModel).where(
+                    ApartmentFloorplanModel.apartment_id == apt.id
+                )
+            )
+            for b in buckets:
+                session.add(
+                    ApartmentFloorplanModel(
+                        id=uuid.uuid4().hex,
+                        apartment_id=apt.id,
+                        bedrooms=b["bedrooms"],
+                        bathrooms=b["bathrooms"],
+                        min_rent=b["min_rent"],
+                        max_rent=b["max_rent"],
+                        min_sqft=b["min_sqft"],
+                        max_sqft=b["max_sqft"],
+                        available_units=b["available_units"],
+                        earliest_available_date=b["earliest_available_date"],
+                        model_ids=b["model_ids"],
+                        pricing_model=b.get("pricing_model"),
+                    )
+                )
+                buckets_created += 1
+
+        await session.commit()
+
+    logger.info(
+        f"Rebuilt floorplan buckets for {len(rows)} buildings "
+        f"({buckets_created} buckets) from scrape"
+    )
+    return buckets_created
