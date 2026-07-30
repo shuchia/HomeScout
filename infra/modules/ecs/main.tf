@@ -61,6 +61,7 @@ locals {
 
   common_environment = [
     { name = "USE_DATABASE", value = "true" },
+    { name = "USE_FLOORPLAN_SEARCH", value = var.use_floorplan_search },
     { name = "FRONTEND_URL", value = var.frontend_url },
     { name = "LOG_LEVEL", value = var.log_level },
     { name = "PYTHONUNBUFFERED", value = "1" },
