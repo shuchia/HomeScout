@@ -189,6 +189,59 @@ guarantee for student housing.
   build — and qa.snugd.ai builds from the `release/qa` branch, so it uses Vercel's
   *Preview*-scoped env vars.
 
+## Detection coverage (why some student markets show few per-person)
+
+A follow-up investigation (2026-07-29/30) asked why Boston / NYC / SF / Cambridge
+surfaced almost no per-person buckets despite large student populations. The
+answer: **it's a detection gap, not a data gap — and it's a precision/recall
+tradeoff working mostly as intended.**
+
+`detect_pricing_model()` fires with high confidence only on explicit phrases
+("per bed", "by the bed", "individual lease", "per room"). The structural
+`beds == baths` heuristic adds only `+0.25` — below the `0.6` threshold on its
+own — precisely because in these markets a 2BR/2BA (or 3BR/3BA) is a normal
+**whole-unit** luxury layout, not by-the-bed. QA has hundreds of such buckets
+(Boston 109× 2/2, Cambridge 118× 2/2, NYC 72× 2/2, SF 85× 2/2) and **none** are
+flagged.
+
+**Precision is validated.** Spot-checking Boston/Cambridge 3BR/3BA buildings
+(180 Brookline Ave, 260 Huntington Ave, 2 H St, 145 Larch Rd, …) confirmed they
+are genuinely conventional whole-unit buildings ("spacious floor plans",
+"premier destination") — correctly *not* flagged. Flagging beds==baths alone
+would flood these markets with false positives.
+
+**But there is a real recall gap.** Two concrete Cambridge/Boston findings:
+
+- ✅ `744 Columbus Ave, Boston (LightView)` — *"Off Campus Housing Near
+  Northeastern University… furnished student apartments"* — **is** correctly
+  flagged `per_person`. Explicit "off campus / student housing" language is
+  caught.
+- ❌ `11-13 Plymouth St, Cambridge (RoostUp)` — *"a beautifully renovated
+  **private bedroom** … in a **4 bedroom/2 bath apartment**"* — a genuine
+  by-the-room co-living listing, tagged **`per_unit`**. It slips through:
+  "private bedroom" isn't a trigger phrase, and 4bd/2ba breaks `beds == baths`.
+
+So co-living / by-the-room operators (RoostUp and similar) that describe a
+"private bedroom in an N-bedroom apartment" are **missed**. Candidate recall-tune
+phrases (add to `_HIGH_SIGNALS` / `_MEDIUM_SIGNALS` in
+`app/services/pricing_model_detector.py`), weighted to preserve precision:
+
+- Unambiguous → high signal: `co-?living`, `rent by the room`, `by-the-room`,
+  `individual bedroom lease`, `per-bedroom lease`, `room in a \d+ ?bed`.
+- Contextual → medium (needs another signal): `private bedroom` **only** when
+  paired with "in a N bedroom apartment" (bare "private primary bedroom suite"
+  in luxury listings would false-positive).
+
+Not yet actioned — this is a data-quality/recall improvement, tracked here. It
+affects a small absolute count (per-person is ~0.6% of buckets) but concentrated
+exactly where students search.
+
+**Also noted:** building-level `apartments.pricing_model` and the per-bucket
+`apartment_floorplans.pricing_model` can disagree (744 Columbus is per_person at
+the building level; the earlier by-city *bucket* count showed 0 fresh Boston
+per-person buckets). Expected — they're detected on different bedroom values and
+freshness windows — but worth remembering when reconciling the two.
+
 ## Known edges / follow-ups
 
 - **True-cost fields on a projected dict are still building-level** (studio-based).
