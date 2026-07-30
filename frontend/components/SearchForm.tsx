@@ -20,6 +20,7 @@ const AVAILABLE_CITIES = [
   { value: 'Philadelphia, PA', label: 'Philadelphia, PA' },
   { value: 'Pittsburgh, PA', label: 'Pittsburgh, PA' },
   { value: 'San Francisco, CA', label: 'San Francisco, CA' },
+  { value: 'State College, PA', label: 'State College, PA' },
 ];
 
 // Property type options
