@@ -84,3 +84,66 @@ def test_per_room_in_description():
         bedrooms=3, bathrooms=2, rent=900, city="Philadelphia",
     )
     assert result["pricing_model"] == "per_person"
+
+
+# ── Recall-tune additions (co-living / by-the-room), precision-guarded ──
+
+def test_coliving_high_confidence():
+    for desc in ["Modern co-living community", "Premier coliving in the city"]:
+        r = detect_pricing_model(desc, bedrooms=2, bathrooms=1, rent=1200, city="Boston")
+        assert r["pricing_model"] == "per_person", desc
+
+
+def test_rent_by_the_room():
+    r = detect_pricing_model("Rent by the room in a renovated brownstone",
+                             bedrooms=4, bathrooms=2, rent=1000, city="Boston")
+    assert r["pricing_model"] == "per_person"
+
+
+def test_roostup_operator():
+    """Real RoostUp (Cambridge) listing that was tagged per_unit before the tune —
+    beds != baths and no classic keyword, but the operator + model are by-the-room."""
+    r = detect_pricing_model(
+        description=("RoostUp is offering a beautifully renovated private bedroom in "
+                     "Cambridge. Less than a 15 minute walk to Kendall Sq in a 4 "
+                     "bedroom/2 bath apartment."),
+        bedrooms=4, bathrooms=2, rent=1400, city="Cambridge",
+    )
+    assert r["pricing_model"] == "per_person"
+
+
+def test_per_bedroom_lease():
+    r = detect_pricing_model("Per-bedroom lease available for students",
+                             bedrooms=3, bathrooms=1, rent=900, city="Philadelphia")
+    assert r["pricing_model"] == "per_person"
+
+
+# ── Precision guards: whole-unit luxury must NOT trip on the new mediums ──
+
+def test_private_bedroom_alone_stays_per_unit():
+    """"private bedroom" is a common luxury phrase — 0.3 medium alone must not flag."""
+    r = detect_pricing_model(
+        description="Each residence features a private bedroom with ensuite bath and walk-in closet.",
+        bedrooms=3, bathrooms=1, rent=4500, city="Boston",
+    )
+    assert r["pricing_model"] == "per_unit"
+
+
+def test_private_bedroom_in_bedsbaths_luxury_stays_per_unit():
+    """Even in a beds==baths (3/3) luxury unit, 'private bedroom' (0.3) + beds==baths
+    (0.25) = 0.55 stays below threshold — no false positive."""
+    r = detect_pricing_model(
+        description="Spacious 3 bedroom residence; each private bedroom is generously sized.",
+        bedrooms=3, bathrooms=3, rent=6000, city="Cambridge",
+    )
+    assert r["pricing_model"] == "per_unit"
+
+
+def test_luxury_conventional_stays_per_unit():
+    """Real conventional 3/3 luxury description (260 Huntington-style) stays per_unit."""
+    r = detect_pricing_model(
+        description=("Perfectly positioned at the intersection of Fenway, Back Bay, and "
+                     "the South End, Lyra places you at the center of Boston's cultural pulse."),
+        bedrooms=3, bathrooms=3, rent=7000, city="Boston",
+    )
+    assert r["pricing_model"] == "per_unit"
