@@ -4,7 +4,7 @@ Admin API endpoints for data collection management.
 import os
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Body, Header
@@ -706,6 +706,81 @@ async def backfill_enrichment(only_missing: bool = True, batch_size: int = 200):
         "only_missing": only_missing,
         "batch_size": batch_size,
     }
+
+
+@router.post("/reset-false-verifications")
+async def reset_false_verifications(apply: bool = Query(False)):
+    """One-shot cleanup for listings marked verified by the old verify logic.
+
+    `_verify_listing` used to treat any response that wasn't a 404 or a
+    200-with-removal-text as proof the listing was live. apartments.com is
+    Akamai-fenced and 403s automated requests, so that certified rows alive
+    *because* we were blocked. The deactivation guard skips anything marked
+    "verified", which left those rows permanently immune to expiry — they sit
+    at is_active=1 with freshness_confidence=0, invisible to search but counted
+    in /stats, forever.
+
+    The verify logic is fixed going forward; this clears the bad rows it left
+    behind. Setting verification_status back to NULL does not deactivate
+    anything — it only makes those listings eligible to expire normally again,
+    which under current decay rates takes 12-23 days of not being re-seen.
+
+    Defaults to a dry run. Pass ?apply=true to write.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from sqlalchemy import select, func, update
+    from app.models.apartment import ApartmentModel
+    from app.database import get_session_context
+
+    try:
+        async with get_session_context() as session:
+            affected = (
+                await session.execute(
+                    select(func.count()).select_from(ApartmentModel).where(
+                        ApartmentModel.verification_status == "verified"
+                    )
+                )
+            ).scalar() or 0
+
+            # These are the ones the bug was actively protecting: verified, yet
+            # decayed to nothing. A genuinely re-seen listing sits at 100.
+            immune = (
+                await session.execute(
+                    select(func.count()).select_from(ApartmentModel).where(
+                        ApartmentModel.verification_status == "verified",
+                        ApartmentModel.freshness_confidence == 0,
+                        ApartmentModel.is_active == 1,
+                    )
+                )
+            ).scalar() or 0
+
+            if not apply:
+                return {
+                    "status": "dry_run",
+                    "would_reset": affected,
+                    "of_which_immune_to_expiry": immune,
+                    "hint": "re-run with ?apply=true to write",
+                }
+
+            await session.execute(
+                update(ApartmentModel)
+                .where(ApartmentModel.verification_status == "verified")
+                .values(verification_status=None, verified_at=None)
+            )
+            await session.commit()
+
+        logger.info(f"Reset {affected} false verification_status rows")
+        return {
+            "status": "applied",
+            "reset": affected,
+            "of_which_immune_to_expiry": immune,
+        }
+
+    except Exception as e:
+        logger.exception(f"reset-false-verifications failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/listings")

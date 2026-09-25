@@ -95,7 +95,7 @@ See `docs/scraping-frequency.md` for the canonical live config (it's updated on 
 | Task | Schedule | Purpose |
 |------|----------|---------|
 | `dispatch_scrapes` | hourly :00 | Read `market_configs`, spawn scrape tasks for due markets |
-| `decay_and_verify` | hourly :30 | Recalculate freshness confidence, trigger HTTP verification (no Apify credit cost) |
+| `decay_and_verify` | hourly :30 | Recalculate freshness confidence from `last_seen_at`. Bulk HTTP verification is off by default (`ENABLE_BULK_VERIFICATION`) — apartments.com 403s automated requests |
 | `cleanup_maintenance` | daily 3 AM | Deactivate dead listings, reset circuit breakers, fail stale jobs |
 | `send_daily_alerts` | daily 13:00 UTC | Email Pro users with new matching listings |
 | `check_tour_reminders` | every 10 min | Fire 30-min post-tour reminders |
@@ -155,7 +155,7 @@ JSON-mode reads (no DB) call `_add_cost_breakdown()` in `routers/apartments.py` 
 | State | Trigger |
 |-------|---------|
 | `is_active = 1`, fresh `last_seen_at` | Seen in latest scrape |
-| Decaying confidence | `decay_and_verify` runs HTTP HEAD checks; failures lower freshness score |
+| Decaying confidence | `decay_and_verify` recomputes `100 - hours_since_last_seen * TIER_DECAY_RATES[tier]` (hot 7d / standard 10d / cool 14d to the search floor) |
 | `is_active = 0` | `cleanup_maintenance` deactivates rows not seen for N days |
 
 ## Common Issues

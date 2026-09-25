@@ -329,7 +329,7 @@ Defined in `celery_app.py`:
 | Task | Schedule | Description |
 |------|----------|-------------|
 | `dispatch_scrapes` | Every hour at :00 | Check `market_configs`, spawn scrape tasks for due markets |
-| `decay_and_verify` | Every hour at :30 | Recalculate freshness confidence, trigger verification |
+| `decay_and_verify` | Every hour at :30 | Recalculate freshness confidence from `last_seen_at` using `TIER_DECAY_RATES`. Bulk verification off by default (`ENABLE_BULK_VERIFICATION`) |
 | `cleanup_maintenance` | Daily at 3 AM UTC | Deactivate dead listings, reset circuit breakers, fail stale jobs |
 | `send_daily_alerts` | Daily at 1 PM UTC (8 AM ET) | Email Pro users with new listings matching saved searches |
 | `check_tour_reminders` | Every 10 minutes | Notify users about upcoming tours |
@@ -382,6 +382,8 @@ data_quality_score: int # 0-100
 # Freshness
 freshness_confidence: int       # 0-100, decayed hourly by decay_and_verify
 verification_status: str        # null | pending | verified | gone
+                                # A blocked/ambiguous response leaves this null —
+                                # never "verified" (see _verify_listing)
 verified_at: datetime
 
 # Status
@@ -534,6 +536,7 @@ GET  /api/admin/data-collection/markets
 PUT  /api/admin/data-collection/markets/{market_id}   # {is_enabled, tier, scrape_frequency_hours, max_listings_per_scrape}
 GET  /api/admin/data-collection/metrics
 GET  /api/admin/data-collection/health
+POST /api/admin/data-collection/reset-false-verifications  # ?apply=true to write
 ```
 
 Markets are the only enable/disable lever for scheduled scraping.
@@ -580,7 +583,7 @@ Markets are the only enable/disable lever for scheduled scraping.
 ## Testing
 
 ```bash
-# Run all backend tests (327 tests across 29 files)
+# Run all backend tests (343 tests across 30 files)
 ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
 ```
 

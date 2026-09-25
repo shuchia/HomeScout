@@ -2,14 +2,23 @@
 Celery tasks for maintenance and cleanup operations.
 """
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from app.celery_app import celery_app
 from app.database import get_session_context, is_database_enabled
+from app.models.market_config import SEARCH_FLOOR
 from app.tasks._async_runner import run_async
 
 logger = logging.getLogger(__name__)
+
+# Corpus-wide listing verification. Off by default — see the comment at the
+# dispatch site in _decay_and_verify() for why.
+BULK_VERIFICATION_ENABLED = os.getenv("ENABLE_BULK_VERIFICATION", "false").lower() == "true"
+
+# Don't re-check the same listing more often than this.
+VERIFICATION_COOLDOWN_HOURS = int(os.getenv("VERIFICATION_COOLDOWN_HOURS", "24"))
 
 
 @celery_app.task
@@ -309,13 +318,16 @@ async def _decay_and_verify() -> Dict[str, Any]:
     verification_dispatched = 0
     deactivated = 0
 
+    from app.models.market_config import TIER_DECAY_RATES, DEFAULT_DECAY_RATE
+
     async with get_session_context() as session:
         # Load all market configs for decay rates
         markets_result = await session.execute(select(MarketConfigModel))
         markets = {m.id: m for m in markets_result.scalars()}
 
-        # Default decay rates by tier
-        tier_rates = {"hot": 3, "standard": 2, "cool": 1}
+        # Decay rates live on the model so this task and MarketConfig.decay_rate
+        # can never drift apart. See market_config.py for the rationale.
+        tier_rates = TIER_DECAY_RATES
 
         # Get all active listings
         stmt = select(ApartmentModel).where(ApartmentModel.is_active == 1)
@@ -328,7 +340,7 @@ async def _decay_and_verify() -> Dict[str, Any]:
             # Get decay rate from market or default
             market = markets.get(apt.market_id)
             tier = market.tier if market else "cool"
-            decay_rate = tier_rates.get(tier, 1)
+            decay_rate = tier_rates.get(tier, DEFAULT_DECAY_RATE)
 
             # Calculate new confidence
             hours_since_seen = (now - apt.last_seen_at.replace(tzinfo=None)).total_seconds() / 3600
@@ -339,8 +351,23 @@ async def _decay_and_verify() -> Dict[str, Any]:
                 apt.confidence_updated_at = now
                 decay_counts[tier] = decay_counts.get(tier, 0) + 1
 
-            # Trigger verification at threshold
-            if new_confidence < 40 and apt.verification_status is None:
+            # Trigger verification at threshold.
+            #
+            # Off by default. Verification GETs the listing's source_url, but
+            # apartments.com is Akamai-fenced and 403s every automated request,
+            # so a corpus-wide sweep is thousands of outbound requests from our
+            # egress IP that cannot answer the question they were sent to ask
+            # (and risk getting that IP flagged, which would take the scraper
+            # with it). Under the decision-layer model we only need to know a
+            # listing is live when a user is actually considering it, which is a
+            # handful of listings, not the whole corpus.
+            #
+            # Set ENABLE_BULK_VERIFICATION=true to restore the sweep.
+            if (
+                BULK_VERIFICATION_ENABLED
+                and new_confidence < SEARCH_FLOOR
+                and apt.verification_status is None
+            ):
                 apt.verification_status = "pending"
                 from app.tasks.maintenance_tasks import verify_listing
                 verify_listing.apply_async(
@@ -381,6 +408,22 @@ def verify_listing(apartment_id: str) -> Dict[str, Any]:
 
 
 async def _verify_listing(apartment_id: str) -> Dict[str, Any]:
+    """Check whether a listing is still live at its source URL.
+
+    Three outcomes, and the distinction matters:
+
+      gone     — the source says so (404, or a removal notice in a 200 body)
+      verified — the source served us the live page
+      unknown  — we could not tell (403, 429, 5xx, timeout, redirect to a
+                 search page). This is the common case for apartments.com,
+                 which is Akamai-fenced and blocks automated requests.
+
+    The previous version had only two outcomes, and anything that wasn't a 404
+    or a 200-with-removal-text counted as "verified". Since apartments.com 403s
+    us, that meant every listing was certified alive *because* we were blocked —
+    and because the deactivation guard skips anything marked "verified", those
+    rows then became permanently immune to expiry. An unknown must stay unknown.
+    """
     import httpx
     from sqlalchemy import select, update
     from app.models.apartment import ApartmentModel
@@ -393,48 +436,79 @@ async def _verify_listing(apartment_id: str) -> Dict[str, Any]:
         if not apt or not apt.source_url:
             return {"status": "skipped", "reason": "no source_url"}
 
+        # Cooldown: a listing that was checked recently doesn't need checking
+        # again, whatever the answer was.
+        if apt.verified_at:
+            age_hours = (datetime.utcnow() - apt.verified_at.replace(tzinfo=None)).total_seconds() / 3600
+            if age_hours < VERIFICATION_COOLDOWN_HOURS:
+                return {"status": "skipped", "reason": "cooldown", "apartment_id": apartment_id}
+
         source_url = apt.source_url
 
-    # Check the URL
+    gone_indicators = [
+        "no longer available",
+        "this listing has been removed",
+        "listing not found",
+        "page not found",
+    ]
+
+    outcome = "unknown"
+    detail = ""
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             response = await client.get(source_url)
 
-        gone_indicators = [
-            "no longer available",
-            "this listing has been removed",
-            "listing not found",
-            "page not found",
-        ]
-
-        is_gone = response.status_code == 404
-        if not is_gone and response.status_code == 200:
+        if response.status_code == 404:
+            outcome = "gone"
+            detail = "404"
+        elif response.status_code == 200:
             body = response.text.lower()
-            is_gone = any(indicator in body for indicator in gone_indicators)
-
-        async with get_session_context() as session:
-            now = datetime.utcnow()
-            if is_gone:
-                await session.execute(
-                    update(ApartmentModel)
-                    .where(ApartmentModel.id == apartment_id)
-                    .values(verification_status="gone", verified_at=now, is_active=0)
-                )
-                status = "gone"
+            if any(indicator in body for indicator in gone_indicators):
+                outcome = "gone"
+                detail = "removal notice in body"
             else:
-                await session.execute(
-                    update(ApartmentModel)
-                    .where(ApartmentModel.id == apartment_id)
-                    .values(verification_status="verified", verified_at=now, freshness_confidence=80)
-                )
-                status = "verified"
-            await session.commit()
-
-        return {"status": status, "apartment_id": apartment_id}
-
+                outcome = "verified"
+                detail = "200"
+        else:
+            # 403 (Akamai), 429, 5xx — we learned nothing about the listing.
+            outcome = "unknown"
+            detail = f"HTTP {response.status_code}"
     except Exception as e:
-        logger.warning(f"Verification failed for {apartment_id}: {e}")
-        return {"status": "pending", "error": str(e)}
+        outcome = "unknown"
+        detail = f"{type(e).__name__}: {e}"
+
+    now = datetime.utcnow()
+    if outcome == "unknown":
+        # Record only that we looked, so the cooldown applies and we don't
+        # hammer a host that is refusing us. Deliberately does NOT touch
+        # verification_status or freshness_confidence — an unanswered question
+        # must not change the listing's standing in either direction.
+        logger.info(f"Verification inconclusive for {apartment_id} ({detail})")
+        async with get_session_context() as session:
+            await session.execute(
+                update(ApartmentModel)
+                .where(ApartmentModel.id == apartment_id)
+                .values(verified_at=now)
+            )
+            await session.commit()
+        return {"status": "unknown", "apartment_id": apartment_id, "detail": detail}
+
+    async with get_session_context() as session:
+        if outcome == "gone":
+            await session.execute(
+                update(ApartmentModel)
+                .where(ApartmentModel.id == apartment_id)
+                .values(verification_status="gone", verified_at=now, is_active=0)
+            )
+        else:
+            await session.execute(
+                update(ApartmentModel)
+                .where(ApartmentModel.id == apartment_id)
+                .values(verification_status="verified", verified_at=now, freshness_confidence=80)
+            )
+        await session.commit()
+
+    return {"status": outcome, "apartment_id": apartment_id, "detail": detail}
 
 
 @celery_app.task
