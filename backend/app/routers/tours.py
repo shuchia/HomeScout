@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel
@@ -73,6 +73,77 @@ DEFAULT_TAGS = [
     {"tag": "Needs work", "sentiment": "con"},
     {"tag": "Limited parking", "sentiment": "con"},
 ]
+
+
+async def _snapshot_apartment(apartment_id: str) -> Optional[dict]:
+    """Read one apartment out of the corpus, in whichever mode is active."""
+    from app.database import is_database_enabled, get_session_context
+
+    if is_database_enabled():
+        from sqlalchemy import select
+        from app.models.apartment import ApartmentModel
+
+        async with get_session_context() as session:
+            db_result = await session.execute(
+                select(ApartmentModel).where(ApartmentModel.id == apartment_id)
+            )
+            apt = db_result.scalar_one_or_none()
+            return apt.to_dict() if apt else None
+
+    from app.routers.apartments import _get_apartments_data
+
+    for a in _get_apartments_data():
+        if a.get("id") == apartment_id:
+            return a
+    return None
+
+
+async def _resolve_apartments(tours: List[dict]) -> dict:
+    """Resolve the apartment behind each tour, snapshot first.
+
+    A tour's own snapshot is authoritative: it is what the user actually saw,
+    and it is the only thing that exists for a listing added by URL. The live
+    corpus is consulted only for rows created before snapshots existed, and
+    when it answers we write the snapshot back so each row degrades at most
+    once. That write-back is fire-and-forget — a tour must still render if it
+    fails.
+
+    Returns a dict keyed by apartment_id. A tour whose apartment cannot be
+    resolved at all is simply absent from it, as before.
+    """
+    apartments_by_id: dict = {}
+    needs_backfill: List[tuple] = []
+
+    for t in tours:
+        apartment_id = t.get("apartment_id")
+        if not apartment_id or apartment_id in apartments_by_id:
+            continue
+
+        snapshot = t.get("apartment_snapshot")
+        if snapshot:
+            apartments_by_id[apartment_id] = snapshot
+            continue
+
+        live = await _snapshot_apartment(apartment_id)
+        if live:
+            apartments_by_id[apartment_id] = live
+            needs_backfill.append((t["id"], live))
+
+    for tour_id, live in needs_backfill:
+        try:
+            (
+                supabase_admin.table("tour_pipeline")
+                .update({
+                    "apartment_snapshot": live,
+                    "snapshot_at": datetime.now(timezone.utc).isoformat(),
+                })
+                .eq("id", tour_id)
+                .execute()
+            )
+        except Exception as e:
+            logger.warning(f"Snapshot backfill failed for tour {tour_id}: {e}")
+
+    return apartments_by_id
 
 
 def _verify_tour_ownership(tour_id: str, user_id: str):
@@ -178,27 +249,7 @@ async def generate_day_plan(
             )
 
         # Fetch apartment data for each tour
-        apartment_ids = [t["apartment_id"] for t in tours]
-        from app.database import is_database_enabled, get_session_context
-
-        apartments_by_id: dict = {}
-        if is_database_enabled():
-            from sqlalchemy import select
-            from app.models.apartment import ApartmentModel
-
-            async with get_session_context() as session:
-                stmt = select(ApartmentModel).where(
-                    ApartmentModel.id.in_(apartment_ids)
-                )
-                db_result = await session.execute(stmt)
-                for apt in db_result.scalars():
-                    apartments_by_id[apt.id] = apt.to_dict()
-        else:
-            from app.routers.apartments import _get_apartments_data
-
-            for a in _get_apartments_data():
-                if a.get("id") in apartment_ids:
-                    apartments_by_id[a["id"]] = a
+        apartments_by_id = await _resolve_apartments(tours)
 
         # Build tour data for Claude
         tour_data = []
@@ -278,27 +329,7 @@ async def generate_decision_brief(
             )
 
         # Fetch apartment data
-        apartment_ids = [t["apartment_id"] for t in tours]
-        from app.database import is_database_enabled, get_session_context
-
-        apartments_by_id: dict = {}
-        if is_database_enabled():
-            from sqlalchemy import select
-            from app.models.apartment import ApartmentModel
-
-            async with get_session_context() as session:
-                stmt = select(ApartmentModel).where(
-                    ApartmentModel.id.in_(apartment_ids)
-                )
-                db_result = await session.execute(stmt)
-                for apt in db_result.scalars():
-                    apartments_by_id[apt.id] = apt.to_dict()
-        else:
-            from app.routers.apartments import _get_apartments_data
-
-            for a in _get_apartments_data():
-                if a.get("id") in apartment_ids:
-                    apartments_by_id[a["id"]] = a
+        apartments_by_id = await _resolve_apartments(tours)
 
         # Fetch notes and tags for each tour
         tour_ids = [t["id"] for t in tours]
@@ -482,27 +513,24 @@ async def create_tour(
             "stage": "interested",
         }
 
-        # Auto-populate contact info from apartment if available
+        # Capture the listing as it stands right now. This is what the tour
+        # will display from here on: the corpus is free to change, decay, or
+        # lose this row without rewriting what the user saw when they decided
+        # to go and see it. Contact details are pulled from the same snapshot
+        # rather than a second query.
         try:
-            from app.database import is_database_enabled, get_session_context
-
-            if is_database_enabled():
-                from sqlalchemy import select
-                from app.models.apartment import ApartmentModel
-
-                async with get_session_context() as session:
-                    stmt = select(ApartmentModel.contact_phone, ApartmentModel.contact_email).where(
-                        ApartmentModel.id == body.apartment_id
-                    )
-                    apt_result = await session.execute(stmt)
-                    apt_row = apt_result.first()
-                    if apt_row:
-                        if apt_row.contact_phone:
-                            row["contact_phone"] = apt_row.contact_phone
-                        if apt_row.contact_email:
-                            row["contact_email"] = apt_row.contact_email
-        except Exception:
-            pass  # Non-critical — user can enter manually
+            snapshot = await _snapshot_apartment(body.apartment_id)
+            if snapshot:
+                row["apartment_snapshot"] = snapshot
+                row["snapshot_at"] = datetime.now(timezone.utc).isoformat()
+                if snapshot.get("contact_phone"):
+                    row["contact_phone"] = snapshot["contact_phone"]
+                if snapshot.get("contact_email"):
+                    row["contact_email"] = snapshot["contact_email"]
+        except Exception as e:
+            # Non-critical — the tour still works, it just falls back to the
+            # live corpus on read and gets backfilled there.
+            logger.warning(f"Could not snapshot apartment {body.apartment_id}: {e}")
 
         result = (
             supabase_admin.table("tour_pipeline")
@@ -756,26 +784,11 @@ async def generate_inquiry_email(
         tour_row = result.data[0]
         apartment_id = tour_row["apartment_id"]
 
-        # Fetch apartment data (DB or JSON)
-        apartment = None
-        from app.database import is_database_enabled, get_session_context
-
-        if is_database_enabled():
-            from sqlalchemy import select
-            from app.models.apartment import ApartmentModel
-
-            async with get_session_context() as session:
-                stmt = select(ApartmentModel).where(ApartmentModel.id == apartment_id)
-                db_result = await session.execute(stmt)
-                apt = db_result.scalar_one_or_none()
-                if apt:
-                    apartment = apt.to_dict()
-        else:
-            from app.routers.apartments import _get_apartments_data
-
-            apartments_data = _get_apartments_data()
-            apt_map = {a.get("id"): a for a in apartments_data}
-            apartment = apt_map.get(apartment_id)
+        # Snapshot first, live corpus only as a fallback. Before this, a tour
+        # whose corpus row had been pruned 404'd here with "Apartment not
+        # found" — the user could no longer draft an inquiry for a place they
+        # had already toured.
+        apartment = (await _resolve_apartments([tour_row])).get(apartment_id)
 
         if not apartment:
             raise HTTPException(

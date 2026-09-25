@@ -537,6 +537,7 @@ PUT  /api/admin/data-collection/markets/{market_id}   # {is_enabled, tier, scrap
 GET  /api/admin/data-collection/metrics
 GET  /api/admin/data-collection/health
 POST /api/admin/data-collection/reset-false-verifications  # ?apply=true to write
+GET  /api/admin/data-collection/pipeline-health            # is work actually happening?
 ```
 
 Markets are the only enable/disable lever for scheduled scraping.
@@ -583,7 +584,7 @@ Markets are the only enable/disable lever for scheduled scraping.
 ## Testing
 
 ```bash
-# Run all backend tests (343 tests across 30 files)
+# Run all backend tests (346 tests across 30 files)
 ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
 ```
 
@@ -641,6 +642,7 @@ Applied in `supabase/migrations/` — see [supabase/CLAUDE.md](../supabase/CLAUD
 | `007_waitlist.sql` | waitlist table |
 | `008_tour_contact_info.sql` | Contact fields on tour_pipeline |
 | `009_add_user_locations.sql` | user_locations (commute destinations) |
+| `010_tour_apartment_snapshot.sql` | apartment_snapshot/snapshot_at on tour_pipeline |
 
 ## Common Tasks
 

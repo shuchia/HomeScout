@@ -527,6 +527,122 @@ async def check_service_health():
     return HealthCheckResponse(**health)
 
 
+@router.get("/pipeline-health")
+async def check_pipeline_health():
+    """
+    Is the scraping pipeline actually doing its job?
+
+    /health answers "can we reach our dependencies", which stayed green through
+    two multi-week outages. This answers "is work happening", which is the
+    question that was going unasked: scrape tasks were dying before they
+    created a scrape_jobs row, so they recorded no failure, tripped no circuit
+    breaker, and left last_scrape_at untouched — and the hourly decay task had
+    failed every single run for weeks without anyone noticing, which in turn
+    masked the scraper by freezing every listing's freshness score.
+
+    Anything in `problems` is worth an alert.
+    """
+    if not is_database_enabled():
+        return {"healthy": True, "message": "Database not enabled", "problems": []}
+
+    from datetime import datetime, timezone
+    from sqlalchemy import select, func
+    from app.models.market_config import MarketConfigModel
+    from app.models.apartment import ApartmentModel
+    from app.models.scrape_job import ScrapeJobModel
+    from app.database import get_session_context
+
+    now = datetime.now(timezone.utc)
+    problems: List[str] = []
+    markets_out = []
+
+    try:
+        async with get_session_context() as session:
+            result = await session.execute(
+                select(MarketConfigModel).where(MarketConfigModel.is_enabled == True)
+            )
+            for m in result.scalars():
+                if m.last_scrape_at:
+                    age_hours = (now - m.last_scrape_at).total_seconds() / 3600
+                    # One full missed cycle is noise; two is a signal.
+                    overdue = age_hours > (m.scrape_frequency_hours * 2)
+                else:
+                    age_hours = None
+                    overdue = True
+
+                if overdue:
+                    problems.append(
+                        f"market '{m.id}' has not scraped in "
+                        f"{'ever' if age_hours is None else f'{age_hours:.0f}h'} "
+                        f"(frequency {m.scrape_frequency_hours}h)"
+                    )
+                if m.consecutive_failures >= 3:
+                    problems.append(f"market '{m.id}' circuit breaker is open")
+
+                markets_out.append({
+                    "id": m.id,
+                    "tier": m.tier,
+                    "frequency_hours": m.scrape_frequency_hours,
+                    "last_scrape_at": m.last_scrape_at.isoformat() if m.last_scrape_at else None,
+                    "hours_since_scrape": round(age_hours, 1) if age_hours is not None else None,
+                    "last_scrape_status": m.last_scrape_status,
+                    "consecutive_failures": m.consecutive_failures,
+                    "overdue": overdue,
+                })
+
+            # The decay task writes confidence_updated_at on every listing it
+            # touches, so the freshest one is a proxy for "when did decay last
+            # succeed" without needing a task-run table.
+            last_decay = (
+                await session.execute(select(func.max(ApartmentModel.confidence_updated_at)))
+            ).scalar()
+
+            jobs_24h = (
+                await session.execute(
+                    select(func.count()).select_from(ScrapeJobModel).where(
+                        ScrapeJobModel.created_at >= now - timedelta(hours=24)
+                    )
+                )
+            ).scalar() or 0
+
+        decay_age_hours = None
+        if last_decay:
+            if last_decay.tzinfo is None:
+                last_decay = last_decay.replace(tzinfo=timezone.utc)
+            decay_age_hours = (now - last_decay).total_seconds() / 3600
+            # Scheduled hourly; 3h means it has missed several in a row.
+            if decay_age_hours > 3:
+                problems.append(f"decay task has not succeeded in {decay_age_hours:.0f}h")
+        else:
+            problems.append("decay task has never succeeded")
+
+        # Expected scrapes/day across enabled markets. Tasks that die before
+        # creating their job row are invisible here by definition, which is
+        # exactly why this compares against the schedule rather than trusting
+        # the job table to be complete.
+        expected_24h = sum(24 / m["frequency_hours"] for m in markets_out) if markets_out else 0
+        if expected_24h and jobs_24h < expected_24h * 0.5:
+            problems.append(
+                f"only {jobs_24h} scrape jobs in 24h, expected ~{expected_24h:.0f}"
+            )
+
+        return {
+            "healthy": not problems,
+            "problems": problems,
+            "checked_at": now.isoformat(),
+            "markets": markets_out,
+            "decay": {
+                "last_success_at": last_decay.isoformat() if last_decay else None,
+                "hours_since": round(decay_age_hours, 1) if decay_age_hours is not None else None,
+            },
+            "scrape_jobs_24h": {"actual": jobs_24h, "expected": round(expected_24h, 1)},
+        }
+
+    except Exception as e:
+        logger.exception(f"Pipeline health check failed: {e}")
+        return {"healthy": False, "problems": [f"health check itself failed: {e}"]}
+
+
 # --- Market Configuration Endpoints ---
 
 @router.get("/markets")

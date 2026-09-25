@@ -93,6 +93,44 @@ class ApifyService(BaseScraper):
         Returns:
             ScrapeResult with normalized listings
         """
+        return await self._execute(
+            lambda: self._build_actor_input(city, state, max_listings, **kwargs),
+            max_listings,
+        )
+
+    async def scrape_url(self, url: str, **kwargs) -> ScrapeResult:
+        """
+        Scrape a single listing by its source URL.
+
+        This is the acquisition primitive for "add a listing by URL": the user
+        pastes a link to a listing we have never scraped and may never scrape,
+        because bulk search only ever returns the head of each market's result
+        list. It is also the only honest way to ask "is this listing still
+        live?" — a direct HTTP GET can't answer that for apartments.com, which
+        blocks automated requests at the edge (see _verify_listing).
+
+        The epctex apartments.com actor returns a byte-identical payload for a
+        direct listing URL as for a search hit (validated 2026-06-17 across two
+        QA listings), so everything downstream — normalization, fee extraction,
+        true-cost — works unchanged on the result.
+
+        Args:
+            url: A listing detail URL on the source site
+
+        Returns:
+            ScrapeResult whose `listings` holds 0 or 1 normalized listings.
+            An empty result means the actor found nothing at that URL, which
+            for a well-formed URL is good evidence the listing is gone.
+        """
+        return await self._execute(lambda: self._build_url_input(url, **kwargs), 1)
+
+    async def _execute(self, build_input, max_listings: int) -> ScrapeResult:
+        """Run an actor with the given input and normalize its dataset.
+
+        Shared by search-mode (`scrape`) and URL-mode (`scrape_url`); the only
+        difference between them is the actor input, so everything from running
+        the actor to normalizing the payload lives here.
+        """
         # Reset client to avoid event loop issues when called from Celery tasks
         # Each run_async() creates a new event loop, so we need a fresh client
         if self._client:
@@ -117,7 +155,7 @@ class ApifyService(BaseScraper):
             result.status = ScraperStatus.RUNNING
 
             # Build actor input based on source
-            actor_input = self._build_actor_input(city, state, max_listings, **kwargs)
+            actor_input = build_input()
 
             # Run the actor
             run_result = await self._run_actor(actor_input)
@@ -220,7 +258,16 @@ class ApifyService(BaseScraper):
         max_listings: int,
         **kwargs
     ) -> Dict[str, Any]:
-        """Build Apartments.com actor input for apartments-scraper-api."""
+        """Build Apartments.com actor input for apartments-scraper-api.
+
+        Note there is no offset, cursor, sort or filter here: the actor takes a
+        search phrase and returns the head of that result list. Every run for a
+        given market therefore issues an identical query and re-fetches the same
+        ~100 listings — over the last 30 days, 96% of fetched records were ones
+        we already held. Scraping more often does not reach deeper inventory;
+        only partitioning the query space (by ZIP, bedroom count or price band)
+        would. That's a deliberate open item, not an oversight.
+        """
         return {
             "search": f"{city}, {state}",
             "maxItems": max_listings,
@@ -229,6 +276,30 @@ class ApifyService(BaseScraper):
             "includeVisuals": kwargs.get("include_visuals", True),
             "includeWalkScore": kwargs.get("include_walk_score", True),
         }
+
+    def _build_url_input(self, url: str, **kwargs) -> Dict[str, Any]:
+        """Build actor input that targets one specific listing URL.
+
+        `startUrls` is supplied as `{"url": ...}` objects — bare strings are
+        rejected by these actors.
+        """
+        actor_input: Dict[str, Any] = {
+            "startUrls": [{"url": url}],
+            "maxItems": 1,
+        }
+
+        if self.source_id in ("apartments_com", "realtor", "rent_com"):
+            actor_input.update({
+                "includeInteriorAmenities": kwargs.get("include_amenities", True),
+                "includeReviews": kwargs.get("include_reviews", True),
+                "includeVisuals": kwargs.get("include_visuals", True),
+                "includeWalkScore": kwargs.get("include_walk_score", True),
+            })
+        elif self.source_id == "zillow":
+            # The Zillow actor names its URL input differently.
+            actor_input = {"searchUrls": [{"url": url}], "maxItems": 1}
+
+        return actor_input
 
     def _build_realtor_input(
         self,

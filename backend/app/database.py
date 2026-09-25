@@ -10,6 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 
+# Import asyncpg eagerly, at module import time, even though nothing here uses
+# it directly. SQLAlchemy would otherwise import it lazily inside
+# create_async_engine() — which, in the Celery prefork worker, happens for the
+# first time inside a forked child. That import lands in a broken partial state
+# ("ImportError: cannot import name compat" / "NameError: name 'exceptions' is
+# not defined") and the half-built module stays cached in that child's
+# sys.modules, so every DB task in that child fails for the rest of its life.
+# Importing here completes the import once in the parent, before any fork, and
+# children inherit a fully-initialised module. Do not remove.
+import asyncpg  # noqa: F401
+
 # Get database URL from environment
 DATABASE_URL = os.getenv(
     "DATABASE_URL",

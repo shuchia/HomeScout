@@ -228,3 +228,37 @@ class TestDecayRates:
     def test_unknown_tier_falls_back_to_default(self):
         market = MarketConfigModel(id="m", display_name="M", city="C", state="XX", tier="bogus")
         assert market.decay_rate == DEFAULT_DECAY_RATE
+
+
+class TestUrlModeInput:
+    """scrape_url is the acquisition primitive for add-by-URL."""
+
+    def test_apartments_com_url_input_uses_start_urls(self):
+        from app.services.scrapers.apify_service import ApifyService
+
+        actor_input = ApifyService("apartments_com")._build_url_input(
+            "https://www.apartments.com/aera/g5qm48y/"
+        )
+        # Bare strings are rejected by these actors — must be {"url": ...}.
+        assert actor_input["startUrls"] == [
+            {"url": "https://www.apartments.com/aera/g5qm48y/"}
+        ]
+        assert actor_input["maxItems"] == 1
+        assert actor_input["includeWalkScore"] is True
+
+    def test_zillow_url_input_uses_search_urls(self):
+        from app.services.scrapers.apify_service import ApifyService
+
+        actor_input = ApifyService("zillow")._build_url_input("https://www.zillow.com/x/")
+        assert actor_input["searchUrls"] == [{"url": "https://www.zillow.com/x/"}]
+        assert "startUrls" not in actor_input
+
+    def test_search_mode_input_is_unchanged(self):
+        """URL mode must not disturb the bulk path."""
+        from app.services.scrapers.apify_service import ApifyService
+
+        actor_input = ApifyService("apartments_com")._build_apartments_com_input(
+            "Boston", "MA", 100
+        )
+        assert actor_input["search"] == "Boston, MA"
+        assert actor_input["maxItems"] == 100
