@@ -291,6 +291,40 @@ class DeduplicationService:
 
         return unique, duplicates, merge_count
 
+    @staticmethod
+    def _build_reseen_update(
+        listing: Dict[str, Any], matched_id: str, content_hash: str
+    ) -> Dict[str, Any]:
+        """Build the payload for a listing we already hold and have just seen again.
+
+        This must carry everything that can legitimately change while a listing
+        stays on the market — above all `rent`. It previously did not, so a
+        re-seen listing kept its original price forever while its freshness was
+        reset to 100: a stale price presented as maximally fresh.
+
+        The fuzzy matcher accepts a rent within 10%, so a match does *not* mean
+        the price is unchanged; it means it's close enough to be the same unit.
+        Matching on identity and then discarding the new price is exactly
+        backwards.
+
+        true_cost_* travels with rent because it is derived from it (the
+        normalizer has already recomputed both against the new rent). Writing
+        one without the other leaves the listing internally inconsistent —
+        a headline rent that disagrees with its own cost breakdown.
+        """
+        return {
+            "matched_id": matched_id,
+            "content_hash": content_hash,
+            "rent": listing.get("rent"),
+            "true_cost_monthly": listing.get("true_cost_monthly"),
+            "true_cost_move_in": listing.get("true_cost_move_in"),
+            "images": listing.get("images", []),
+            "description": listing.get("description", ""),
+            "available_date": listing.get("available_date"),
+            "contact_phone": listing.get("contact_phone"),
+            "contact_email": listing.get("contact_email"),
+        }
+
     def deduplicate_batch_with_updates(
         self,
         listings: List[Dict[str, Any]],
@@ -323,30 +357,18 @@ class DeduplicationService:
 
             # Check against existing DB data
             if content_hash in existing_hashes:
-                updates.append({
-                    "matched_id": existing_hashes[content_hash],
-                    "content_hash": content_hash,
-                    "images": listing.get("images", []),
-                    "description": listing.get("description", ""),
-                    "available_date": listing.get("available_date"),
-                    "contact_phone": listing.get("contact_phone"),
-                    "contact_email": listing.get("contact_email"),
-                })
+                updates.append(
+                    self._build_reseen_update(listing, existing_hashes[content_hash], content_hash)
+                )
                 continue
 
             # Check fuzzy match against existing
             if existing_listings:
                 dup_result = self.check_duplicate(listing, existing_hashes, existing_listings)
                 if dup_result.is_duplicate and dup_result.matched_id:
-                    updates.append({
-                        "matched_id": dup_result.matched_id,
-                        "content_hash": content_hash,
-                        "images": listing.get("images", []),
-                        "description": listing.get("description", ""),
-                        "available_date": listing.get("available_date"),
-                        "contact_phone": listing.get("contact_phone"),
-                        "contact_email": listing.get("contact_email"),
-                    })
+                    updates.append(
+                        self._build_reseen_update(listing, dup_result.matched_id, content_hash)
+                    )
                     continue
 
             # Check within this batch

@@ -569,6 +569,29 @@ async def _update_reseen_listings(updates: List[Dict[str, Any]]):
                 # the market, so restore it to search results.
                 "is_active": 1,
             }
+
+            # Price. This is the whole point of re-scraping a listing we already
+            # hold — and it used to be dropped on the floor. The scrape arrives
+            # carrying the current rent, we reset freshness to 100 on the
+            # strength of having seen it, and then kept the old price. Anything
+            # that moved less than the fuzzy matcher's 10% tolerance displayed
+            # its original rent indefinitely, stamped maximally fresh.
+            #
+            # true_cost_* is written in the same breath because it is derived
+            # from rent; updating one without the other would leave the headline
+            # price disagreeing with its own cost breakdown.
+            if upd.get("rent") is not None:
+                values["rent"] = upd["rent"]
+                if upd.get("true_cost_monthly") is not None:
+                    values["true_cost_monthly"] = upd["true_cost_monthly"]
+                if upd.get("true_cost_move_in") is not None:
+                    values["true_cost_move_in"] = upd["true_cost_move_in"]
+                # The stored hash was derived from the old rent. Leaving it
+                # stale would make the next scrape miss the hash match and fall
+                # through to fuzzy matching unnecessarily.
+                if upd.get("content_hash"):
+                    values["content_hash"] = upd["content_hash"]
+
             # Merge richer data if available
             if upd.get("images"):
                 values["images"] = upd["images"]
