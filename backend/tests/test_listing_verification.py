@@ -203,17 +203,30 @@ class TestDecayRates:
     """Decay decides how long an un-re-seen listing stays visible."""
 
     def test_rates_are_derived_from_days_to_search_floor(self):
-        for tier, expected_days in (("hot", 7), ("standard", 10), ("cool", 14)):
+        """Recalibrated 2026-09-25 when sweeps moved to weekly."""
+        for tier, expected_days in (("hot", 21), ("standard", 28), ("cool", 35)):
             rate = TIER_DECAY_RATES[tier]
             days_to_floor = (100 - SEARCH_FLOOR) / rate / 24
             assert days_to_floor == pytest.approx(expected_days, abs=0.01)
 
-    def test_hot_listings_survive_a_missed_scrape_cycle(self):
-        """The old 3/hr rate hid hot listings 20h after a scrape, which made
-        search fail whenever the pipeline hiccupped. A listing must now outlive
-        several missed cycles."""
-        hours_to_floor = (100 - SEARCH_FLOOR) / TIER_DECAY_RATES["hot"]
-        assert hours_to_floor > 24 * 5
+    @pytest.mark.parametrize("tier", ["hot", "standard", "cool"])
+    def test_a_listing_survives_several_missed_weekly_sweeps(self, tier):
+        """The invariant that matters, independent of the exact rates.
+
+        Sweeps run weekly. At the old 3/hr a hot listing was hidden 20h after a
+        scrape; at 7 days it reached the floor the very hour its next weekly
+        sweep was due, so any delay dropped the market out of search. A listing
+        must outlive at least two missed sweeps.
+        """
+        WEEK = 24 * 7
+        hours_to_floor = (100 - SEARCH_FLOOR) / TIER_DECAY_RATES[tier]
+        assert hours_to_floor > WEEK * 2
+
+    @pytest.mark.parametrize("tier", ["hot", "standard", "cool"])
+    def test_confidence_stays_above_the_floor_across_one_sweep(self, tier):
+        """A listing re-seen on schedule must never dip below the search floor."""
+        WEEK = 24 * 7
+        assert 100 - WEEK * TIER_DECAY_RATES[tier] > SEARCH_FLOOR
 
     def test_ordering_is_hot_fastest_cool_slowest(self):
         assert TIER_DECAY_RATES["hot"] > TIER_DECAY_RATES["standard"]

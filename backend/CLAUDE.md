@@ -537,6 +537,7 @@ PUT  /api/admin/data-collection/markets/{market_id}   # {is_enabled, tier, scrap
 GET  /api/admin/data-collection/metrics
 GET  /api/admin/data-collection/health
 POST /api/admin/data-collection/reset-false-verifications  # ?apply=true to write
+POST /api/admin/data-collection/normalize-boston-cities     # fold Boston neighbourhood names
 GET  /api/admin/data-collection/pipeline-health            # is work actually happening?
 ```
 
@@ -584,7 +585,7 @@ Markets are the only enable/disable lever for scheduled scraping.
 ## Testing
 
 ```bash
-# Run all backend tests (346 tests across 30 files)
+# Run all backend tests (398 tests across 32 files)
 ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
 ```
 

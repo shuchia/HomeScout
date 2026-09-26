@@ -26,6 +26,30 @@ logger = logging.getLogger(__name__)
 _NYC_ZIP_PREFIXES = frozenset({"100", "101", "102", "103", "104",
                                "110", "111", "112", "113", "114"})
 
+# Boston has the same problem as NYC — apartments.com tags listings with the
+# neighbourhood rather than the municipality — but it cannot be solved the same
+# way. NYC is separable by zip prefix; Boston is not, because 021xx also covers
+# Brookline, Cambridge and Somerville, which are genuinely different cities with
+# their own rents.
+#
+# A measured sweep of Boston (700 properties, 2026-09-25) came back labelled
+# with 27 distinct cities, only 63% of them "Boston". Folding these names back
+# in raises it to ~75%; the rest really are other municipalities and must be
+# left alone.
+#
+# Only names that are unambiguously City of Boston belong here. Chestnut Hill is
+# deliberately absent — it straddles Boston, Brookline and Newton. Cambridge,
+# Somerville, Brookline, Chelsea, Everett, Revere, Watertown and Quincy are
+# separate cities and must never be folded in.
+_BOSTON_NEIGHBORHOODS = frozenset({
+    "allston", "back bay", "bay village", "beacon hill", "brighton",
+    "charlestown", "chinatown", "dorchester", "dorchester center",
+    "east boston", "fenway", "hyde park", "jamaica plain", "mattapan",
+    "mission hill", "north end", "roslindale", "roxbury",
+    "roxbury crossing", "south boston", "south end", "west end",
+    "west roxbury",
+})
+
 
 class ApifyService(BaseScraper):
     """
@@ -271,8 +295,31 @@ class ApifyService(BaseScraper):
         return {
             "search": f"{city}, {state}",
             "maxItems": max_listings,
-            "includeInteriorAmenities": kwargs.get("include_amenities", True),
-            "includeReviews": kwargs.get("include_reviews", True),
+            # The four include* flags drive detail-page fetches, and they
+            # dominate both cost and runtime: measured 2026-09-25, all four off
+            # returned 300 Boston properties in 129s for $0.15 (~$0.0005 each),
+            # against ~$0.002 each with all four on.
+            #
+            # What you get for free regardless: fees, models (per-unit
+            # floorplans with prices), baseRent/totalRent, beds, baths, sqft,
+            # community amenities, coordinates, contact, specials, schools,
+            # transitAndPOI, description, rating. That covers true cost, comps,
+            # floorplan buckets and per-person pricing detection.
+            #
+            # Kept on:
+            #   includeVisuals   — images. Needed for the UI, and they are the
+            #                      reference set for perceptual-hash scam
+            #                      detection. Absent entirely when off.
+            #   includeWalkScore — walk_score/transit_score are stored and
+            #                      displayed; turning this off is a visible
+            #                      regression with no offsetting benefit.
+            # Turned off:
+            #   includeReviews            — `rating` already arrives without it.
+            #   includeInteriorAmenities  — community amenities already arrive;
+            #                               unit-level detail isn't worth a
+            #                               detail-page fetch per listing.
+            "includeInteriorAmenities": kwargs.get("include_amenities", False),
+            "includeReviews": kwargs.get("include_reviews", False),
             "includeVisuals": kwargs.get("include_visuals", True),
             "includeWalkScore": kwargs.get("include_walk_score", True),
         }
@@ -643,6 +690,19 @@ class ApifyService(BaseScraper):
             if not neighborhood:
                 neighborhood = city
             city = "New York"
+
+        # Same fold for Boston, keyed on the neighbourhood name rather than the
+        # zip (see _BOSTON_NEIGHBORHOODS for why zip can't work here). Without
+        # it, comps keyed on `city` compute a separate median for Allston as
+        # though it were a different market from Boston.
+        elif (
+            state == "MA"
+            and city
+            and city.strip().lower() in _BOSTON_NEIGHBORHOODS
+        ):
+            if not neighborhood:
+                neighborhood = city
+            city = "Boston"
 
         # Handle coordinates
         coords = raw.get("coordinates", {})

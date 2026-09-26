@@ -824,6 +824,27 @@ async def backfill_enrichment(only_missing: bool = True, batch_size: int = 200):
     }
 
 
+@router.post("/normalize-boston-cities")
+async def normalize_boston_cities():
+    """One-shot fix for Boston listings tagged with a neighbourhood name.
+
+    apartments.com labels Boston listings Allston, Brighton, Dorchester, East
+    Boston, Jamaica Plain and so on — all legally City of Boston. Unlike NYC
+    this can't be keyed on zip, because 021xx also covers Brookline, Cambridge
+    and Somerville, which are separate cities with different rents. Keyed on the
+    neighbourhood name instead; the scraper does the same on write.
+
+    Comps keyed on `city` otherwise compute a separate median for Allston as
+    though it were its own market.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import backfill_boston_city_normalization
+    task = backfill_boston_city_normalization.apply_async(queue="maintenance")
+    return {"status": "dispatched", "task_id": task.id}
+
+
 @router.post("/reset-false-verifications")
 async def reset_false_verifications(apply: bool = Query(False)):
     """One-shot cleanup for listings marked verified by the old verify logic.

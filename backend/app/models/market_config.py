@@ -29,10 +29,21 @@ from app.database import Base
 #
 # Rates below are derived from "days until a listing falls below the search
 # floor": (100 - 40) / (days * 24).
+# Recalibrated 2026-09-25 for weekly sweeps. At the previous 7/10/14 days a
+# hot-tier market scraped weekly reached the search floor at the exact moment
+# its next sweep was due — any delay dropped the market out of search. These
+# give roughly three missed sweeps of headroom.
+#
+# The corpus's job is now comps and reference data, where a listing that
+# vanished a fortnight ago still carries price signal. The sharper test for "is
+# this listing gone" is absence from a sweep that exhausted its market, which is
+# now possible since a sweep returns the complete market (measured: State
+# College 102, Boston 700, both exhausting below maxItems). Decay is the
+# fallback for when a sweep fails, not the primary signal.
 _DAYS_TO_SEARCH_FLOOR = {
-    "hot": float(os.getenv("DECAY_DAYS_HOT", "7")),
-    "standard": float(os.getenv("DECAY_DAYS_STANDARD", "10")),
-    "cool": float(os.getenv("DECAY_DAYS_COOL", "14")),
+    "hot": float(os.getenv("DECAY_DAYS_HOT", "21")),
+    "standard": float(os.getenv("DECAY_DAYS_STANDARD", "28")),
+    "cool": float(os.getenv("DECAY_DAYS_COOL", "35")),
 }
 SEARCH_FLOOR = 40
 

@@ -309,88 +309,123 @@ def decay_and_verify() -> Dict[str, Any]:
 
 
 async def _decay_and_verify() -> Dict[str, Any]:
-    from sqlalchemy import select, update
-    from app.models.apartment import ApartmentModel
-    from app.models.market_config import MarketConfigModel
+    """Recompute freshness confidence for every active listing.
 
-    now = datetime.utcnow()
-    decay_counts = {"hot": 0, "standard": 0, "cool": 0}
-    verification_dispatched = 0
-    deactivated = 0
+    Done as set-based SQL rather than an ORM loop. The previous version did
+    `select(ApartmentModel).where(is_active == 1)` and iterated, which
+    materialised every active listing as a full ORM object — including
+    `raw_data` (the entire Apify payload) plus a dozen other JSONB columns. At
+    3,240 listings that exceeded the worker's 512 MB and the task was SIGKILLed
+    by the OOM killer on every run, so it never reached its commit. It had not
+    succeeded since 2026-06-29.
 
+    Nothing here needs Python. The computation is
+    `100 - hours_since_last_seen * rate`, over columns already in the database,
+    so it runs in constant memory as one statement — and stays that way as the
+    corpus grows (raising maxItems to 1000 roughly triples it).
+    """
+    from sqlalchemy import text
     from app.models.market_config import TIER_DECAY_RATES, DEFAULT_DECAY_RATE
 
+    rates = {
+        "hot": TIER_DECAY_RATES["hot"],
+        "std": TIER_DECAY_RATES["standard"],
+        "cool": TIER_DECAY_RATES["cool"],
+        "fallback": DEFAULT_DECAY_RATE,
+        "floor": SEARCH_FLOOR,
+    }
+
     async with get_session_context() as session:
-        # Load all market configs for decay rates
-        markets_result = await session.execute(select(MarketConfigModel))
-        markets = {m.id: m for m in markets_result.scalars()}
+        # The correlated subquery resolves each listing's tier; COALESCE covers
+        # listings whose market_id is null or points at a deleted market, which
+        # the ORM version handled by defaulting to "cool".
+        decay_result = await session.execute(
+            text("""
+                UPDATE apartments a
+                SET freshness_confidence = GREATEST(0, FLOOR(
+                        100 - (EXTRACT(EPOCH FROM (now() - a.last_seen_at)) / 3600.0)
+                              * COALESCE(
+                                  CASE (SELECT m.tier FROM market_configs m
+                                        WHERE m.id = a.market_id)
+                                    WHEN 'hot' THEN :hot
+                                    WHEN 'standard' THEN :std
+                                    WHEN 'cool' THEN :cool
+                                  END, :fallback)
+                    ))::int
+                WHERE a.is_active = 1
+                  AND a.last_seen_at IS NOT NULL
+            """),
+            rates,
+        )
+        decayed = decay_result.rowcount or 0
 
-        # Decay rates live on the model so this task and MarketConfig.decay_rate
-        # can never drift apart. See market_config.py for the rationale.
-        tier_rates = TIER_DECAY_RATES
+        # Stamp only the rows whose value actually moved, so
+        # max(confidence_updated_at) stays a truthful "when did decay last
+        # succeed" signal for /pipeline-health.
+        await session.execute(
+            text("""
+                UPDATE apartments
+                SET confidence_updated_at = now()
+                WHERE is_active = 1 AND last_seen_at IS NOT NULL
+            """)
+        )
 
-        # Get all active listings
-        stmt = select(ApartmentModel).where(ApartmentModel.is_active == 1)
-        result = await session.execute(stmt)
-
-        for apt in result.scalars():
-            if not apt.last_seen_at:
-                continue
-
-            # Get decay rate from market or default
-            market = markets.get(apt.market_id)
-            tier = market.tier if market else "cool"
-            decay_rate = tier_rates.get(tier, DEFAULT_DECAY_RATE)
-
-            # Calculate new confidence
-            hours_since_seen = (now - apt.last_seen_at.replace(tzinfo=None)).total_seconds() / 3600
-            new_confidence = max(0, int(100 - (hours_since_seen * decay_rate)))
-
-            if new_confidence != apt.freshness_confidence:
-                apt.freshness_confidence = new_confidence
-                apt.confidence_updated_at = now
-                decay_counts[tier] = decay_counts.get(tier, 0) + 1
-
-            # Trigger verification at threshold.
-            #
-            # Off by default. Verification GETs the listing's source_url, but
-            # apartments.com is Akamai-fenced and 403s every automated request,
-            # so a corpus-wide sweep is thousands of outbound requests from our
-            # egress IP that cannot answer the question they were sent to ask
-            # (and risk getting that IP flagged, which would take the scraper
-            # with it). Under the decision-layer model we only need to know a
-            # listing is live when a user is actually considering it, which is a
-            # handful of listings, not the whole corpus.
-            #
-            # Set ENABLE_BULK_VERIFICATION=true to restore the sweep.
-            if (
-                BULK_VERIFICATION_ENABLED
-                and new_confidence < SEARCH_FLOOR
-                and apt.verification_status is None
-            ):
-                apt.verification_status = "pending"
-                from app.tasks.maintenance_tasks import verify_listing
-                verify_listing.apply_async(
-                    kwargs={"apartment_id": apt.id},
-                    queue="maintenance",
-                )
-                verification_dispatched += 1
-
-            # Deactivate at zero confidence (unless verified)
-            if new_confidence == 0 and apt.verification_status != "verified":
-                apt.is_active = 0
-                deactivated += 1
+        # Expire listings that have decayed to nothing. IS DISTINCT FROM rather
+        # than <> because <> 'verified' is NULL for unverified rows, which would
+        # silently exclude every one of them.
+        deact_result = await session.execute(
+            text("""
+                UPDATE apartments
+                SET is_active = 0
+                WHERE is_active = 1
+                  AND freshness_confidence = 0
+                  AND verification_status IS DISTINCT FROM 'verified'
+            """)
+        )
+        deactivated = deact_result.rowcount or 0
 
         await session.commit()
 
+    verification_dispatched = 0
+    if BULK_VERIFICATION_ENABLED:
+        # Off by default — see the note on BULK_VERIFICATION_ENABLED. Selects
+        # ids only, never whole rows, so this cannot reintroduce the OOM.
+        async with get_session_context() as session:
+            rows = await session.execute(
+                text("""
+                    SELECT id FROM apartments
+                    WHERE is_active = 1
+                      AND freshness_confidence < :floor
+                      AND verification_status IS NULL
+                    LIMIT 500
+                """),
+                {"floor": SEARCH_FLOOR},
+            )
+            ids = [r[0] for r in rows]
+            if ids:
+                await session.execute(
+                    text("""
+                        UPDATE apartments SET verification_status = 'pending'
+                        WHERE id = ANY(:ids)
+                    """),
+                    {"ids": ids},
+                )
+                await session.commit()
+
+        for apartment_id in ids:
+            verify_listing.apply_async(
+                kwargs={"apartment_id": apartment_id}, queue="maintenance"
+            )
+            verification_dispatched += 1
+
     logger.info(
-        f"Decay update: {sum(decay_counts.values())} listings updated, "
+        f"Decay update: {decayed} listings recomputed, "
         f"{verification_dispatched} verifications dispatched, "
         f"{deactivated} deactivated"
     )
     return {
         "status": "completed",
-        "decay_counts": decay_counts,
+        "listings_recomputed": decayed,
         "verifications_dispatched": verification_dispatched,
         "deactivated": deactivated,
     }
@@ -850,6 +885,57 @@ async def _backfill_nyc_city_normalization() -> Dict[str, Any]:
         "updated": updated,
         "sample_moves": sample_moves,
     }
+
+
+@celery_app.task
+def backfill_boston_city_normalization() -> Dict[str, Any]:
+    """Fold Boston neighbourhood names into "Boston" on existing rows.
+
+    Same problem as the NYC borough issue, different solution. NYC is separable
+    by zip prefix; Boston is not, because 021xx also covers Brookline,
+    Cambridge and Somerville — genuinely different cities with different rents.
+    So this keys on the neighbourhood name instead (see
+    _BOSTON_NEIGHBORHOODS in apify_service.py, which also handles it on write).
+
+    A measured Boston sweep (700 properties, 2026-09-25) was labelled with 27
+    distinct cities, only 63% of them "Boston". Folding these names in raises
+    that to ~75%; the remainder really are other municipalities. Without this,
+    comps keyed on `city` compute a separate median for Allston as though it
+    were a different market from Boston.
+
+    Set-based rather than an ORM loop, deliberately: the decay task was being
+    OOM-killed for exactly that pattern.
+    """
+    if not is_database_enabled():
+        return {"status": "skipped", "reason": "Database not enabled"}
+
+    return run_async(_backfill_boston_city_normalization())
+
+
+async def _backfill_boston_city_normalization() -> Dict[str, Any]:
+    from sqlalchemy import text
+    from app.services.scrapers.apify_service import _BOSTON_NEIGHBORHOODS
+
+    names = sorted(_BOSTON_NEIGHBORHOODS)
+
+    async with get_session_context() as session:
+        # Preserve the neighbourhood name rather than discarding it, so cards
+        # still read "Allston, MA" while comps group under Boston.
+        result = await session.execute(
+            text("""
+                UPDATE apartments
+                SET neighborhood = COALESCE(NULLIF(neighborhood, ''), city),
+                    city = 'Boston'
+                WHERE state = 'MA'
+                  AND lower(btrim(city)) = ANY(:names)
+            """),
+            {"names": names},
+        )
+        updated = result.rowcount or 0
+        await session.commit()
+
+    logger.info(f"backfill_boston_city_normalization: updated={updated}")
+    return {"status": "completed", "updated": updated, "names_matched": len(names)}
 
 
 @celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
