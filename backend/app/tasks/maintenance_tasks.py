@@ -327,6 +327,9 @@ async def _decay_and_verify() -> Dict[str, Any]:
     from sqlalchemy import text
     from app.models.market_config import TIER_DECAY_RATES, DEFAULT_DECAY_RATE
 
+    # Every bound parameter is CAST explicitly. Postgres cannot infer a type
+    # for a placeholder inside a CASE arm, so asyncpg binds it as text and the
+    # statement dies with 'operator does not exist: numeric * text'.
     rates = {
         "hot": TIER_DECAY_RATES["hot"],
         "std": TIER_DECAY_RATES["standard"],
@@ -343,14 +346,14 @@ async def _decay_and_verify() -> Dict[str, Any]:
             text("""
                 UPDATE apartments a
                 SET freshness_confidence = GREATEST(0, FLOOR(
-                        100 - (EXTRACT(EPOCH FROM (now() - a.last_seen_at)) / 3600.0)
+                        100.0 - (EXTRACT(EPOCH FROM (now() - a.last_seen_at))::double precision / 3600.0)
                               * COALESCE(
                                   CASE (SELECT m.tier FROM market_configs m
                                         WHERE m.id = a.market_id)
-                                    WHEN 'hot' THEN :hot
-                                    WHEN 'standard' THEN :std
-                                    WHEN 'cool' THEN :cool
-                                  END, :fallback)
+                                    WHEN 'hot' THEN CAST(:hot AS double precision)
+                                    WHEN 'standard' THEN CAST(:std AS double precision)
+                                    WHEN 'cool' THEN CAST(:cool AS double precision)
+                                  END, CAST(:fallback AS double precision))
                     ))::int
                 WHERE a.is_active = 1
                   AND a.last_seen_at IS NOT NULL
@@ -395,7 +398,7 @@ async def _decay_and_verify() -> Dict[str, Any]:
                 text("""
                     SELECT id FROM apartments
                     WHERE is_active = 1
-                      AND freshness_confidence < :floor
+                      AND freshness_confidence < CAST(:floor AS integer)
                       AND verification_status IS NULL
                     LIMIT 500
                 """),

@@ -597,10 +597,15 @@ async def check_pipeline_health():
                 await session.execute(select(func.max(ApartmentModel.confidence_updated_at)))
             ).scalar()
 
-            jobs_24h = (
+            # The window has to span the slowest market's cadence, or the
+            # check fires constantly: at weekly sweeps a normal day has zero
+            # jobs, and a fixed 24h window reads that as an outage.
+            slowest = max((m["frequency_hours"] for m in markets_out), default=24)
+            window_hours = max(48, slowest * 2)
+            jobs_in_window = (
                 await session.execute(
                     select(func.count()).select_from(ScrapeJobModel).where(
-                        ScrapeJobModel.created_at >= now - timedelta(hours=24)
+                        ScrapeJobModel.created_at >= now - timedelta(hours=window_hours)
                     )
                 )
             ).scalar() or 0
@@ -620,10 +625,14 @@ async def check_pipeline_health():
         # creating their job row are invisible here by definition, which is
         # exactly why this compares against the schedule rather than trusting
         # the job table to be complete.
-        expected_24h = sum(24 / m["frequency_hours"] for m in markets_out) if markets_out else 0
-        if expected_24h and jobs_24h < expected_24h * 0.5:
+        expected_in_window = (
+            sum(window_hours / m["frequency_hours"] for m in markets_out)
+            if markets_out else 0
+        )
+        if expected_in_window and jobs_in_window < expected_in_window * 0.5:
             problems.append(
-                f"only {jobs_24h} scrape jobs in 24h, expected ~{expected_24h:.0f}"
+                f"only {jobs_in_window} scrape jobs in {window_hours}h, "
+                f"expected ~{expected_in_window:.0f}"
             )
 
         return {
@@ -635,7 +644,11 @@ async def check_pipeline_health():
                 "last_success_at": last_decay.isoformat() if last_decay else None,
                 "hours_since": round(decay_age_hours, 1) if decay_age_hours is not None else None,
             },
-            "scrape_jobs_24h": {"actual": jobs_24h, "expected": round(expected_24h, 1)},
+            "scrape_jobs": {
+                "window_hours": window_hours,
+                "actual": jobs_in_window,
+                "expected": round(expected_in_window, 1),
+            },
         }
 
     except Exception as e:
