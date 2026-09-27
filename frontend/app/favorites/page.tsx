@@ -33,7 +33,9 @@ export default function FavoritesPage() {
     if (!user) return
     listTours()
       .then(({ tours }) => {
-        setTouringApartmentIds(new Set(tours.map(t => t.apartment_id)))
+        setTouringApartmentIds(
+          new Set(tours.map(t => t.apartment_id).filter((id): id is string => !!id)),
+        )
       })
       .catch(() => {
         // Silently fail — tour status is non-critical

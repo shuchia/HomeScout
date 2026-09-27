@@ -105,11 +105,9 @@ export default function TourDetailPage() {
       setTour(tourRes.tour)
       setSuggestions(suggestionsRes.suggestions)
 
-      // Fetch apartment data
-      const apartments = await getApartmentsBatch([tourRes.tour.apartment_id])
-      if (apartments.length > 0) {
-        setApartment(apartments[0])
-      }
+      // The tour carries its own copy of the listing — no second fetch, and
+      // it keeps rendering after the corpus row is gone.
+      setApartment(tourRes.tour.listing)
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setError('Tour not found')

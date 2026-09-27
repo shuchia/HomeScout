@@ -17,7 +17,7 @@ def check_tour_reminders():
 
     # Find scheduled tours for today that haven't been toured yet
     result = (
-        supabase_admin.table("tour_pipeline")
+        supabase_admin.table("saved_listings")
         .select("id, user_id, apartment_id, scheduled_date, scheduled_time")
         .eq("scheduled_date", today)
         .eq("stage", "scheduled")

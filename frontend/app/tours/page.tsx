@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { listTours, getApartmentsBatch } from '@/lib/api'
+import { listTours } from '@/lib/api'
 import { Tour, TourStage } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
 import TourCard from '@/components/TourCard'
@@ -41,28 +41,30 @@ function isFuture(dateStr: string): boolean {
 export default function ToursPage() {
   const { user, loading: authLoading, signInWithGoogle, isPro, profileLoading } = useAuth()
   const [tours, setTours] = useState<Tour[]>([])
-  const [apartments, setApartments] = useState<Record<string, Apartment>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('today')
+
+  // DecisionBrief takes a map keyed by apartment_id. Derived from the tours
+  // rather than fetched, since each one already carries its listing.
+  const apartments = useMemo(
+    () => Object.fromEntries(
+      tours.filter(t => t.apartment_id).map(t => [t.apartment_id as string, t.listing]),
+    ),
+    [tours],
+  )
 
   const fetchTours = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
+      // Each tour carries its own copy of the listing, so there is no second
+      // round trip and no reconciliation. This used to fetch
+      // /api/apartments/batch and index by apartment_id, which broke for a
+      // tour whose corpus row had been pruned — and cannot work at all for a
+      // listing added by URL, which has no apartment_id.
       const data = await listTours()
       setTours(data.tours)
-
-      // Fetch apartment data for all tours
-      const apartmentIds = [...new Set(data.tours.map((t) => t.apartment_id))]
-      if (apartmentIds.length > 0) {
-        const aptData = await getApartmentsBatch(apartmentIds)
-        const aptMap: Record<string, Apartment> = {}
-        for (const apt of aptData) {
-          aptMap[apt.id] = apt
-        }
-        setApartments(aptMap)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tours')
     } finally {
@@ -283,7 +285,7 @@ export default function ToursPage() {
                   />
                 ))}
                 {todayTours.map((tour) => (
-                  <TourCard key={tour.id} tour={tour} apartment={apartments[tour.apartment_id]} />
+                  <TourCard key={tour.id} tour={tour} apartment={tour.listing} />
                 ))}
               </div>
             )
@@ -304,7 +306,7 @@ export default function ToursPage() {
                   />
                 ))}
                 {upcomingTours.map((tour) => (
-                  <TourCard key={tour.id} tour={tour} apartment={apartments[tour.apartment_id]} />
+                  <TourCard key={tour.id} tour={tour} apartment={tour.listing} />
                 ))}
               </div>
             )
@@ -322,7 +324,7 @@ export default function ToursPage() {
                     </h2>
                     <div className="space-y-3">
                       {stageTours.map((tour) => (
-                        <TourCard key={tour.id} tour={tour} apartment={apartments[tour.apartment_id]} />
+                        <TourCard key={tour.id} tour={tour} apartment={tour.listing} />
                       ))}
                     </div>
                   </div>

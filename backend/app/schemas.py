@@ -481,10 +481,24 @@ class DecisionBriefResponse(BaseModel):
 
 
 class TourResponse(BaseModel):
-    """Response model for a single tour pipeline entry."""
+    """Response model for a single tour pipeline entry.
+
+    Backed by `saved_listings`. `apartment_id` is nullable because a listing
+    added by URL has no corpus row behind it, and `stage` is nullable because
+    the same table holds favourites — though this response is only built for
+    rows that are in the pipeline.
+
+    Must stay in sync with frontend/types/tour.ts.
+    """
     id: str
-    apartment_id: str
-    stage: str
+    apartment_id: Optional[str] = None
+    listing: dict = Field(default_factory=dict)
+    listing_checked_at: Optional[str] = None
+    availability_status: str = "unknown"
+    last_change: Optional[dict] = None
+    last_change_at: Optional[str] = None
+    is_favorite: bool = False
+    stage: Optional[str] = None
     inquiry_email_draft: Optional[str] = None
     outreach_sent_at: Optional[str] = None
     scheduled_date: Optional[str] = None

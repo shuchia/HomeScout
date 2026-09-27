@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Tour, TourStage } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
+import { ListingChangeNotice } from '@/components/ListingChangeNotice'
 
 interface TourCardProps {
   tour: Tour
@@ -86,6 +87,21 @@ export default function TourCard({ tour, apartment }: TourCardProps) {
           {stage.label}
         </span>
       </div>
+
+      {/* What a source check found. Adding to tours is a commitment, so the
+          listing is re-checked — and a price that moved since the user
+          decided to go and see it is exactly what they need to know before
+          they turn up. Nothing renders for 'unknown': a check that could not
+          reach the source is not evidence. */}
+      {(tour.last_change || tour.availability_status === 'gone') && (
+        <div className="mt-2">
+          <ListingChangeNotice
+            changes={tour.last_change}
+            availability={tour.availability_status}
+            checkedAt={tour.listing_checked_at}
+          />
+        </div>
+      )}
 
       {/* Scheduled date/time */}
       {tour.stage === 'scheduled' && tour.scheduled_date && (

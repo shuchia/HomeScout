@@ -1,3 +1,6 @@
+import { Apartment } from './apartment'
+import { AvailabilityStatus, ListingChanges } from './savedListing'
+
 export type TourStage = 'interested' | 'outreach_sent' | 'scheduled' | 'toured' | 'deciding'
 
 export interface TourNote {
@@ -23,7 +26,16 @@ export interface TourTag {
 
 export interface Tour {
   id: string
-  apartment_id: string
+  /** Null for a listing added by URL, which has no corpus row behind it. */
+  apartment_id: string | null
+  /** The tour's own copy of the listing. Always present; no batch fetch needed. */
+  listing: Apartment
+  listing_checked_at: string | null
+  availability_status: AvailabilityStatus
+  /** Unacknowledged changes a source check found; null when there is nothing to show. */
+  last_change: ListingChanges | null
+  last_change_at: string | null
+  is_favorite: boolean
   stage: TourStage
   inquiry_email_draft: string | null
   outreach_sent_at: string | null

@@ -38,10 +38,22 @@ def _ensure_supabase():
 
 
 def _build_tour_response(row: dict, notes=None, photos=None, tags=None) -> dict:
-    """Build a TourResponse-compatible dict from a DB row."""
+    """Build a TourResponse-compatible dict from a saved_listings row.
+
+    `listing` travels with the response so callers do not need a second round
+    trip to /api/apartments/batch, and so a tour keeps rendering after its
+    corpus row has been pruned. The check fields come along for the same
+    reason: the change marker is part of the tour card, not a separate fetch.
+    """
     return {
         "id": row["id"],
         "apartment_id": row["apartment_id"],
+        "listing": row.get("listing") or {},
+        "listing_checked_at": row.get("listing_checked_at"),
+        "availability_status": row.get("availability_status") or "unknown",
+        "last_change": row.get("last_change"),
+        "last_change_at": row.get("last_change_at"),
+        "is_favorite": row.get("is_favorite", False),
         "stage": row["stage"],
         "inquiry_email_draft": row.get("inquiry_email_draft"),
         "outreach_sent_at": row.get("outreach_sent_at"),
@@ -76,7 +88,12 @@ DEFAULT_TAGS = [
 
 
 async def _snapshot_apartment(apartment_id: str) -> Optional[dict]:
-    """Read one apartment out of the corpus, in whichever mode is active."""
+    """Read one apartment out of the corpus, in whichever mode is active.
+
+    Only used when a tour is created from a search result and needs its first
+    copy of the listing. Everything afterwards reads `listing` off the saved
+    listing itself.
+    """
     from app.database import is_database_enabled, get_session_context
 
     if is_database_enabled():
@@ -98,58 +115,44 @@ async def _snapshot_apartment(apartment_id: str) -> Optional[dict]:
     return None
 
 
-async def _resolve_apartments(tours: List[dict]) -> dict:
-    """Resolve the apartment behind each tour, snapshot first.
+def _resolve_apartments(tours: List[dict]) -> dict:
+    """Map apartment_id -> listing for a set of saved listings.
 
-    A tour's own snapshot is authoritative: it is what the user actually saw,
-    and it is the only thing that exists for a listing added by URL. The live
-    corpus is consulted only for rows created before snapshots existed, and
-    when it answers we write the snapshot back so each row degrades at most
-    once. That write-back is fire-and-forget — a tour must still render if it
-    fails.
+    Now a plain projection rather than a lookup. A saved listing carries its
+    own copy of the listing in `listing`, so there is nothing to join, nothing
+    to fall back to, and nothing to backfill — the corpus can lose a row
+    without affecting any of this.
 
-    Returns a dict keyed by apartment_id. A tour whose apartment cannot be
-    resolved at all is simply absent from it, as before.
+    Keyed by apartment_id because callers still index by it. A listing added by
+    URL has no apartment_id and is keyed by its saved-listing id instead, so it
+    still resolves.
     """
-    apartments_by_id: dict = {}
-    needs_backfill: List[tuple] = []
+    return {
+        (t.get("apartment_id") or t["id"]): (t.get("listing") or {})
+        for t in tours
+    }
 
-    for t in tours:
-        apartment_id = t.get("apartment_id")
-        if not apartment_id or apartment_id in apartments_by_id:
-            continue
 
-        snapshot = t.get("apartment_snapshot")
-        if snapshot:
-            apartments_by_id[apartment_id] = snapshot
-            continue
+def _queue_listing_check(saved_listing_id: str) -> None:
+    """Queue a source check. Never blocks and never fails the caller.
 
-        live = await _snapshot_apartment(apartment_id)
-        if live:
-            apartments_by_id[apartment_id] = live
-            needs_backfill.append((t["id"], live))
+    A check takes 10-20 seconds, so it runs on the worker and the response
+    goes back immediately with the copy we already hold.
+    """
+    try:
+        from app.tasks.listing_check_tasks import check_saved_listing
 
-    for tour_id, live in needs_backfill:
-        try:
-            (
-                supabase_admin.table("tour_pipeline")
-                .update({
-                    "apartment_snapshot": live,
-                    "snapshot_at": datetime.now(timezone.utc).isoformat(),
-                })
-                .eq("id", tour_id)
-                .execute()
-            )
-        except Exception as e:
-            logger.warning(f"Snapshot backfill failed for tour {tour_id}: {e}")
-
-    return apartments_by_id
+        check_saved_listing.apply_async(
+            kwargs={"saved_listing_id": saved_listing_id}, queue="maintenance"
+        )
+    except Exception as e:
+        logger.warning(f"Could not queue check for {saved_listing_id}: {e}")
 
 
 def _verify_tour_ownership(tour_id: str, user_id: str):
     """Verify the tour belongs to the user, raise 404 if not."""
     result = (
-        supabase_admin.table("tour_pipeline")
+        supabase_admin.table("saved_listings")
         .select("id")
         .eq("id", tour_id)
         .eq("user_id", user_id)
@@ -172,7 +175,7 @@ async def get_tag_suggestions(
     try:
         # Fetch user's existing tags across all tours
         user_tours = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .select("id")
             .eq("user_id", user.user_id)
             .execute()
@@ -184,7 +187,7 @@ async def get_tag_suggestions(
             tags_result = (
                 supabase_admin.table("tour_tags")
                 .select("tag, sentiment")
-                .in_("tour_pipeline_id", tour_ids)
+                .in_("saved_listing_id", tour_ids)
                 .execute()
             )
             # Count occurrences
@@ -235,7 +238,7 @@ async def generate_day_plan(
     try:
         # Fetch the specified tours and verify ownership
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .select("*")
             .eq("user_id", user.user_id)
             .in_("id", body.tour_ids)
@@ -249,7 +252,7 @@ async def generate_day_plan(
             )
 
         # Fetch apartment data for each tour
-        apartments_by_id = await _resolve_apartments(tours)
+        apartments_by_id = _resolve_apartments(tours)
 
         # Build tour data for Claude
         tour_data = []
@@ -315,7 +318,7 @@ async def generate_decision_brief(
     try:
         # Fetch all tours in "toured" or "deciding" stage
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .select("*")
             .eq("user_id", user.user_id)
             .in_("stage", ["toured", "deciding"])
@@ -329,32 +332,32 @@ async def generate_decision_brief(
             )
 
         # Fetch apartment data
-        apartments_by_id = await _resolve_apartments(tours)
+        apartments_by_id = _resolve_apartments(tours)
 
         # Fetch notes and tags for each tour
         tour_ids = [t["id"] for t in tours]
 
         notes_result = (
             supabase_admin.table("tour_notes")
-            .select("tour_pipeline_id, content")
-            .in_("tour_pipeline_id", tour_ids)
+            .select("saved_listing_id, content")
+            .in_("saved_listing_id", tour_ids)
             .execute()
         )
         notes_by_tour: dict[str, list[str]] = {}
         for n in (notes_result.data or []):
-            notes_by_tour.setdefault(n["tour_pipeline_id"], []).append(
+            notes_by_tour.setdefault(n["saved_listing_id"], []).append(
                 n.get("content", "")
             )
 
         tags_result = (
             supabase_admin.table("tour_tags")
-            .select("tour_pipeline_id, tag, sentiment")
-            .in_("tour_pipeline_id", tour_ids)
+            .select("saved_listing_id, tag, sentiment")
+            .in_("saved_listing_id", tour_ids)
             .execute()
         )
         tags_by_tour: dict[str, list[dict]] = {}
         for tg in (tags_result.data or []):
-            tags_by_tour.setdefault(tg["tour_pipeline_id"], []).append(
+            tags_by_tour.setdefault(tg["saved_listing_id"], []).append(
                 {"tag": tg["tag"], "sentiment": tg["sentiment"]}
             )
 
@@ -365,13 +368,13 @@ async def generate_decision_brief(
         # planned follow-up that will replace this weak count with real content.)
         photos_result = (
             supabase_admin.table("tour_photos")
-            .select("tour_pipeline_id")
-            .in_("tour_pipeline_id", tour_ids)
+            .select("saved_listing_id")
+            .in_("saved_listing_id", tour_ids)
             .execute()
         )
         photo_count_by_tour: dict[str, int] = {}
         for p in (photos_result.data or []):
-            tid = p["tour_pipeline_id"]
+            tid = p["saved_listing_id"]
             photo_count_by_tour[tid] = photo_count_by_tour.get(tid, 0) + 1
 
         # Build user preferences string — prefer request body (current search
@@ -493,19 +496,34 @@ async def create_tour(
     _ensure_supabase()
 
     try:
-        # Check for duplicate apartment in this user's pipeline
+        # A favourite and a tour are one row now, so an apartment the user
+        # already starred is moved into the pipeline rather than inserted
+        # again — an insert would hit the unique index on (user_id,
+        # dedupe_key). Only an apartment already *in* the pipeline is a
+        # genuine duplicate.
         existing = (
-            supabase_admin.table("tour_pipeline")
-            .select("id")
+            supabase_admin.table("saved_listings")
+            .select("*")
             .eq("user_id", user.user_id)
             .eq("apartment_id", body.apartment_id)
             .execute()
         )
         if existing.data:
-            raise HTTPException(
-                status_code=409,
-                detail="Apartment is already in your tour pipeline.",
+            current = existing.data[0]
+            if current.get("stage"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Apartment is already in your tour pipeline.",
+                )
+            promoted = (
+                supabase_admin.table("saved_listings")
+                .update({"stage": "interested"})
+                .eq("id", current["id"])
+                .execute()
             )
+            tour = promoted.data[0] if promoted.data else {**current, "stage": "interested"}
+            _queue_listing_check(tour["id"])
+            return {"tour": _build_tour_response(tour)}
 
         row = {
             "user_id": user.user_id,
@@ -513,31 +531,37 @@ async def create_tour(
             "stage": "interested",
         }
 
-        # Capture the listing as it stands right now. This is what the tour
-        # will display from here on: the corpus is free to change, decay, or
-        # lose this row without rewriting what the user saw when they decided
-        # to go and see it. Contact details are pulled from the same snapshot
-        # rather than a second query.
+        # Capture the listing as it stands. From here on the tour reads this
+        # copy: the corpus is free to change, decay or lose the row without
+        # rewriting what the user saw when they decided to go and see it.
+        # Contact details come from the same copy rather than a second query.
         try:
             snapshot = await _snapshot_apartment(body.apartment_id)
             if snapshot:
-                row["apartment_snapshot"] = snapshot
-                row["snapshot_at"] = datetime.now(timezone.utc).isoformat()
+                row["listing"] = snapshot
+                row["source_url"] = snapshot.get("source_url")
                 if snapshot.get("contact_phone"):
                     row["contact_phone"] = snapshot["contact_phone"]
                 if snapshot.get("contact_email"):
                     row["contact_email"] = snapshot["contact_email"]
         except Exception as e:
-            # Non-critical — the tour still works, it just falls back to the
-            # live corpus on read and gets backfilled there.
             logger.warning(f"Could not snapshot apartment {body.apartment_id}: {e}")
 
+        if not row.get("listing"):
+            # `listing` is NOT NULL, and a tour with no listing data is not a
+            # tour. Better to refuse than to write a husk.
+            raise HTTPException(status_code=404, detail="Apartment not found")
+
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .insert(row)
             .execute()
         )
         tour = result.data[0] if result.data else row
+
+        # Adding to tours is a commitment, so verify the listing is still
+        # real and the numbers still hold. Not awaited — see _queue_listing_check.
+        _queue_listing_check(tour["id"])
 
         # Funnel signal: tour-add is a strong-intent step (user has
         # committed to physically visiting). Track for conversion analysis.
@@ -567,10 +591,14 @@ async def list_tours(
     _ensure_supabase()
 
     try:
+        # stage IS NOT NULL is what makes this the tour pipeline rather than
+        # the whole board: favourites live in the same table with a null stage,
+        # and without this filter every starred listing would appear as a tour.
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .select("*")
             .eq("user_id", user.user_id)
+            .not_.is_("stage", "null")
             .order("updated_at", desc=True)
             .execute()
         )
@@ -599,7 +627,7 @@ async def get_tour(
 
     try:
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .select("*")
             .eq("id", tour_id)
             .eq("user_id", user.user_id)
@@ -614,7 +642,7 @@ async def get_tour(
         notes_result = (
             supabase_admin.table("tour_notes")
             .select("id, content, source, transcription_status, created_at")
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -622,7 +650,7 @@ async def get_tour(
         photos_result = (
             supabase_admin.table("tour_photos")
             .select("id, thumbnail_s3_key, caption, created_at")
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -640,7 +668,7 @@ async def get_tour(
         tags_result = (
             supabase_admin.table("tour_tags")
             .select("id, tag, sentiment")
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .execute()
         )
 
@@ -706,7 +734,7 @@ async def update_tour(
             )
 
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .update(updates)
             .eq("id", tour_id)
             .eq("user_id", user.user_id)
@@ -733,7 +761,7 @@ async def delete_tour(
 
     try:
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .delete()
             .eq("id", tour_id)
             .eq("user_id", user.user_id)
@@ -772,7 +800,7 @@ async def generate_inquiry_email(
     try:
         # Verify ownership and fetch tour data
         result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .select("*")
             .eq("id", tour_id)
             .eq("user_id", user.user_id)
@@ -788,7 +816,8 @@ async def generate_inquiry_email(
         # whose corpus row had been pruned 404'd here with "Apartment not
         # found" — the user could no longer draft an inquiry for a place they
         # had already toured.
-        apartment = (await _resolve_apartments([tour_row])).get(apartment_id)
+        resolved = _resolve_apartments([tour_row])
+        apartment = resolved.get(apartment_id) or resolved.get(tour_row["id"])
 
         if not apartment:
             raise HTTPException(
@@ -820,9 +849,9 @@ async def generate_inquiry_email(
             user_context=user_context,
         )
 
-        # Save draft to tour_pipeline
+        # Save draft to saved_listings
         draft_text = f"Subject: {email_result['subject']}\n\n{email_result['body']}"
-        supabase_admin.table("tour_pipeline").update(
+        supabase_admin.table("saved_listings").update(
             {"inquiry_email_draft": draft_text}
         ).eq("id", tour_id).eq("user_id", user.user_id).execute()
 
@@ -877,7 +906,7 @@ async def enhance_note(
             supabase_admin.table("tour_notes")
             .select("id, content")
             .eq("id", body.note_id)
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .execute()
         )
         if not note_result.data:
@@ -887,7 +916,7 @@ async def enhance_note(
 
         # Fetch the tour to get apartment_id
         tour_result = (
-            supabase_admin.table("tour_pipeline")
+            supabase_admin.table("saved_listings")
             .select("apartment_id")
             .eq("id", tour_id)
             .eq("user_id", user.user_id)
@@ -980,7 +1009,7 @@ async def create_voice_note(
 
         # Create note with pending status
         row = {
-            "tour_pipeline_id": tour_id,
+            "saved_listing_id": tour_id,
             "user_id": user.user_id,
             "source": "voice",
             "audio_s3_key": s3_key,
@@ -1017,7 +1046,7 @@ async def create_note(
         _verify_tour_ownership(tour_id, user.user_id)
 
         row = {
-            "tour_pipeline_id": tour_id,
+            "saved_listing_id": tour_id,
             "user_id": user.user_id,
             "content": body.content,
             "source": "typed",
@@ -1051,7 +1080,7 @@ async def list_notes(
         result = (
             supabase_admin.table("tour_notes")
             .select("id, content, source, transcription_status, created_at")
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .order("created_at", desc=False)
             .execute()
         )
@@ -1079,7 +1108,7 @@ async def delete_note(
             supabase_admin.table("tour_notes")
             .delete()
             .eq("id", note_id)
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .execute()
         )
         if not result.data:
@@ -1124,7 +1153,7 @@ async def create_photo(
         thumbnail_url = PhotoService.get_presigned_url(upload_result["thumbnail_s3_key"])
 
         row = {
-            "tour_pipeline_id": tour_id,
+            "saved_listing_id": tour_id,
             "user_id": user.user_id,
             "s3_key": upload_result["s3_key"],
             "thumbnail_s3_key": upload_result["thumbnail_s3_key"],
@@ -1161,7 +1190,7 @@ async def list_photos(
         result = (
             supabase_admin.table("tour_photos")
             .select("id, s3_key, thumbnail_s3_key, thumbnail_url, caption, created_at")
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -1199,7 +1228,7 @@ async def update_photo(
             supabase_admin.table("tour_photos")
             .update({"caption": body.caption})
             .eq("id", photo_id)
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .execute()
         )
         if not result.data:
@@ -1229,7 +1258,7 @@ async def delete_photo(
             supabase_admin.table("tour_photos")
             .delete()
             .eq("id", photo_id)
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .execute()
         )
         if not result.data:
@@ -1269,7 +1298,7 @@ async def create_tag(
         _verify_tour_ownership(tour_id, user.user_id)
 
         row = {
-            "tour_pipeline_id": tour_id,
+            "saved_listing_id": tour_id,
             "tag": body.tag,
             "sentiment": body.sentiment,
         }
@@ -1303,7 +1332,7 @@ async def delete_tag(
             supabase_admin.table("tour_tags")
             .delete()
             .eq("id", tag_id)
-            .eq("tour_pipeline_id", tour_id)
+            .eq("saved_listing_id", tour_id)
             .execute()
         )
         if not result.data:

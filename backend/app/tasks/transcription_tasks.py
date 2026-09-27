@@ -53,7 +53,7 @@ def enhance_voice_note(note_id: str, raw_text: str, tour_id: str):
 
     try:
         # Fetch apartment context
-        tour_result = supabase_admin.table("tour_pipeline").select("apartment_id").eq("id", tour_id).execute()
+        tour_result = supabase_admin.table("saved_listings").select("apartment_id").eq("id", tour_id).execute()
         if not tour_result.data:
             return
 

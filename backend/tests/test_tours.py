@@ -19,6 +19,26 @@ SAMPLE_TOUR = {
     "id": "tour-001",
     "user_id": "user-123",
     "apartment_id": "apt-001",
+    # A saved listing carries its own copy of the listing. Routes read this
+    # rather than joining the corpus, so a fixture without it is not a
+    # realistic row — it is one that could never have been written.
+    "listing": {
+        "id": "apt-001",
+        "address": "123 Main St, Philadelphia, PA 19103",
+        "rent": 2200,
+        "bedrooms": 2,
+        "bathrooms": 1,
+        "property_type": "Apartment",
+        "available_date": "2026-04-01",
+        "amenities": ["Laundry", "Gym"],
+        "neighborhood": "Center City",
+        "description": "Bright 2BR apartment in Center City.",
+        "images": [],
+        "source_url": "https://www.apartments.com/test/abc/",
+    },
+    "listing_checked_at": None,
+    "availability_status": "unknown",
+    "is_favorite": False,
     "stage": "interested",
     "inquiry_email_draft": None,
     "outreach_sent_at": None,
@@ -74,7 +94,13 @@ class TestCreateTour:
                 data=[SAMPLE_TOUR]
             )
 
-            with patch("app.routers.tours.supabase_admin", mock_sb):
+            # saved_listings.listing is NOT NULL, so a tour cannot be created
+            # for an apartment the corpus cannot produce — the route 404s
+            # rather than writing a husk of a row.
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.routers.tours._snapshot_apartment",
+                       new=AsyncMock(return_value={"id": "apt-001", "rent": 2000,
+                                                   "source_url": "https://x/y/"})):
                 response = client.post(
                     "/api/tours",
                     json={"apartment_id": "apt-001"},
@@ -88,14 +114,49 @@ class TestCreateTour:
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 
-    def test_duplicate_apartment_returns_409(self):
-        """POST /api/tours with existing apartment returns 409."""
+    def test_favourited_apartment_is_promoted_not_rejected(self):
+        """Favourites and tours are one row now.
+
+        Adding a tour for an apartment the user already starred moves it into
+        the pipeline. Inserting instead would hit the unique index on
+        (user_id, dedupe_key), so the old "already exists" check would have
+        turned every favourite into a 409.
+        """
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
         try:
             mock_sb = MagicMock()
-            # Duplicate check returns existing entry
+            favourite = {**SAMPLE_TOUR, "stage": None, "is_favorite": True}
             mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-                data=[{"id": "tour-001"}]
+                data=[favourite]
+            )
+            mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[{**favourite, "stage": "interested"}]
+            )
+
+            with patch("app.routers.tours.supabase_admin", mock_sb):
+                response = client.post(
+                    "/api/tours",
+                    json={"apartment_id": "apt-001"},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 201
+            assert response.json()["tour"]["stage"] == "interested"
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_duplicate_apartment_returns_409(self):
+        """POST /api/tours for something already IN the pipeline returns 409.
+
+        The row must carry a stage. A row with stage NULL is a favourite, not
+        a tour, and gets promoted instead — see the test above.
+        """
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+            # Duplicate check returns an entry already in the pipeline
+            mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[{"id": "tour-001", "stage": "scheduled"}]
             )
 
             with patch("app.routers.tours.supabase_admin", mock_sb):
@@ -122,7 +183,10 @@ class TestListTours:
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
         try:
             mock_sb = MagicMock()
-            mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
+            # .select().eq(user_id).not_.is_(stage, null).order().execute()
+            # The stage filter is what separates tours from favourites, which
+            # now share this table.
+            mock_sb.table.return_value.select.return_value.eq.return_value.not_.is_.return_value.order.return_value.execute.return_value = MagicMock(
                 data=[SAMPLE_TOUR]
             )
 
@@ -151,23 +215,23 @@ class TestGetTour:
             # Use side_effect to differentiate by table name.
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     # .select().eq(id).eq(user_id).execute()
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TOUR]
                     )
                 elif table_name == "tour_notes":
-                    # .select().eq(tour_pipeline_id).order().execute()
+                    # .select().eq(saved_listing_id).order().execute()
                     mock_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_NOTE]
                     )
                 elif table_name == "tour_photos":
-                    # .select().eq(tour_pipeline_id).order().execute()
+                    # .select().eq(saved_listing_id).order().execute()
                     mock_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_PHOTO]
                     )
                 elif table_name == "tour_tags":
-                    # .select().eq(tour_pipeline_id).execute()
+                    # .select().eq(saved_listing_id).execute()
                     mock_table.select.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TAG]
                     )
@@ -352,7 +416,7 @@ class TestDeleteTour:
 
 SAMPLE_NOTE_CREATED = {
     "id": "note-002",
-    "tour_pipeline_id": "tour-001",
+    "saved_listing_id": "tour-001",
     "content": "Great natural light",
     "source": "typed",
     "transcription_status": "complete",
@@ -377,7 +441,7 @@ class TestNotes:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -411,7 +475,7 @@ class TestNotes:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -442,7 +506,7 @@ class TestNotes:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -470,7 +534,7 @@ class TestNotes:
 
 SAMPLE_PHOTO_CREATED = {
     "id": "photo-002",
-    "tour_pipeline_id": "tour-001",
+    "saved_listing_id": "tour-001",
     "user_id": "user-123",
     "s3_key": "tours/user-123/tour-001/abc.jpg",
     "thumbnail_s3_key": "tours/user-123/tour-001/thumbs/abc.jpg",
@@ -497,7 +561,7 @@ class TestPhotos:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -540,7 +604,7 @@ class TestPhotos:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -572,7 +636,7 @@ class TestPhotos:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -608,7 +672,7 @@ class TestPhotos:
 
 SAMPLE_TAG_CREATED = {
     "id": "tag-002",
-    "tour_pipeline_id": "tour-001",
+    "saved_listing_id": "tour-001",
     "tag": "Great light",
     "sentiment": "pro",
 }
@@ -623,7 +687,7 @@ class TestTags:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -670,7 +734,7 @@ class TestTags:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -701,7 +765,7 @@ class TestTags:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     # User has one tour
                     mock_table.select.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
@@ -765,7 +829,7 @@ class TestInquiryEmail:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     # For the select (fetch tour)
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TOUR]
@@ -859,7 +923,7 @@ class TestDayPlan:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     # in_ query for fetching tours by IDs
                     mock_table.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TOUR_SCHEDULED, SAMPLE_TOUR_SCHEDULED_2]
@@ -917,13 +981,13 @@ class TestEnhanceNote:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     # _verify_tour_ownership: select().eq().eq().execute()
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TOUR]
                     )
                 elif table_name == "tour_notes":
-                    # Fetch note by id + tour_pipeline_id
+                    # Fetch note by id + saved_listing_id
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "note-001", "content": "uh kitchen was like really nice, kinda small tho"}]
                     )
@@ -992,18 +1056,18 @@ class TestDecisionBrief:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     # Fetch toured/deciding tours
                     mock_table.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_TOUR_TOURED, SAMPLE_TOUR_TOURED_2]
                     )
                 elif table_name == "tour_notes":
                     mock_table.select.return_value.in_.return_value.execute.return_value = MagicMock(
-                        data=[{"tour_pipeline_id": "tour-001", "content": "Great light"}]
+                        data=[{"saved_listing_id": "tour-001", "content": "Great light"}]
                     )
                 elif table_name == "tour_tags":
                     mock_table.select.return_value.in_.return_value.execute.return_value = MagicMock(
-                        data=[{"tour_pipeline_id": "tour-001", "tag": "Spacious", "sentiment": "pro"}]
+                        data=[{"saved_listing_id": "tour-001", "tag": "Spacious", "sentiment": "pro"}]
                     )
                 return mock_table
 
@@ -1123,7 +1187,7 @@ class TestProTierGating:
 
 SAMPLE_VOICE_NOTE = {
     "id": "vnote-001",
-    "tour_pipeline_id": "tour-001",
+    "saved_listing_id": "tour-001",
     "user_id": "user-123",
     "source": "voice",
     "audio_s3_key": "tours/user-123/tour-001/voice/abc.webm",
@@ -1148,7 +1212,7 @@ class TestVoiceUpload:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )
@@ -1190,7 +1254,7 @@ class TestVoiceUpload:
 
             def table_router(table_name):
                 mock_table = MagicMock()
-                if table_name == "tour_pipeline":
+                if table_name == "saved_listings":
                     mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[{"id": "tour-001"}]
                     )

@@ -29,12 +29,12 @@ class TestCheckTourReminders:
         tour = _make_tour("tour-1", "user-1", "apt-1", tour_time)
 
         mock_sb = MagicMock()
-        call_count = {"tour_pipeline": 0, "notifications": 0}
+        call_count = {"saved_listings": 0, "notifications": 0}
 
         def table_side_effect(name):
             call_count[name] = call_count.get(name, 0) + 1
             mock_table = MagicMock()
-            if name == "tour_pipeline":
+            if name == "saved_listings":
                 # .select().eq().eq().execute() — 2 eq calls
                 mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                     data=[tour]
@@ -69,7 +69,7 @@ class TestCheckTourReminders:
 
         def table_side_effect(name):
             mock_table = MagicMock()
-            if name == "tour_pipeline":
+            if name == "saved_listings":
                 # .select().eq().eq().execute() — 2 eq calls, returns empty
                 mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                     data=[]
@@ -94,7 +94,7 @@ class TestCheckTourReminders:
 
         def table_side_effect(name):
             mock_table = MagicMock()
-            if name == "tour_pipeline":
+            if name == "saved_listings":
                 # .select().eq().eq().execute() — 2 eq calls
                 mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                     data=[tour]

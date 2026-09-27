@@ -67,7 +67,7 @@ async def beta_report(
     """Beta usage snapshot — read-only.
 
     Aggregates from: invite_codes, invite_redemptions, profiles,
-    tour_pipeline, tour_notes, tour_photos, saved_searches, beta_feedback.
+    saved_listings, tour_notes, tour_photos, saved_searches, beta_feedback.
 
     Returns a structured JSON intended for the scripts/beta-report.sh
     wrapper to render as markdown, but useful directly for any other
@@ -162,13 +162,19 @@ async def beta_report(
     # in directly) skew aggregates and aren't the audience for this report.
     user_filter = redeemer_ids or [""]  # avoid empty .in_() error
 
-    tours_resp = (
-        supabase_admin.table("tour_pipeline")
-        .select("id,user_id,apartment_id,stage,created_at,updated_at,decision,scheduled_date")
+    # saved_listings now holds favourites (stage IS NULL) alongside tours, so
+    # both are pulled and split here. Counting them together would inflate
+    # every tour metric in this report by the number of starred listings, and
+    # a star is a much weaker signal than committing to a visit.
+    saved_resp = (
+        supabase_admin.table("saved_listings")
+        .select("id,user_id,apartment_id,stage,is_favorite,created_at,updated_at,decision,scheduled_date")
         .in_("user_id", user_filter)
         .execute()
     )
-    all_tours = tours_resp.data or []
+    all_saved = saved_resp.data or []
+    all_tours = [t for t in all_saved if t.get("stage")]
+    favorites_total = sum(1 for t in all_saved if t.get("is_favorite"))
 
     stage_counts = Counter()
     decision_counts = Counter()
@@ -190,7 +196,7 @@ async def beta_report(
         if created and created >= cutoff:
             tours_in_window += 1
 
-    # Notes + photos count, joined to tour → user via tour_pipeline_id
+    # Notes + photos count, joined to tour -> user via saved_listing_id
     tour_id_to_user: Dict[str, str] = {t["id"]: t.get("user_id") for t in all_tours if t.get("id")}
     notes_by_user: Dict[str, int] = Counter()
     photos_by_user: Dict[str, int] = Counter()
@@ -198,23 +204,23 @@ async def beta_report(
     if tour_id_to_user:
         notes_resp = (
             supabase_admin.table("tour_notes")
-            .select("tour_pipeline_id")
-            .in_("tour_pipeline_id", list(tour_id_to_user.keys()))
+            .select("saved_listing_id")
+            .in_("saved_listing_id", list(tour_id_to_user.keys()))
             .execute()
         )
         for n in (notes_resp.data or []):
-            uid = tour_id_to_user.get(n.get("tour_pipeline_id"))
+            uid = tour_id_to_user.get(n.get("saved_listing_id"))
             if uid:
                 notes_by_user[uid] += 1
 
         photos_resp = (
             supabase_admin.table("tour_photos")
-            .select("tour_pipeline_id")
-            .in_("tour_pipeline_id", list(tour_id_to_user.keys()))
+            .select("saved_listing_id")
+            .in_("saved_listing_id", list(tour_id_to_user.keys()))
             .execute()
         )
         for p in (photos_resp.data or []):
-            uid = tour_id_to_user.get(p.get("tour_pipeline_id"))
+            uid = tour_id_to_user.get(p.get("saved_listing_id"))
             if uid:
                 photos_by_user[uid] += 1
 
@@ -233,7 +239,7 @@ async def beta_report(
     # ── Per-user event funnel (analytics_events split by user × type) ──
     # Lets the report answer "Bharath searched 12 times but never added a
     # tour" — the kind of post-redemption friction signal you can't see
-    # from the tour_pipeline aggregates alone (which only show tours that
+    # from the saved_listings aggregates alone (which only show tours that
     # WERE created, not what happened before that).
     events_per_user: Dict[str, Counter] = defaultdict(Counter)
     try:
@@ -366,6 +372,7 @@ async def beta_report(
             "by_stage": dict(stage_counts),
             "by_decision": dict(decision_counts),
         },
+        "favorites_total": favorites_total,
         "saved_searches_total": sum(saved_by_user.values()),
         "tour_notes_total": sum(notes_by_user.values()),
         "tour_photos_total": sum(photos_by_user.values()),

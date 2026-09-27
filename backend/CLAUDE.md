@@ -586,7 +586,7 @@ Markets are the only enable/disable lever for scheduled scraping.
 ## Testing
 
 ```bash
-# Run all backend tests (413 tests across 33 files)
+# Run all backend tests (414 tests across 33 files)
 ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
 ```
 
@@ -646,8 +646,8 @@ Applied in `supabase/migrations/` — see [supabase/CLAUDE.md](../supabase/CLAUD
 | `009_add_user_locations.sql` | user_locations (commute destinations) |
 | `010_tour_apartment_snapshot.sql` | apartment_snapshot/snapshot_at on tour_pipeline |
 | `011_saved_listings.sql` | saved_listings (additive; applied 2026-09-26) |
-| `012_saved_listings_cutover.sql` | **not yet run** — repoints tour children, drops favorites/tour_pipeline |
-| `013_saved_listing_last_change.sql` | last_change/last_change_at on saved_listings (additive; independent of 012) |
+| `012_saved_listings_cutover.sql` | applied 2026-09-27 — repointed tour children, dropped favorites/tour_pipeline |
+| `013_saved_listing_last_change.sql` | **not yet run** — last_change/last_change_at on saved_listings |
 | `010_tour_apartment_snapshot.sql` | apartment_snapshot/snapshot_at on tour_pipeline |
 
 ## Common Tasks
