@@ -26,6 +26,7 @@ celery_app = Celery(
         "app.tasks.transcription_tasks",
         "app.tasks.tour_reminder_tasks",
         "app.tasks.true_cost_tasks",
+        "app.tasks.listing_check_tasks",
     ]
 )
 

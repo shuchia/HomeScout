@@ -159,6 +159,7 @@ PostgreSQL (ApartmentModel)
 | `commute.py` | `/api/user/locations`, `/api/apartments/commute` | Saved locations + commute times |
 | `billing.py` | `/api/billing`, `/api/webhooks/stripe` | Stripe checkout, portal, webhooks |
 | `saved_searches.py` | `/api/saved-searches` | Saved search CRUD (Pro only to create) |
+| `saved_listings.py` | `/api/saved-listings` | The user's own copy of a listing — favourites + tour pipeline as one record |
 | `invite.py` | `/api/invite`, `/api/admin/invite-codes` | Beta invite redeem/status, code minting |
 | `feedback.py` | `/api/feedback` | Beta feedback submission |
 | `waitlist.py` | `/api/waitlist`, `/api/admin/waitlist` | Public waitlist signup + admin listing |
@@ -585,7 +586,7 @@ Markets are the only enable/disable lever for scheduled scraping.
 ## Testing
 
 ```bash
-# Run all backend tests (398 tests across 32 files)
+# Run all backend tests (411 tests across 33 files)
 ANTHROPIC_API_KEY=test-key SUPABASE_JWT_SECRET=test-secret python -m pytest tests/ -v
 ```
 
@@ -643,6 +644,9 @@ Applied in `supabase/migrations/` — see [supabase/CLAUDE.md](../supabase/CLAUD
 | `007_waitlist.sql` | waitlist table |
 | `008_tour_contact_info.sql` | Contact fields on tour_pipeline |
 | `009_add_user_locations.sql` | user_locations (commute destinations) |
+| `010_tour_apartment_snapshot.sql` | apartment_snapshot/snapshot_at on tour_pipeline |
+| `011_saved_listings.sql` | saved_listings (additive; applied 2026-09-26) |
+| `012_saved_listings_cutover.sql` | **not yet run** — repoints tour children, drops favorites/tour_pipeline |
 | `010_tour_apartment_snapshot.sql` | apartment_snapshot/snapshot_at on tour_pipeline |
 
 ## Common Tasks
