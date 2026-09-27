@@ -41,12 +41,22 @@ function SettingsContent() {
 
   async function handleExportData() {
     const { supabase } = await import('@/lib/supabase')
-    const [favs, searches] = await Promise.all([
-      supabase.from('favorites').select('*').eq('user_id', user!.id),
+    const { listSavedListings } = await import('@/lib/api')
+
+    // Saved listings come through the API rather than a direct table read:
+    // `favorites` is being retired (migration 012) and a saved listing carries
+    // its own copy of the listing, so the export is now self-contained instead
+    // of a list of apartment ids that mean nothing outside our database.
+    const [saved, searches] = await Promise.all([
+      listSavedListings().catch(() => ({ saved_listings: [] })),
       supabase.from('saved_searches').select('*').eq('user_id', user!.id),
     ])
     const blob = new Blob(
-      [JSON.stringify({ favorites: favs.data, saved_searches: searches.data }, null, 2)],
+      [JSON.stringify(
+        { saved_listings: saved.saved_listings, saved_searches: searches.data },
+        null,
+        2,
+      )],
       { type: 'application/json' }
     )
     const url = URL.createObjectURL(blob)

@@ -6,6 +6,7 @@
 import { SearchParams, SearchResponse, HealthResponse, Apartment, SearchContext, ComparisonAnalysis, UserLocation, CommuteTime } from '@/types/apartment';
 import { Tour, TourTag, TourNote } from '@/types/tour';
 import { getAccessToken, isTokenExpiringSoon, refreshAccessToken } from './auth-store';
+import type { SavedListing, SavedListingStage } from '@/types/savedListing';
 
 // Get API URL from environment variable, fallback to localhost
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -758,4 +759,109 @@ export async function submitFeedback(data: {
     throw new ApiError(err.detail || 'Failed to submit feedback', res.status);
   }
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Saved listings
+//
+// One record per (user, listing), replacing the old favorites/tour_pipeline
+// split. Creating or re-staging one queues a check of the listing against its
+// source; the response does not wait for it, so callers should re-fetch a
+// moment later to pick up `listing_checked_at`, `availability_status` and any
+// `last_change`.
+// ---------------------------------------------------------------------------
+
+export async function listSavedListings(opts?: {
+  favoritesOnly?: boolean
+  inPipeline?: boolean
+}): Promise<{ saved_listings: SavedListing[] }> {
+  const params = new URLSearchParams()
+  if (opts?.favoritesOnly) params.set('favorites_only', 'true')
+  if (opts?.inPipeline) params.set('in_pipeline', 'true')
+  const qs = params.toString()
+  const response = await fetchWithAuth(`${API_URL}/api/saved-listings${qs ? `?${qs}` : ''}`)
+  if (!response.ok) throw new ApiError('Failed to load saved listings', response.status)
+  return response.json()
+}
+
+export async function createSavedListing(input: {
+  apartmentId?: string
+  sourceUrl?: string
+  isFavorite?: boolean
+  stage?: SavedListingStage
+}): Promise<{ saved_listing: SavedListing; created: boolean }> {
+  const response = await fetchWithAuth(`${API_URL}/api/saved-listings`, {
+    method: 'POST',
+    body: JSON.stringify({
+      apartment_id: input.apartmentId,
+      source_url: input.sourceUrl,
+      is_favorite: input.isFavorite ?? false,
+      stage: input.stage ?? null,
+    }),
+  })
+  if (!response.ok) throw new ApiError('Failed to save listing', response.status)
+  return response.json()
+}
+
+export async function updateSavedListing(
+  id: string,
+  patch: Partial<Pick<SavedListing,
+    'is_favorite' | 'stage' | 'tour_rating' | 'scheduled_date' |
+    'scheduled_time' | 'decision' | 'decision_reason' | 'contact_phone' | 'contact_email'
+  >>,
+): Promise<{ saved_listing: SavedListing }> {
+  const response = await fetchWithAuth(`${API_URL}/api/saved-listings/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+  if (!response.ok) throw new ApiError('Failed to update saved listing', response.status)
+  return response.json()
+}
+
+/**
+ * Un-star a listing. Kept if it is in the tour pipeline, deleted otherwise —
+ * see the backend route for why deletion is transitional.
+ */
+export async function unfavoriteSavedListing(
+  id: string,
+): Promise<{ saved_listing: SavedListing | null; deleted: boolean }> {
+  const response = await fetchWithAuth(`${API_URL}/api/saved-listings/${id}/unfavorite`, {
+    method: 'POST',
+  })
+  if (!response.ok) throw new ApiError('Failed to unfavorite', response.status)
+  return response.json()
+}
+
+export async function deleteSavedListing(id: string): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/api/saved-listings/${id}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new ApiError('Failed to delete saved listing', response.status)
+}
+
+/** Clear the "changed since you saved this" marker. */
+export async function dismissListingChange(
+  id: string,
+): Promise<{ saved_listing: SavedListing }> {
+  const response = await fetchWithAuth(`${API_URL}/api/saved-listings/${id}/dismiss-change`, {
+    method: 'POST',
+  })
+  if (!response.ok) throw new ApiError('Failed to dismiss change', response.status)
+  return response.json()
+}
+
+/**
+ * Queue checks for several saved listings at once.
+ *
+ * This is the comparison path: a head-to-head over listings saved at different
+ * times would otherwise compare across time — each snapshot accurate when it
+ * was taken, but not contemporaneous with the others.
+ */
+export async function checkSavedListings(ids: string[]): Promise<{ queued: number }> {
+  const response = await fetchWithAuth(`${API_URL}/api/saved-listings/check`, {
+    method: 'POST',
+    body: JSON.stringify(ids),
+  })
+  if (!response.ok) throw new ApiError('Failed to queue checks', response.status)
+  return response.json()
 }

@@ -8,6 +8,7 @@ import CommutePanel, { CommutePrompt } from '@/components/CommutePanel'
 import { useCommuteTimes } from '@/lib/useCommuteTimes'
 import Link from 'next/link'
 import { Apartment, ApartmentWithScore } from '@/types/apartment'
+import { ListingChangeNotice } from '@/components/ListingChangeNotice'
 import { listTours } from '@/lib/api'
 
 // Convert a basic Apartment to ApartmentWithScore for display
@@ -22,10 +23,10 @@ function toApartmentWithScore(apartment: Apartment): ApartmentWithScore {
 
 export default function FavoritesPage() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth()
-  const { favorites, loading } = useFavorites()
+  const { favorites, loading, dismissChange } = useFavorites()
   const [touringApartmentIds, setTouringApartmentIds] = useState<Set<string>>(new Set())
   const { byApt: commuteByApt, hasLocations } = useCommuteTimes(
-    favorites.filter(f => f.apartment).map(f => f.apartment_id)
+    favorites.filter(f => f.listing).map(f => f.apartment_id).filter((id): id is string => !!id)
   )
 
   useEffect(() => {
@@ -110,33 +111,38 @@ export default function FavoritesPage() {
         <div className="grid gap-6 sm:grid-cols-2">
           {favorites.map(fav => (
             <div key={fav.id} className="relative">
-              {fav.is_available === false && (
-                <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center rounded-lg">
-                  <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                    No longer available
-                  </span>
+              {/* A saved listing always carries its own copy, so there is no
+                  "not found" case any more — the corpus row can disappear
+                  without taking the user's card with it. */}
+              <ApartmentCard apartment={toApartmentWithScore(fav.listing)} />
+
+              {/* Explicit rather than silently restating the price: the number
+                  on a saved listing is one the user has already reasoned
+                  about. `unknown` renders nothing — a check that could not
+                  reach the source is not evidence of anything. */}
+              {(fav.last_change || fav.availability_status === 'gone') && (
+                <div className="mt-2">
+                  <ListingChangeNotice
+                    changes={fav.last_change}
+                    availability={fav.availability_status}
+                    checkedAt={fav.listing_checked_at}
+                    onDismiss={fav.last_change ? () => dismissChange(fav.id) : undefined}
+                  />
                 </div>
               )}
-              {fav.apartment ? (
-                <>
-                  <ApartmentCard apartment={toApartmentWithScore(fav.apartment)} />
-                  {commuteByApt[fav.apartment_id]?.length ? (
-                    <div className="mt-2">
-                      <CommutePanel commutes={commuteByApt[fav.apartment_id]} />
-                    </div>
-                  ) : null}
-                  <div className="mt-2">
-                    <TourPrompt
-                      apartmentId={fav.apartment_id}
-                      alreadyInTours={touringApartmentIds.has(fav.apartment_id)}
-                    />
-                  </div>
-                </>
-              ) : (
-                <div className="bg-gray-100 rounded-lg p-4 h-64 flex items-center justify-center">
-                  <p className="text-gray-500 text-sm">
-                    Apartment {fav.apartment_id} not found
-                  </p>
+
+              {fav.apartment_id && commuteByApt[fav.apartment_id]?.length ? (
+                <div className="mt-2">
+                  <CommutePanel commutes={commuteByApt[fav.apartment_id]} />
+                </div>
+              ) : null}
+
+              {fav.apartment_id && (
+                <div className="mt-2">
+                  <TourPrompt
+                    apartmentId={fav.apartment_id}
+                    alreadyInTours={touringApartmentIds.has(fav.apartment_id)}
+                  />
                 </div>
               )}
             </div>
