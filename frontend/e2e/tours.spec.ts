@@ -7,6 +7,16 @@ import { test, expect, Page } from '@playwright/test'
 const MOCK_TOUR = {
   id: 'tour-001',
   apartment_id: 'test-001',
+  // A tour carries its own copy of the listing — see MOCK_APARTMENT below,
+  // which this is assigned from after both are declared. The frontend stopped
+  // calling /api/apartments/batch for tours, so a fixture without `listing`
+  // renders no address and is not a row the API could ever return.
+  listing: {} as Record<string, unknown>,
+  listing_checked_at: null,
+  availability_status: 'unknown' as const,
+  last_change: null,
+  last_change_at: null,
+  is_favorite: false,
   stage: 'interested' as const,
   inquiry_email_draft: null,
   outreach_sent_at: null,
@@ -37,6 +47,9 @@ const MOCK_APARTMENT = {
   description: 'A great test apartment',
   images: [],
 }
+
+// Keeps the two fixtures in step: the tour's listing IS the apartment.
+MOCK_TOUR.listing = MOCK_APARTMENT
 
 const MOCK_APARTMENT_2 = {
   id: 'test-002',

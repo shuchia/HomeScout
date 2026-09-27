@@ -559,20 +559,40 @@ test.describe('Snugd E2E Tests', () => {
       await page.goto('/');
       await mockSearchApi(page);
 
-      // Mock Supabase insert for adding favorite
-      await page.route('**/supabase.co/**/favorites**', async (route) => {
+      // Favourites go through /api/saved-listings now, not a direct Supabase
+      // table write. The response carries the listing itself, so there is no
+      // follow-up batch fetch to mock.
+      await page.route('**/api/saved-listings**', async (route) => {
         const method = route.request().method();
         if (method === 'POST') {
           await route.fulfill({
             status: 201,
             contentType: 'application/json',
-            body: JSON.stringify([{ id: 'fav-1', user_id: 'test-user-id', apartment_id: 'test-001' }]),
+            body: JSON.stringify({
+              saved_listing: {
+                id: 'saved-1',
+                user_id: 'test-user-id',
+                apartment_id: 'test-001',
+                source: 'corpus',
+                source_url: null,
+                listing: { id: 'test-001', address: '123 Test St', rent: 1500 },
+                listing_checked_at: null,
+                availability_status: 'unknown',
+                last_change: null,
+                last_change_at: null,
+                is_favorite: true,
+                stage: null,
+                created_at: '2026-03-01T00:00:00Z',
+                updated_at: '2026-03-01T00:00:00Z',
+              },
+              created: true,
+            }),
           });
         } else {
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
-            body: JSON.stringify([]),
+            body: JSON.stringify({ saved_listings: [] }),
           });
         }
       });
@@ -698,27 +718,48 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should show favorites when they exist', async ({ page }) => {
-      // Override the Supabase route to return favorites data instead of empty
-      // Register a more specific route that takes priority (LIFO order)
-      await page.route('**/rest/v1/favorites**', async (route) => {
+      // A saved listing carries its own copy of the listing, so this single
+      // mock replaces what used to be a `favorites` table read plus a
+      // /api/apartments/batch hydration.
+      await page.route('**/api/saved-listings**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          headers: { 'content-range': '0-0/1' },
-          body: JSON.stringify([
-            {
-              id: 'fav-1',
-              user_id: 'test-user-id',
-              apartment_id: 'test-001',
-              notes: null,
-              is_available: true,
-              created_at: '2026-03-01T00:00:00Z',
-            },
-          ]),
+          body: JSON.stringify({
+            saved_listings: [
+              {
+                id: 'saved-1',
+                user_id: 'test-user-id',
+                apartment_id: 'test-001',
+                source: 'corpus',
+                source_url: null,
+                listing: {
+                  id: 'test-001',
+                  address: '123 Test St, Pittsburgh, PA 15213',
+                  rent: 1500,
+                  bedrooms: 1,
+                  bathrooms: 1,
+                  sqft: 750,
+                  property_type: 'Apartment',
+                  available_date: '2026-03-01',
+                  amenities: ['Parking', 'Laundry'],
+                  neighborhood: 'Test Neighborhood',
+                  description: 'A great test apartment',
+                  images: [],
+                },
+                listing_checked_at: null,
+                availability_status: 'unknown',
+                last_change: null,
+                last_change_at: null,
+                is_favorite: true,
+                stage: null,
+                created_at: '2026-03-01T00:00:00Z',
+                updated_at: '2026-03-01T00:00:00Z',
+              },
+            ],
+          }),
         });
       });
-
-      await mockBatchApi(page);
 
       // Mock the tours endpoint (favorites page fetches tours for TourPrompt)
       await page.route('**/api/tours', async (route, request) => {
