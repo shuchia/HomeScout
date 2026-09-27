@@ -37,6 +37,41 @@
 -- Favorites and tours were also two tables describing one thing: a listing
 -- someone is considering. They are now stages of one record.
 
+-- WHAT THIS TABLE DELIBERATELY DOES NOT STORE, AND HOW TO GET IT BACK
+--
+-- An earlier draft carried six listing-related fields. Three were cut. None of
+-- the cuts is a one-way door, but they are not equally reversible, so:
+--
+--   listing_captured_at  — cut as genuinely redundant. Row creation *is* the
+--     capture, so it duplicated created_at exactly. Nothing can ever need it.
+--
+--   listing_refreshed_at — not cut, renamed to listing_checked_at. Same field.
+--
+--   availability_checked_at — merged into listing_checked_at. One check answers
+--     "is it still there" and "has it changed" at the same instant, so the two
+--     timestamps would always hold the same value. Re-add it only if checks
+--     ever stop being a single operation.
+--
+--   listing_as_saved (a frozen copy of the listing as first seen) — cut, and
+--     this is the one with a cost. The column itself is trivially re-addable,
+--     but the data is not recoverable retroactively: once `listing` has been
+--     overwritten by a check, the original is gone. Today that costs nothing
+--     because this table has no rows. The cost accrues gradually as people
+--     start saving listings, so the door closes slowly rather than slamming.
+--
+--     Two things would want it: "the rent dropped $200 since you saved this",
+--     and lease-vs-listing reconciliation ("the listing said water was
+--     included"), which is the sharpest feature on the roadmap. Neither exists.
+--
+--     Insurance, so that waiting is not expensive: the check already computes a
+--     diff in order to tell the user what changed. Log that diff to
+--     analytics_events (event_type 'listing-changed', metadata carrying the
+--     before/after). That table already exists, takes arbitrary JSON, and is
+--     fire-and-forget, so it costs no schema commitment — and it preserves the
+--     record of every observed change, which is what both of those features
+--     actually need. Adding listing_as_saved later then loses only the original
+--     first-seen state, not the change history.
+
 -- ============================================
 -- SAVED LISTINGS
 -- ============================================
@@ -56,13 +91,38 @@ create table public.saved_listings (
   -- The user's own copy of the listing (ApartmentModel.to_dict() shape).
   -- Authoritative for every display path. Never null: a saved listing without
   -- listing data is not a saved listing.
+  --
+  -- Replaced wholesale whenever the listing is checked against its source,
+  -- which happens when the user favourites it, adds it to a comparison, or adds
+  -- it to the tour pipeline. Between those moments it can be up to one scrape
+  -- interval stale, which is fine — nothing is promised to the user off the
+  -- back of a search result. Checking stops once `decision` is set, so a
+  -- decided listing naturally freezes at the state it was decided on.
   listing jsonb not null,
-  listing_captured_at timestamptz not null default now(),
-  listing_refreshed_at timestamptz,
 
-  -- Position in the touring pipeline. 'saved' means "not in the pipeline yet".
-  stage text not null default 'saved'
-    check (stage in ('saved', 'interested', 'outreach_sent', 'scheduled', 'toured', 'deciding')),
+  -- When `listing` was last checked against the source. NULL means never
+  -- checked, i.e. it is still the copy taken from the scraped corpus.
+  --
+  -- Replaces the listing_captured_at / listing_refreshed_at pair from the
+  -- first draft. captured_at duplicated created_at exactly, and one timestamp
+  -- covers both questions because a single check answers "is it still there"
+  -- and "has it changed" at the same instant.
+  listing_checked_at timestamptz,
+
+  -- Result of that check. 'unknown' until one has run, or when a check could
+  -- not reach the source — a failed check must never be recorded as 'live'.
+  availability_status text not null default 'unknown'
+    check (availability_status in ('live', 'gone', 'unknown')),
+
+  -- Position in the touring pipeline. NULL means not in the pipeline.
+  --
+  -- The first draft used stage='saved' for that, which invented a "saved
+  -- listings" concept the product does not have and gave the table three
+  -- overlapping states (row exists / starred / in pipeline) where there are
+  -- only two facts worth recording.
+  stage text
+    check (stage is null or stage in
+      ('interested', 'outreach_sent', 'scheduled', 'toured', 'deciding')),
 
   -- The star, tracked separately from `stage` on purpose.
   --
@@ -73,8 +133,11 @@ create table public.saved_listings (
   -- "I marked this" and "I am this far along with it".
   --
   -- Consequence for the application: unfavouriting sets this false and leaves
-  -- stage alone. A row with is_favorite = false AND stage = 'saved' has nothing
-  -- left to record and should be deleted rather than kept as an orphan.
+  -- stage alone. While there is no board UI, a row left with is_favorite=false
+  -- and stage IS NULL is invisible but still present, so the unfavourite
+  -- handler should delete it in that case. That is transitional application
+  -- behaviour, not a schema rule — once listings can live on a board without
+  -- being starred, unfavouriting must stop deleting anything.
   is_favorite boolean not null default false,
 
   -- Outreach / touring state (was tour_pipeline)
@@ -114,7 +177,9 @@ create unique index idx_saved_listings_user_dedupe
   on public.saved_listings (user_id, dedupe_key);
 
 create index idx_saved_listings_user on public.saved_listings (user_id);
-create index idx_saved_listings_user_stage on public.saved_listings (user_id, stage);
+-- Partial: only rows actually in the pipeline, which is the tours view.
+create index idx_saved_listings_user_stage on public.saved_listings (user_id, stage)
+  where stage is not null;
 -- The favourites list is its own view of this table.
 create index idx_saved_listings_user_favorite on public.saved_listings (user_id)
   where is_favorite;
