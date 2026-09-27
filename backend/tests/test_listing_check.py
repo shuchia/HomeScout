@@ -173,3 +173,29 @@ class TestCheckListing:
         _, updated, changes = await check_listing("https://x/y/", {"rent": 2100, "sqft": 800})
         assert updated["sqft"] == 800
         assert changes == {}
+
+
+class TestChangeMarker:
+    """The correction surfaces as an explicit marker, so the diff has to be
+    readable by the frontend — analytics_events is service-role only."""
+
+    def test_diff_shape_is_renderable(self):
+        """{field: {from, to}} is what last_change stores and the marker reads."""
+        d = diff_listing(
+            {"rent": 2100, "true_cost_monthly": 2480},
+            {"rent": 1950, "true_cost_monthly": 2330},
+        )
+        assert d == {
+            "rent": {"from": 2100, "to": 1950},
+            "true_cost_monthly": {"from": 2480, "to": 2330},
+        }
+        # Every entry must carry both sides, or the marker cannot say
+        # "was X, now Y".
+        for change in d.values():
+            assert set(change) == {"from", "to"}
+
+    def test_no_marker_when_nothing_material_moved(self):
+        """An empty diff must stay empty, so last_change is not set and no
+        marker appears for a check that found nothing."""
+        assert diff_listing({"rent": 2100, "description": "old"},
+                            {"rent": 2100, "description": "new"}) == {}

@@ -59,6 +59,14 @@ async def _check_saved_listing(saved_listing_id: str) -> Dict[str, Any]:
     if status == LIVE and updated is not None:
         patch["listing"] = updated
 
+    if changes:
+        # Drives the "price changed since you saved this" marker. Deliberately
+        # overwrites rather than accumulating: the user needs to know the
+        # current state differs from what they last saw, not every hop it took
+        # to get there. The full history goes to analytics_events below.
+        patch["last_change"] = changes
+        patch["last_change_at"] = now
+
     try:
         (
             supabase_admin.table("saved_listings")

@@ -299,6 +299,36 @@ async def delete_saved_listing(
         raise HTTPException(status_code=500, detail="Failed to delete saved listing")
 
 
+@router.post("/api/saved-listings/{saved_listing_id}/dismiss-change")
+async def dismiss_change(
+    saved_listing_id: str,
+    user: UserContext = Depends(get_current_user),
+):
+    """Clear the "changed since you saved this" marker.
+
+    `last_change` means "there is something here this user has not seen yet",
+    not "this listing has ever changed" — so acknowledging it clears it. The
+    durable record of every change stays in analytics_events.
+    """
+    _ensure_supabase()
+    try:
+        result = (
+            supabase_admin.table("saved_listings")
+            .update({"last_change": None, "last_change_at": None})
+            .eq("id", saved_listing_id)
+            .eq("user_id", user.user_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Saved listing not found")
+        return {"saved_listing": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to dismiss change: {e}")
+        raise HTTPException(status_code=500, detail="Failed to dismiss change")
+
+
 @router.post("/api/saved-listings/{saved_listing_id}/unfavorite")
 async def unfavorite_saved_listing(
     saved_listing_id: str,

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "homescout-dev-admin-key")
 
+# How long a saved listing may sit unchecked before it counts as a backlog.
+# A check takes 10-20s, so anything past a few minutes means the queue is
+# stuck rather than merely busy.
+CHECK_LAG_MINUTES = int(os.getenv("CHECK_LAG_MINUTES", "15"))
+
 
 async def verify_admin_key(x_admin_key: str = Header(...)):
     """Require a valid X-Admin-Key header. Mirrors routers/invite.py so the
@@ -635,9 +640,46 @@ async def check_pipeline_health():
                 f"expected ~{expected_in_window:.0f}"
             )
 
+        # Listing checks run on the worker, so if it is unhealthy they simply
+        # stop and every saved listing quietly keeps its corpus copy. Nothing
+        # above would notice — the scrape and decay signals watch different
+        # tasks — and the user-visible symptom is silent staleness rather than
+        # an error. A check is queued the moment a row is created, so a row
+        # created well over the 10-20s a check takes and still never checked
+        # means the queue is not draining.
+        #
+        # Guarded separately: saved_listings lives in Supabase, not RDS, so a
+        # Supabase outage must not take down the rest of this endpoint.
+        checks = {"unchecked_backlog": None, "threshold_minutes": CHECK_LAG_MINUTES}
+        try:
+            from app.services.tier_service import supabase_admin
+
+            if supabase_admin:
+                cutoff = (now - timedelta(minutes=CHECK_LAG_MINUTES)).isoformat()
+                stale = (
+                    supabase_admin.table("saved_listings")
+                    .select("id")
+                    .is_("listing_checked_at", "null")
+                    .lt("created_at", cutoff)
+                    .limit(100)
+                    .execute()
+                )
+                backlog = len(stale.data or [])
+                checks["unchecked_backlog"] = backlog
+                if backlog:
+                    problems.append(
+                        f"{backlog}{'+' if backlog >= 100 else ''} saved listings "
+                        f"never checked after {CHECK_LAG_MINUTES}min — "
+                        f"listing checks are not draining"
+                    )
+        except Exception as e:
+            logger.warning(f"Could not measure listing-check lag: {e}")
+            checks["error"] = str(e)
+
         return {
             "healthy": not problems,
             "problems": problems,
+            "listing_checks": checks,
             "checked_at": now.isoformat(),
             "markets": markets_out,
             "decay": {
