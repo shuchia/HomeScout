@@ -191,22 +191,49 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
           const optional = petRent + parkingFee;
           const headlineCost = apartment.true_cost_monthly - optional;
           if (headlineCost <= rent) return null;
+          const unit = apartment.pricing_model === 'per_person' ? '/person' : '/mo';
+          const extras = headlineCost - rent;
+
+          // When the matched floorplan is unpriced, `rent` is not a price we
+          // are willing to show — floorplans.py falls back to the building's
+          // rent purely so scoring can do `rent <= budget`, and the price
+          // block renders "Price on request" instead. A total built on that
+          // number would contradict the line above it and quietly disclose the
+          // very figure the card just declined to give.
+          //
+          // The extras are still sound: utilities and fees are estimated from
+          // the building and zip, not from the unit's rent. So show what to
+          // add, and let the quote supply the rest.
+          const priceUnknown = apartment.matched_floorplan?.price_on_request === true;
           return (
           <div className="space-y-1">
             <button
               onClick={() => setShowBreakdown(!showBreakdown)}
               className="text-left w-full group"
             >
-              <p className="text-sm text-gray-500">
-                Est. True Cost:{' '}
-                <span className="font-semibold text-gray-700">
-                  {formatRent(headlineCost)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'}
-                </span>
-              </p>
-              <p className="text-xs text-amber-600 group-hover:text-amber-700 transition">
-                +{formatRent(headlineCost - rent)}{apartment.pricing_model === 'per_person' ? '/person' : '/mo'} in fees &amp; utilities
-                <span className="ml-1">{showBreakdown ? '\u25B2' : '\u25BC'}</span>
-              </p>
+              {priceUnknown ? (
+                <p className="text-sm text-gray-500">
+                  Budget{' '}
+                  <span className="font-semibold text-gray-700">
+                    +{formatRent(extras)}{unit}
+                  </span>{' '}
+                  on top of the quoted rent
+                  <span className="ml-1 text-amber-600">{showBreakdown ? '\u25B2' : '\u25BC'}</span>
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-500">
+                    Est. True Cost:{' '}
+                    <span className="font-semibold text-gray-700">
+                      {formatRent(headlineCost)}{unit}
+                    </span>
+                  </p>
+                  <p className="text-xs text-amber-600 group-hover:text-amber-700 transition">
+                    +{formatRent(extras)}{unit} in fees &amp; utilities
+                    <span className="ml-1">{showBreakdown ? '\u25B2' : '\u25BC'}</span>
+                  </p>
+                </>
+              )}
             </button>
 
             {showBreakdown && (
