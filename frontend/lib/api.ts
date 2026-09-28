@@ -792,6 +792,7 @@ export async function createSavedListing(input: {
 }): Promise<{ saved_listing: SavedListing; created: boolean }> {
   const response = await fetchWithAuth(`${API_URL}/api/saved-listings`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       apartment_id: input.apartmentId,
       source_url: input.sourceUrl,
@@ -812,6 +813,7 @@ export async function updateSavedListing(
 ): Promise<{ saved_listing: SavedListing }> {
   const response = await fetchWithAuth(`${API_URL}/api/saved-listings/${id}`, {
     method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   })
   if (!response.ok) throw new ApiError('Failed to update saved listing', response.status)
@@ -860,6 +862,7 @@ export async function dismissListingChange(
 export async function checkSavedListings(ids: string[]): Promise<{ queued: number }> {
   const response = await fetchWithAuth(`${API_URL}/api/saved-listings/check`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ids),
   })
   if (!response.ok) throw new ApiError('Failed to queue checks', response.status)
