@@ -103,7 +103,7 @@ Consequence: **`qa.snugd.ai` and local dev serve the search app at `/`**, produc
 | `lib/geocode.ts` | Address → coordinates for proximity search |
 | `lib/useCommuteTimes.ts` | Commute times hook |
 | `hooks/useComparison.ts` | Zustand store (persisted) — comparison selection + `SearchContext` |
-| `hooks/useFavorites.ts` | Favorites via Supabase + batch apartment hydration. **Owns the free-tier 5-favorite cap** (`atLimit`) — the backend does not enforce it |
+| `hooks/useFavorites.ts` | Favourites via `/api/saved-listings`. Each row carries its own `listing`, so there is no batch hydration and no "apartment not found" state. **Owns the free-tier 5-favorite cap** (`atLimit`) — the backend does not enforce it |
 
 **Lazy AI**: `searchApartments()` returns immediately with heuristic scores; `scoreBatch()` is a separate call that fills in Claude scoring for Pro users. Don't block first paint on it.
 
@@ -149,7 +149,7 @@ npx playwright test e2e/tours.spec.ts
 
 ## Deployment
 
-Two Vercel projects — `snugd` (production, `snugd.ai`) and `snugd-dev` — **both deploy from `main`**. `qa.snugd.ai` is an alias, not a separate project. See [../infra/CLAUDE.md](../infra/CLAUDE.md).
+Two Vercel projects — `snugd` (production, `snugd.ai`) and `snugd-dev`. `qa.snugd.ai` is an alias, not a separate project. **Pushing to `release/qa` deploys the frontend to qa.snugd.ai** — verified 2026-09-27 by grepping the served `/_next/static/chunks/*.js` for a string only the new build contained, while `main` was 12 commits behind. See [../infra/CLAUDE.md](../infra/CLAUDE.md).
 
 ## Gotchas
 
@@ -160,3 +160,4 @@ Two Vercel projects — `snugd` (production, `snugd.ai`) and `snugd-dev` — **b
 | Auth spinner forever | Should be impossible — `AuthContext` has a 5 s timeout; if it happens, check that timeout wasn't removed |
 | E2E auth mock ignored | Only honored when `NODE_ENV !== 'production'` |
 | Types drift from API | `types/*.ts` are hand-maintained against `backend/app/schemas.py` |
+| POST/PATCH returns 422 | The request is missing `headers: { 'Content-Type': 'application/json' }`. Without it the browser sends the body as `text/plain` and FastAPI rejects it before the handler runs. `curl -d` sets the header implicitly, so the endpoint looks fine under test |
