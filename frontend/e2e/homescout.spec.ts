@@ -911,8 +911,32 @@ test.describe('Snugd E2E Tests', () => {
     // still default to http://localhost:8000.
     const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+    /**
+     * GET an endpoint, backing off if the API throttles us.
+     *
+     * These tests hit the real deployed backend, and the whole suite runs from
+     * a single CI IP — comfortably more than the anonymous allowance of 30
+     * requests a minute. So by the time these run, the budget is often spent
+     * and the API answers 429.
+     *
+     * That is the rate limiter working, not a fault: asserting `.ok()` on an
+     * endpoint the suite has just hammered is asking to never be throttled,
+     * which is not a property the backend offers or should. A real client
+     * backs off, so these do too. The window is a whole minute
+     * (`int(time.time()) // 60` in rate_limit.py), so the wait has to cross a
+     * boundary rather than retry immediately.
+     */
+    async function getWithBackoff(page: Page, url: string) {
+      let response = await page.request.get(url);
+      for (let attempt = 0; attempt < 2 && response.status() === 429; attempt++) {
+        await page.waitForTimeout(61_000);
+        response = await page.request.get(url);
+      }
+      return response;
+    }
+
     test('should reach the backend health endpoint', async ({ page }) => {
-      const response = await page.request.get(`${BACKEND_URL}/health`);
+      const response = await getWithBackoff(page, `${BACKEND_URL}/health`);
       expect(response.ok()).toBeTruthy();
 
       const body = await response.json();
@@ -920,7 +944,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should get apartment count from backend', async ({ page }) => {
-      const response = await page.request.get(`${BACKEND_URL}/api/apartments/count`);
+      const response = await getWithBackoff(page, `${BACKEND_URL}/api/apartments/count`);
       expect(response.ok()).toBeTruthy();
 
       const body = await response.json();
@@ -928,7 +952,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should get apartment stats from backend', async ({ page }) => {
-      const response = await page.request.get(`${BACKEND_URL}/api/apartments/stats`);
+      const response = await getWithBackoff(page, `${BACKEND_URL}/api/apartments/stats`);
       expect(response.ok()).toBeTruthy();
 
       const body = await response.json();
@@ -938,7 +962,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should list apartments from backend', async ({ page }) => {
-      const response = await page.request.get(`${BACKEND_URL}/api/apartments/list?limit=5`);
+      const response = await getWithBackoff(page, `${BACKEND_URL}/api/apartments/list?limit=5`);
       expect(response.ok()).toBeTruthy();
 
       const body = await response.json();
