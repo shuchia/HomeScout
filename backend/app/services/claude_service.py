@@ -49,10 +49,22 @@ class ClaudeService:
     @staticmethod
     def prepare_apartment_for_scoring(apt: dict) -> dict:
         """Prepare apartment data for Claude scoring. No truncation."""
+        # An unpriced floorplan has no rent to reason about. `rent` is only a
+        # fallback to the building's figure so heuristic scoring can do
+        # `rent <= budget` (see floorplans.py, decision D1) — the heuristic path
+        # already drops the budget term entirely in this case rather than score
+        # against a fabricated number. Handing that same fallback to Claude got
+        # it quoted back to the user as "$3,390 advertised rent" on a card whose
+        # price line reads "Price on request", which is worse than either the
+        # omission or the number alone.
+        price_on_request = bool(
+            apt.get("price_on_request")
+            or (apt.get("matched_floorplan") or {}).get("price_on_request")
+        )
+
         data = {
             "id": apt["id"],
             "address": apt.get("address", ""),
-            "rent": apt.get("rent", 0),
             "bedrooms": apt.get("bedrooms", 0),
             "bathrooms": apt.get("bathrooms", 0),
             "sqft": apt.get("sqft", 0),
@@ -69,8 +81,17 @@ class ClaudeService:
         # only the star average, not review text, so treat it as one weak signal.
         if apt.get("apartments_com_rating") is not None:
             data["renter_rating"] = apt["apartments_com_rating"]
-        # Include true cost data if available
-        if apt.get("true_cost_monthly"):
+        if price_on_request:
+            # Say so explicitly rather than leaving the field absent, so the
+            # model treats it as a known unknown instead of missing data.
+            data["price_on_request"] = True
+        else:
+            data["rent"] = apt.get("rent", 0)
+
+        # Include true cost data if available. Suppressed for an unpriced
+        # floorplan: true_cost_monthly is rent + extras, so publishing it
+        # discloses by subtraction the very figure we are withholding.
+        if apt.get("true_cost_monthly") and not price_on_request:
             data["true_cost_monthly"] = apt["true_cost_monthly"]
             data["true_cost_move_in"] = apt.get("true_cost_move_in")
             data["cost_details"] = {
@@ -86,8 +107,25 @@ class ClaudeService:
                 "est_renters_insurance": apt.get("est_renters_insurance") or 0,
                 "est_laundry": apt.get("est_laundry") or 0,
             }
+        elif price_on_request:
+            # The extras are still sound — utilities and fees are estimated from
+            # the building and its zip, not from the unit's rent — so pass them
+            # on their own. This is the same figure the card shows as
+            # "Budget +$X/mo on top of the quoted rent", and it keeps the
+            # reasoning useful instead of merely silent about cost.
+            extras = (
+                (apt.get("est_electric") or 0)
+                + (apt.get("est_gas") or 0)
+                + (apt.get("est_water") or 0)
+                + (apt.get("est_internet") or 0)
+                + (apt.get("est_renters_insurance") or 0)
+                + (apt.get("est_laundry") or 0)
+            )
+            if extras:
+                data["est_monthly_extras"] = extras
+
         # Include per-person pricing info if applicable
-        if apt.get("pricing_model") == "per_person":
+        if apt.get("pricing_model") == "per_person" and not price_on_request:
             data["pricing_model"] = "per_person"
             data["pricing_note"] = (
                 f"Rent ${apt.get('rent', 0)} is per person, not for the whole unit."
@@ -219,6 +257,8 @@ OBJECTIVITY RULES (renters have told us AI praise feels untrustworthy — follow
 - Lead the reasoning with the most decision-relevant fact. If there is a dealbreaker — no availability, over budget, move-in date mismatch, or a required preference the listing can't meet — state it first, not after positives. Do not praise the value of a unit that cannot currently be rented.
 - Stay balanced: surface at least one genuine concern unless the match is near-perfect.
 - When a renter_rating is provided, factor it in and attribute it as the listing's rating, but do not treat it as decisive on its own.
+
+When a listing has "price_on_request": true, its rent is genuinely unknown — the property publishes no price for that floorplan. Never state, estimate or imply a rent or total monthly cost for it, and never call it over or under budget; there is no number to compare. Judge it on space, location, availability and amenities, say plainly that pricing is not published, and if "est_monthly_extras" is given, note that roughly that much in utilities and fees sits on top of whatever rent they are quoted. A listing with unknown pricing is neither a bargain nor a dealbreaker.
 
 When a listing has pricing_model "per_person", the rent shown is per-occupant, not per-unit. For budget comparison, compare the per-person cost against the search budget. Flag per-person pricing prominently in highlights: "Per-person pricing — $X is per bed, not for the whole unit."
 
@@ -371,7 +411,8 @@ OBJECTIVITY RULES (renters have told us AI praise feels untrustworthy — follow
 - Do not restate facts the renter already sees on the listing (amenity tags, bed/bath counts, square footage). A point earns its place only if it adds interpretation: how it compares to their budget, whether it meets a stated preference, or a tradeoff it creates.
 - Lead each apartment's reasoning, and the winner's reason, with the most decision-relevant fact — including any dealbreaker (over budget, move-in mismatch, or a required preference it cannot meet).
 - Stay balanced: every apartment, including the winner, must have at least one genuine tradeoff or weakness called out in its reasoning or a category note, unless it is a near-perfect fit.
-- When a renter_rating is provided, factor it into Value and other relevant categories and attribute it as the listing's rating, but do not treat it as decisive on its own."""
+- When a renter_rating is provided, factor it into Value and other relevant categories and attribute it as the listing's rating, but do not treat it as decisive on its own.
+- When a listing has "price_on_request": true, its rent is genuinely unknown. Never state, estimate or imply a rent or total for it, and never rank it above or below the others on price. Score Value on what is known — space, amenities, location, and any "est_monthly_extras" — and say plainly that pricing is not published. Do not let an unknown price decide the winner in either direction."""
 
         selected_model = model or self.MODEL_FAST
         try:
