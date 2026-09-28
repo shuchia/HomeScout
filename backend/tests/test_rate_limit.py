@@ -20,6 +20,10 @@ def _clear_testing_env(monkeypatch):
     monkeypatch.delenv("TESTING", raising=False)
 
 
+# NOTE: these tests probe /api/apartments/list rather than /health. /health is
+# exempt from rate limiting on purpose — throttling it lets load turn into an
+# outage, because the ALB's own polls start 429ing and ECS then kills healthy
+# tasks. See EXEMPT_PATHS.
 def _build_app_and_client(mock_redis_client=None):
     """Build a minimal FastAPI app with rate limiting middleware and return a TestClient."""
     app = FastAPI()
@@ -68,11 +72,11 @@ class TestRateLimitNormalRequests:
         client, patcher = _build_app_and_client(mock_redis)
         try:
             response = client.get(
-                "/health",
+                "/api/apartments/list",
                 headers={"Authorization": "Bearer test-token-123"},
             )
             assert response.status_code == 200
-            assert response.json() == {"status": "ok"}
+            assert response.json() == {"apartments": []}
         finally:
             patcher.stop()
 
@@ -80,9 +84,9 @@ class TestRateLimitNormalRequests:
         mock_redis = _make_mock_redis(counter_value=1)
         client, patcher = _build_app_and_client(mock_redis)
         try:
-            response = client.get("/health")
+            response = client.get("/api/apartments/list")
             assert response.status_code == 200
-            assert response.json() == {"status": "ok"}
+            assert response.json() == {"apartments": []}
         finally:
             patcher.stop()
 
@@ -102,7 +106,7 @@ class TestRateLimitNormalRequests:
         client, patcher = _build_app_and_client(mock_redis)
         try:
             for _ in range(5):
-                response = client.get("/health")
+                response = client.get("/api/apartments/list")
                 assert response.status_code == 200
         finally:
             patcher.stop()
@@ -116,7 +120,7 @@ class TestRateLimitExceeded:
         client, patcher = _build_app_and_client(mock_redis)
         try:
             response = client.get(
-                "/health",
+                "/api/apartments/list",
                 headers={"Authorization": "Bearer test-token"},
             )
             assert response.status_code == 429
@@ -129,7 +133,7 @@ class TestRateLimitExceeded:
         mock_redis = _make_mock_redis(counter_value=ANON_LIMIT + 1)
         client, patcher = _build_app_and_client(mock_redis)
         try:
-            response = client.get("/health")
+            response = client.get("/api/apartments/list")
             assert response.status_code == 429
             assert "Rate limit exceeded" in response.json()["detail"]
         finally:
@@ -142,7 +146,7 @@ class TestRateLimitExceeded:
         client, patcher = _build_app_and_client(mock_redis)
         try:
             response = client.get(
-                "/health",
+                "/api/apartments/list",
                 headers={"Authorization": "Bearer test-token"},
             )
             assert response.status_code == 200
@@ -200,7 +204,7 @@ class TestRedisUnavailable:
         """When Redis connection fails, all requests pass through."""
         client, patcher = _build_app_and_client(mock_redis_client=None)
         try:
-            response = client.get("/health")
+            response = client.get("/api/apartments/list")
             assert response.status_code == 200
         finally:
             patcher.stop()
@@ -211,7 +215,7 @@ class TestRedisUnavailable:
         mock_redis.incr.side_effect = Exception("Redis connection lost")
         client, patcher = _build_app_and_client(mock_redis)
         try:
-            response = client.get("/health")
+            response = client.get("/api/apartments/list")
             assert response.status_code == 200
         finally:
             patcher.stop()
@@ -225,7 +229,7 @@ class TestRedisKeyManagement:
         mock_redis = _make_mock_redis(counter_value=1)
         client, patcher = _build_app_and_client(mock_redis)
         try:
-            client.get("/health")
+            client.get("/api/apartments/list")
             mock_redis.expire.assert_called()
             call_args = mock_redis.expire.call_args
             assert call_args[0][1] == 120
@@ -237,7 +241,64 @@ class TestRedisKeyManagement:
         mock_redis = _make_mock_redis(counter_value=5)
         client, patcher = _build_app_and_client(mock_redis)
         try:
-            client.get("/health")
+            client.get("/api/apartments/list")
             mock_redis.expire.assert_not_called()
         finally:
             patcher.stop()
+
+
+class TestClientIdentity:
+    """Who the limiter thinks a request came from.
+
+    Behind an ALB, request.client.host is the balancer, so identifying callers
+    by it puts every anonymous user in the world into one bucket — about
+    ANON_LIMIT per ALB node for the whole anonymous population. That is how a
+    single CI runner managed to 429 the load balancer's own health checks in
+    QA on 2026-09-28.
+    """
+
+    @staticmethod
+    def _req(headers, client_host="10.1.1.68"):
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            headers=headers,
+            client=SimpleNamespace(host=client_host),
+        )
+
+    def test_uses_the_real_client_not_the_balancer(self):
+        from app.middleware.rate_limit import RateLimitMiddleware
+        ip = RateLimitMiddleware._client_ip(
+            self._req({"x-forwarded-for": "203.0.113.9"})
+        )
+        assert ip == "203.0.113.9"
+
+    def test_takes_the_rightmost_entry(self):
+        """The ALB appends what it observed, so the rightmost entry is the one
+        it actually saw. Reading the leftmost would let a caller forge the
+        header and dodge the limit entirely."""
+        from app.middleware.rate_limit import RateLimitMiddleware
+        ip = RateLimitMiddleware._client_ip(
+            self._req({"x-forwarded-for": "1.2.3.4, 203.0.113.9"})
+        )
+        assert ip == "203.0.113.9", "a spoofed leading entry must not win"
+
+    def test_falls_back_to_socket_when_unproxied(self):
+        from app.middleware.rate_limit import RateLimitMiddleware
+        assert RateLimitMiddleware._client_ip(self._req({})) == "10.1.1.68"
+
+    def test_handles_whitespace_and_empties(self):
+        from app.middleware.rate_limit import RateLimitMiddleware
+        ip = RateLimitMiddleware._client_ip(
+            self._req({"x-forwarded-for": " 1.2.3.4 ,  203.0.113.9 , "})
+        )
+        assert ip == "203.0.113.9"
+
+
+class TestExemptPaths:
+    def test_health_and_metrics_are_exempt(self):
+        """Throttling a health check turns load into an outage: the ALB polls
+        /health every 30s, and 429s there eventually make ECS kill tasks that
+        were serving fine."""
+        from app.middleware.rate_limit import EXEMPT_PATHS
+        assert "/health" in EXEMPT_PATHS
+        assert "/metrics" in EXEMPT_PATHS

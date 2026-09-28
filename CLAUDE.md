@@ -79,7 +79,7 @@ Architecture: Next.js (frontend) + FastAPI (backend) + PostgreSQL + Redis + Supa
 - **Dual data mode**: `USE_DATABASE` env var. Every apartment endpoint checks `is_database_enabled()` and routes to JSON or Postgres accordingly.
 - **Claude models**: `claude-haiku-4-5-20251001` for search/emails/notes/day-plan; `claude-sonnet-4-5-20250929` for comparison and decision brief.
 - **Claude calls**: 15 s timeout (search), 45 s (compare); heuristic fallback on any exception; max 5 concurrent via `asyncio.Semaphore(5)`; system-prompt caching enabled.
-- **Rate limiting** (`middleware/rate_limit.py`): authed 120/min, anonymous 30/min, expensive paths (`/api/search`, `/api/apartments/compare`) 20/min. Fail-open on Redis errors.
+- **Rate limiting** (`middleware/rate_limit.py`): authed 120/min, anonymous 30/min, expensive paths (`/api/search`, `/api/apartments/compare`) 20/min. Fail-open on Redis errors. Anonymous callers are keyed on the **rightmost** `X-Forwarded-For` entry, not `request.client.host` — behind the ALB that is the balancer, so every anonymous user in the world shared one bucket. Rightmost because the ALB appends what it observed; the leftmost is caller-supplied and forgeable. `/health` and `/metrics` are in `EXEMPT_PATHS` — throttling a health check lets load become an outage, since the ALB's own polls start 429ing and ECS then kills healthy tasks.
 - **Tests**: `TESTING=1` disables rate limiting; E2E mocks auth via `localStorage.__test_auth_user` (only when `NODE_ENV !== 'production'`).
 - **Auth**: 5-second timeout in `AuthContext` to avoid infinite loading; fail-open for Redis/Supabase outages.
 - **Analytics**: fire-and-forget — never blocks or raises.
