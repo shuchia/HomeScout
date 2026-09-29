@@ -1,62 +1,45 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import {
-  listSavedListings,
-  createSavedListing,
-  unfavoriteSavedListing,
-  dismissListingChange,
-} from '@/lib/api'
-import { SavedListing } from '@/types/savedListing'
+import { useFavoritesStore } from '@/hooks/useFavoritesStore'
 
 /**
  * Favourites, backed by `saved_listings`.
  *
- * This used to query the `favorites` table directly through the anon key and
- * then hydrate each row from /api/apartments/batch. It now goes through the
- * backend, for two reasons:
+ * State lives in a shared store rather than in this hook. `FavoriteButton`
+ * renders once per `ApartmentCard`, so a page of results mounts a dozen of
+ * these — when each owned its own state and loading effect, every card fetched
+ * the whole favourites list independently. See useFavoritesStore.
  *
- *  - A saved listing carries its own copy of the listing, so there is no
- *    second fetch and nothing to reconcile. The old version had to keep a map
- *    of previously-loaded apartments to paper over ids the batch call missed.
- *  - Saving queues a check of the listing against its source. Search reads a
- *    weekly-swept corpus, so a result can be days old; the check is what stops
- *    a stale rent becoming a true-cost figure the user acts on.
+ * Saving a listing queues a check of it against its source: search reads a
+ * weekly-swept corpus, so a result can be days old, and the check is what
+ * stops a stale rent becoming a true-cost figure the user acts on. It is
+ * deliberately not awaited — the row is created from the corpus copy and the
+ * corrected values arrive on the next load.
  *
- * The check is deliberately not awaited — it takes 10-20 seconds. The row is
- * created from the corpus copy, this returns immediately, and `refresh()`
- * picks up the corrected values plus any `last_change` marker.
- *
- * The public interface is unchanged from the previous version so callers such
- * as FavoriteButton did not need to move.
+ * The public interface is unchanged from the per-hook version, so callers did
+ * not have to move.
  */
 export function useFavorites() {
   const { user, isPro, profileLoading } = useAuth()
-  const [favorites, setFavorites] = useState<SavedListing[]>([])
-  const [loading, setLoading] = useState(true)
 
-  const loadFavorites = useCallback(async () => {
-    if (!user) {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    try {
-      const { saved_listings } = await listSavedListings({ favoritesOnly: true })
-      setFavorites(saved_listings || [])
-    } catch (error) {
-      console.error('Failed to load favorites:', error)
-      // Deliberately not clearing: a transient failure should not make the
-      // user's favourites appear to vanish.
-    }
-    setLoading(false)
-  }, [user])
+  const favorites = useFavoritesStore(s => s.favorites)
+  const loading = useFavoritesStore(s => s.loading)
+  const load = useFavoritesStore(s => s.load)
+  const add = useFavoritesStore(s => s.add)
+  const remove = useFavoritesStore(s => s.remove)
+  const dismissChange = useFavoritesStore(s => s.dismissChange)
+  const reset = useFavoritesStore(s => s.reset)
 
   useEffect(() => {
-    // Intentional: load on mount; loadFavorites sets state (react-hooks v6).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadFavorites()
-  }, [user, loadFavorites])
+    if (!user) {
+      reset()
+      return
+    }
+    // Every mounted FavoriteButton runs this. The store coalesces them onto a
+    // single request and skips entirely once the list is loaded.
+    void load(user.id)
+  }, [user, load, reset])
 
   async function addFavorite(apartmentId: string): Promise<boolean> {
     if (!user) return false
@@ -67,55 +50,12 @@ export function useFavorites() {
       return false // Caller handles the UI feedback
     }
 
-    try {
-      const { saved_listing } = await createSavedListing({
-        apartmentId,
-        isFavorite: true,
-      })
-      setFavorites(prev =>
-        prev.some(f => f.id === saved_listing.id)
-          ? prev.map(f => (f.id === saved_listing.id ? saved_listing : f))
-          : [saved_listing, ...prev],
-      )
-      return true
-    } catch (error) {
-      console.error('addFavorite failed:', error)
-      return false
-    }
+    return add(user.id, apartmentId)
   }
 
   async function removeFavorite(apartmentId: string): Promise<boolean> {
     if (!user) return false
-
-    const target = favorites.find(f => f.apartment_id === apartmentId)
-    if (!target) return false
-
-    const previous = [...favorites]
-    setFavorites(prev => prev.filter(f => f.id !== target.id))
-
-    try {
-      await unfavoriteSavedListing(target.id)
-      return true
-    } catch (error) {
-      console.error('removeFavorite failed:', error)
-      setFavorites(previous)
-      return false
-    }
-  }
-
-  /** Acknowledge the "changed since you saved this" marker on one listing. */
-  async function dismissChange(savedListingId: string): Promise<void> {
-    setFavorites(prev =>
-      prev.map(f =>
-        f.id === savedListingId ? { ...f, last_change: null, last_change_at: null } : f,
-      ),
-    )
-    try {
-      await dismissListingChange(savedListingId)
-    } catch (error) {
-      console.error('dismissChange failed:', error)
-      await loadFavorites()
-    }
+    return remove(apartmentId)
   }
 
   function isFavorite(apartmentId: string): boolean {
@@ -129,7 +69,7 @@ export function useFavorites() {
     removeFavorite,
     dismissChange,
     isFavorite,
-    refresh: loadFavorites,
+    refresh: () => (user ? load(user.id, { force: true }) : Promise.resolve()),
     atLimit: !isPro && !profileLoading && favorites.length >= 5,
   }
 }
