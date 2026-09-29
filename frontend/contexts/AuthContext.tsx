@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase, Profile } from '@/lib/supabase'
-import { setAccessToken } from '@/lib/auth-store'
+import { setAccessToken, setAuthLostHandler } from '@/lib/auth-store'
 import { useComparison } from '@/hooks/useComparison'
 
 interface AuthContextType {
@@ -160,6 +160,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth()
 
     // Listen for auth state changes (sign-in, sign-out, token refresh)
+    // A refresh that proves the session is gone happens inside lib/api.ts,
+    // outside Supabase's own event stream, so onAuthStateChange never fires
+    // for it. Without this the token store empties while `user` stays set and
+    // the UI keeps presenting a signed-in shell whose every request 401s.
+    setAuthLostHandler(() => {
+      if (!mounted) return
+      applySession(null)
+      setProfile(null)
+    })
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, s) => {
         if (!mounted) return
@@ -191,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false
       clearTimeout(timeout)
+      setAuthLostHandler(null)
       subscription.unsubscribe()
     }
   }, [fetchProfile, applySession, finishLoading])

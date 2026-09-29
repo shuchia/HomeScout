@@ -97,7 +97,7 @@ Consequence: **`qa.snugd.ai` and local dev serve the search app at `/`**, produc
 | File | Role |
 |------|------|
 | `contexts/AuthContext.tsx` | Supabase session → React context. **5-second safety timeout** so the UI is never stuck loading. Reads `localStorage.__test_auth_user` for E2E (guarded to non-production) |
-| `lib/auth-store.ts` | Module-level token store. `AuthContext` writes on every session change; `lib/api.ts` reads it **synchronously** — no `getSession()` in the request path. Also refreshes proactively before expiry |
+| `lib/auth-store.ts` | Module-level token store. `AuthContext` writes on every session change; `lib/api.ts` reads it **synchronously** — no `getSession()` in the request path. Refreshes when the token is **missing or** expiring (a missing token is the case most needing it), backs off 30s after a failed refresh, and calls `setAuthLostHandler` so `AuthContext` can clear a session that is genuinely gone |
 | `lib/api.ts` | Every backend call (~30 functions: search, scoreBatch, tours, notes, photos, tags, commute, invite, billing) |
 | `lib/supabase.ts` | Supabase browser client |
 | `lib/geocode.ts` | Address → coordinates for proximity search |
@@ -161,5 +161,6 @@ Two Vercel projects — `snugd` (production, `snugd.ai`) and `snugd-dev`. `qa.sn
 | Auth spinner forever | Should be impossible — `AuthContext` has a 5 s timeout; if it happens, check that timeout wasn't removed |
 | E2E auth mock ignored | Only honored when `NODE_ENV !== 'production'` |
 | Types drift from API | `types/*.ts` are hand-maintained against `backend/app/schemas.py` |
+| Authed requests 401 with no `JWT verification failed` in the API logs | The header was never sent, not rejected. `auth.py` returns 401 for a missing header too, and logs a warning only for an invalid one — the absent warning is the tell. Means the token store is empty; check that refresh is attempted when `getAccessToken()` is null |
 | A list endpoint is hit N times per page | A hook with per-instance state rendered per card. Favourites hit this; the fix is a shared store with an `inFlight` promise, not a `useEffect` dep tweak |
 | POST/PATCH returns 422 | The request is missing `headers: { 'Content-Type': 'application/json' }`. Without it the browser sends the body as `text/plain` and FastAPI rejects it before the handler runs. `curl -d` sets the header implicitly, so the endpoint looks fine under test |

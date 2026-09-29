@@ -17,6 +17,10 @@ let _expiresAt: number = 0 // Unix timestamp in seconds
 export function setAccessToken(token: string | null, expiresAt?: number) {
   _accessToken = token
   _expiresAt = expiresAt ?? 0
+  if (token) {
+    // A fresh session clears any standing refresh backoff.
+    _refreshDeadUntil = 0
+  }
 }
 
 export function getAccessToken(): string | null {
@@ -32,6 +36,13 @@ export function isTokenExpiringSoon(): boolean {
 // Prevent concurrent refresh calls
 let _refreshPromise: Promise<string | null> | null = null
 
+// After a failed refresh, stop hammering Supabase for a bit. Without this,
+// making refresh attemptable when the token is *missing* (rather than only
+// when expiring) would mean a signed-out visitor triggers a refresh on every
+// API call.
+const REFRESH_BACKOFF_MS = 30_000
+let _refreshDeadUntil = 0
+
 /**
  * Refresh the token from Supabase and update the store.
  * Uses refreshSession() (network call) not getSession() (memory-only).
@@ -42,6 +53,7 @@ let _refreshPromise: Promise<string | null> | null = null
  */
 export async function refreshAccessToken(): Promise<string | null> {
   if (_refreshPromise) return _refreshPromise
+  if (Date.now() < _refreshDeadUntil) return null
 
   _refreshPromise = (async () => {
     try {
@@ -52,14 +64,17 @@ export async function refreshAccessToken(): Promise<string | null> {
         return session.access_token
       }
       // Refresh returned no session — refresh token is invalid/expired.
-      // Clear the stale token so fetchWithAuth knows auth is dead.
       _accessToken = null
       _expiresAt = 0
+      _refreshDeadUntil = Date.now() + REFRESH_BACKOFF_MS
+      _onAuthLost?.()
       return null
     } catch {
-      // Network error during refresh — clear stale token
+      // Network error during refresh — the session may still be fine, so back
+      // off briefly but do not announce the session as lost.
       _accessToken = null
       _expiresAt = 0
+      _refreshDeadUntil = Date.now() + REFRESH_BACKOFF_MS
       return null
     }
   })()
@@ -69,4 +84,19 @@ export async function refreshAccessToken(): Promise<string | null> {
   } finally {
     _refreshPromise = null
   }
+}
+
+
+/**
+ * Called when a refresh proves the session is genuinely gone.
+ *
+ * Without this, a failed refresh clears the token here while AuthContext keeps
+ * `user` set, so the UI goes on claiming the visitor is signed in while every
+ * authenticated request fails. QA logged 38 such requests in two minutes, all
+ * of them "Missing authorization token".
+ */
+let _onAuthLost: (() => void) | null = null
+
+export function setAuthLostHandler(fn: (() => void) | null) {
+  _onAuthLost = fn
 }

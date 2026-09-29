@@ -20,13 +20,21 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
  * Use this for all endpoints that require or benefit from authentication.
  */
 async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
-  // Proactively refresh if we have a token that's about to expire
-  if (getAccessToken() && isTokenExpiringSoon()) {
-    const refreshed = await refreshAccessToken()
-    if (!refreshed) {
-      // Refresh failed permanently — session is dead.
-      // Continue without auth; endpoint will return 401 if auth required.
-    }
+  // Refresh if the token is missing OR about to expire.
+  //
+  // This used to be gated on `getAccessToken() &&`, which skipped the refresh
+  // in exactly the case that needs it: an empty store. isTokenExpiringSoon()
+  // returns true for a missing token on purpose, and the short-circuit meant
+  // it was never consulted. A failed refresh clears the token here while
+  // AuthContext keeps `user` set, so the app stayed in a state where it
+  // believed it was signed in, sent every request without a header, and never
+  // tried to recover — QA logged 38 such requests in two minutes, all of them
+  // "Missing authorization token" rather than a rejected one.
+  //
+  // refreshAccessToken() de-dupes concurrent calls and backs off after a
+  // failure, so an actually signed-out visitor does not hammer Supabase.
+  if (isTokenExpiringSoon()) {
+    await refreshAccessToken()
   }
 
   const addAuth = (headers?: HeadersInit): Record<string, string> => {
@@ -41,16 +49,19 @@ async function fetchWithAuth(url: string, init?: RequestInit): Promise<Response>
 
   const response = await fetch(url, { ...init, headers: addAuth(init?.headers) })
 
-  // Retry once on 401 — only if we can get a genuinely new token
-  if (response.status === 401 && getAccessToken()) {
-    const oldToken = getAccessToken()
+  // Retry once on 401 if a refresh yields a usable token.
+  //
+  // No longer gated on a token already existing: a 401 with an empty store is
+  // the case most worth retrying, and the old guard made it unrecoverable.
+  // The `newToken !== oldToken` comparison is gone too — it was guarding
+  // against a loop that cannot happen, since the retry is a bare fetch rather
+  // than a re-entry into fetchWithAuth, and under concurrency it could reject
+  // a perfectly good token another caller had just fetched.
+  if (response.status === 401) {
     const newToken = await refreshAccessToken()
-    // Only retry if we got a different, valid token
-    if (newToken && newToken !== oldToken) {
+    if (newToken) {
       return fetch(url, { ...init, headers: addAuth(init?.headers) })
     }
-    // Refresh returned null or same token — auth is permanently dead.
-    // Return the 401 response so the caller can handle it.
   }
 
   return response
