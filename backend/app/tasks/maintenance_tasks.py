@@ -263,6 +263,53 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
         result = await session.execute(stmt)
         metrics["avg_quality_score"] = round(result.scalar() or 0, 2)
 
+        # Floorplan buckets — the index floorplan-aware search actually joins
+        # against. Nothing reported on it before, so the only way to answer
+        # "how many buckets are indexed" was an ad-hoc task against the
+        # database. A building with no buckets is invisible to that search when
+        # USE_FLOORPLAN_SEARCH is on, which makes `active_without_buckets` the
+        # number worth watching: it is coverage debt, not a curiosity.
+        from app.models.apartment_floorplan import ApartmentFloorplanModel
+
+        buckets_total = (
+            await session.execute(select(func.count(ApartmentFloorplanModel.id)))
+        ).scalar() or 0
+
+        active_join = (
+            select(func.count(ApartmentFloorplanModel.id))
+            .select_from(ApartmentFloorplanModel)
+            .join(ApartmentModel, ApartmentModel.id == ApartmentFloorplanModel.apartment_id)
+            .where(ApartmentModel.is_active == 1)
+        )
+        buckets_active = (await session.execute(active_join)).scalar() or 0
+
+        buildings_with_buckets = (
+            await session.execute(
+                select(func.count(func.distinct(ApartmentFloorplanModel.apartment_id)))
+                .select_from(ApartmentFloorplanModel)
+                .join(ApartmentModel, ApartmentModel.id == ApartmentFloorplanModel.apartment_id)
+                .where(ApartmentModel.is_active == 1)
+            )
+        ).scalar() or 0
+
+        unpriced = (
+            await session.execute(
+                select(func.count(ApartmentFloorplanModel.id)).where(
+                    ApartmentFloorplanModel.min_rent.is_(None)
+                )
+            )
+        ).scalar() or 0
+
+        metrics["floorplans"] = {
+            "buckets_total": buckets_total,
+            "buckets_on_active_listings": buckets_active,
+            "active_buildings_with_buckets": buildings_with_buckets,
+            "active_buildings_without_buckets": max(
+                0, (metrics.get("active_listings") or 0) - buildings_with_buckets
+            ),
+            "buckets_price_on_request": unpriced,
+        }
+
         stmt = select(func.count(ScrapeJobModel.id)).where(
             ScrapeJobModel.created_at > datetime.utcnow() - timedelta(days=1)
         )

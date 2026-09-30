@@ -535,7 +535,7 @@ GET  /api/admin/data-collection/sources
 PUT  /api/admin/data-collection/sources/{source_id}
 GET  /api/admin/data-collection/markets
 PUT  /api/admin/data-collection/markets/{market_id}   # {is_enabled, tier, scrape_frequency_hours, max_listings_per_scrape}
-GET  /api/admin/data-collection/metrics
+GET  /api/admin/data-collection/metrics                    # includes floorplans.* bucket counts
 GET  /api/admin/data-collection/health
 POST /api/admin/data-collection/reset-false-verifications  # ?apply=true to write
 POST /api/admin/data-collection/normalize-boston-cities     # fold Boston neighbourhood names
@@ -695,5 +695,6 @@ Set `USE_FLOORPLAN_SEARCH=true` locally — it is **off by default** and on in Q
 | Celery tasks not running | Check Redis: `redis-cli ping` |
 | `--reload` causes issues | Don't use it |
 | Port 8000 in use | `pkill -f "uvicorn app.main"` |
+| An ECS one-off task starts a worker instead of your command | `docker-entrypoint.sh` dispatches on `SERVICE_TYPE`; it now `exec "$@"` first, but an older image will silently discard the override |
 | Listings vanish from search but stats still counts them | Freshness filter (≥ 40) vs stats counting all active rows |
 | Floorplan behavior differs from QA | `USE_FLOORPLAN_SEARCH` unset locally |
