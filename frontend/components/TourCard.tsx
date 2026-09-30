@@ -75,7 +75,7 @@ export default function TourCard({ tour, apartment }: TourCardProps) {
           </p>
           {apartment && (
             <p className="text-sm text-gray-500 mt-0.5">
-              {formatRent(apartment.rent)}/mo
+              {apartment.rent != null ? `${formatRent(apartment.rent)}/mo` : 'Price on request'}
               <span className="mx-1.5 text-gray-300">|</span>
               {apartment.bedrooms === 0 ? 'Studio' : `${apartment.bedrooms} bed`}
               <span className="mx-1"> / </span>

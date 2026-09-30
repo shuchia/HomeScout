@@ -112,7 +112,11 @@ export default function ComparePage() {
     }
   }
 
-  const lowestRent = apartments.length > 0 ? Math.min(...apartments.map(a => a.rent)) : 0
+  // Only priced listings can be the cheapest. Including a null would make
+  // Math.min return 0 and hand the "lowest rent" badge to a listing whose
+  // price nobody knows.
+  const pricedRents = apartments.map(a => a.rent).filter((r): r is number => r != null)
+  const lowestRent = pricedRents.length > 0 ? Math.min(...pricedRents) : 0
 
   // Auth loading state
   if (authLoading) {
@@ -443,7 +447,7 @@ export default function ComparePage() {
                       {/* Key Stats */}
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="bg-gray-50 rounded-lg p-2">
-                          <p className={`text-sm font-bold ${apt.rent === lowestRent ? 'text-green-600' : 'text-gray-900'}`}>{formatRent(apt.rent)}</p>
+                          <p className={`text-sm font-bold ${apt.rent != null && apt.rent === lowestRent ? 'text-green-600' : 'text-gray-900'}`}>{apt.rent != null ? formatRent(apt.rent) : 'Price on request'}</p>
                           <p className="text-xs text-gray-500">/mo{apt.rent === lowestRent ? ' ★' : ''}</p>
                         </div>
                         <div className="bg-gray-50 rounded-lg p-2">
@@ -566,7 +570,7 @@ export default function ComparePage() {
                     <td className="bg-[var(--color-bg)] px-6 py-4 text-sm font-medium text-gray-900">Rent</td>
                     {apartments.map((apt) => (
                       <td key={apt.id} className={`px-6 py-4 text-center border-l border-gray-200 ${apt.rent === lowestRent ? 'bg-green-50' : ''}`}>
-                        <span className={`text-lg font-bold ${apt.rent === lowestRent ? 'text-green-600' : 'text-gray-900'}`}>{formatRent(apt.rent)}</span>
+                        <span className={`text-lg font-bold ${apt.rent != null && apt.rent === lowestRent ? 'text-green-600' : 'text-gray-900'}`}>{apt.rent != null ? formatRent(apt.rent) : 'Price on request'}</span>
                         <span className="text-sm text-gray-500">/mo</span>
                         {apt.rent === lowestRent && <span className="block text-xs text-green-600 font-medium mt-1">Lowest</span>}
                       </td>
@@ -583,7 +587,7 @@ export default function ComparePage() {
                             <span className="font-semibold">
                               {formatRent(apt.true_cost_monthly)}/mo
                             </span>
-                            {apt.true_cost_monthly > apt.rent && (
+                            {apt.rent != null && apt.true_cost_monthly > apt.rent && (
                               <span className="block text-xs text-amber-600">
                                 +{formatRent(apt.true_cost_monthly - apt.rent)} over rent
                               </span>

@@ -231,7 +231,11 @@ class ScoringService:
         scored = []
         for apt in apartments:
             h_score = ScoringService.compute_heuristic_score(
-                rent=apt.get("rent", 0),
+                # rent_for_scoring, not rent: a projected floorplan bucket
+                # leaves `rent` None when the bucket has no published price,
+                # and this is the field that still carries a number. Falls
+                # back to `rent` for unprojected listings, which have no split.
+                rent=apt.get("rent_for_scoring") or apt.get("rent") or 0,
                 budget=budget,
                 freshness_confidence=apt.get("freshness_confidence"),
                 last_seen_at=apt.get("last_seen_at"),

@@ -89,7 +89,13 @@ class SourceUpdateRequest(BaseModel):
 
 
 class MetricsResponse(BaseModel):
-    """Response for collection metrics."""
+    """Response for collection metrics.
+
+    Every field compute_metrics_snapshot() produces has to be declared here.
+    A response_model silently discards anything it does not know about, so an
+    added metric shows up in the function, passes tests, deploys green — and
+    is simply absent from the response.
+    """
     total_listings: int
     active_listings: int
     listings_by_source: dict
@@ -98,6 +104,7 @@ class MetricsResponse(BaseModel):
     jobs_last_24h: int
     successful_jobs_last_24h: int
     timestamp: str
+    floorplans: dict = Field(default_factory=dict)
 
 
 class HealthCheckResponse(BaseModel):
@@ -676,9 +683,46 @@ async def check_pipeline_health():
             logger.warning(f"Could not measure listing-check lag: {e}")
             checks["error"] = str(e)
 
+        # Buildings with no floorplan bucket are invisible to search while
+        # USE_FLOORPLAN_SEARCH is on, so this is coverage debt rather than
+        # trivia. backfill_floorplans is the remedy.
+        floorplans: Dict[str, Any] = {}
+        try:
+            from app.models.apartment_floorplan import ApartmentFloorplanModel
+
+            async with get_session_context() as session:
+                with_buckets = (
+                    await session.execute(
+                        select(func.count(func.distinct(ApartmentFloorplanModel.apartment_id)))
+                        .select_from(ApartmentFloorplanModel)
+                        .join(ApartmentModel, ApartmentModel.id == ApartmentFloorplanModel.apartment_id)
+                        .where(ApartmentModel.is_active == 1)
+                    )
+                ).scalar() or 0
+                active_total = (
+                    await session.execute(
+                        select(func.count()).select_from(ApartmentModel).where(
+                            ApartmentModel.is_active == 1
+                        )
+                    )
+                ).scalar() or 0
+            missing = max(0, active_total - with_buckets)
+            floorplans = {
+                "active_buildings_with_buckets": with_buckets,
+                "active_buildings_without_buckets": missing,
+            }
+            if missing:
+                problems.append(
+                    f"{missing} active listings have no floorplan buckets — "
+                    f"invisible to search; run backfill_floorplans"
+                )
+        except Exception as e:
+            logger.warning(f"Could not measure floorplan coverage: {e}")
+
         return {
             "healthy": not problems,
             "problems": problems,
+            "floorplans": floorplans,
             "listing_checks": checks,
             "checked_at": now.isoformat(),
             "markets": markets_out,

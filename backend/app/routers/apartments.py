@@ -39,6 +39,10 @@ def _get_claude_service():
 
 def _add_cost_breakdown(apartment: dict, include_breakdown: bool) -> dict:
     """Add true cost fields to apartment dict. Full breakdown only if include_breakdown=True."""
+    # `rent` is None for a floorplan bucket with no published price, so this
+    # skips rather than deriving a total from a number the property never
+    # quoted. Do not relax the guard to rent_for_scoring — that value exists
+    # for ranking, not for arithmetic the user will read.
     if apartment.get("true_cost_monthly") is None and apartment.get("rent"):
         breakdown = _cost_estimator.compute_true_cost(
             rent=apartment["rent"],

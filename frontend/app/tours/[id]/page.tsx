@@ -326,7 +326,7 @@ export default function TourDetailPage() {
             </p>
             {apartment && (
               <p className="text-xs text-gray-500">
-                {formatRent(apartment.rent)}/mo
+                {apartment.rent != null ? `${formatRent(apartment.rent)}/mo` : 'Price on request'}
               </p>
             )}
           </div>
@@ -483,7 +483,7 @@ function InfoTab({ apartment, tour, onTourUpdate }: { apartment: Apartment | nul
     <div className="space-y-6">
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="Rent" value={`${formatRent(apartment.rent)}/mo`} />
+        <Stat label="Rent" value={`${apartment.rent != null ? `${formatRent(apartment.rent)}/mo` : 'Price on request'}`} />
         <Stat label="Bedrooms" value={apartment.bedrooms === 0 ? 'Studio' : String(apartment.bedrooms)} />
         <Stat label="Bathrooms" value={String(apartment.bathrooms)} />
         <Stat label="Size" value={apartment.sqft ? `${formatSqft(apartment.sqft)} sqft` : 'N/A'} />

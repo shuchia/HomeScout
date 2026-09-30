@@ -177,22 +177,48 @@ def test_projection_does_not_mutate_input():
     assert BUILDING["bedrooms"] == 0 and BUILDING["rent"] == 2150
 
 
-def test_projection_price_on_request_keeps_rent_numeric():
-    """Null min_rent (D1) must still yield a numeric rent so scoring's
-    ``rent <= budget`` never hits None; falls back max_rent → building rent."""
-    # max_rent present → use it.
+def test_projection_uses_max_rent_when_min_is_missing():
+    """max_rent is a real price for this bucket, so `rent` may carry it."""
     out = project_matched_floorplan(BUILDING, bedrooms=3, bathrooms=2.0,
                                     min_rent=None, max_rent=5200, min_sqft=1400,
                                     max_sqft=1400, available_units=1)
     assert out["rent"] == 5200
+    assert out["rent_for_scoring"] == 5200
     assert out["price_on_request"] is True
     assert out["matched_floorplan"]["min_rent"] is None
-    # No prices at all → fall back to the building's own rent (never None).
-    out2 = project_matched_floorplan(BUILDING, bedrooms=3, bathrooms=2.0,
-                                     min_rent=None, max_rent=None, min_sqft=None,
-                                     max_sqft=None, available_units=1)
-    assert out2["rent"] == 2150
-    assert isinstance(out2["rent"], int)
+
+
+def test_projection_never_passes_off_the_building_rent_as_a_price():
+    """The contract this replaced.
+
+    `rent` used to fall back to the building's collapsed studio rent so
+    scoring's `rent <= budget` always had a number. Every consumer that read
+    `rent` as a price then published a figure the property never quoted — a
+    card showing "Price on request" above "Est. True Cost $2,700/mo", and AI
+    reasoning asserting "$3,390 advertised rent" on an unpriced listing.
+
+    So `rent` is now None when the bucket has no price, and the fallback moved
+    to `rent_for_scoring`. A consumer wanting something displayable gets None
+    and must decide what to do about it.
+    """
+    out = project_matched_floorplan(BUILDING, bedrooms=3, bathrooms=2.0,
+                                    min_rent=None, max_rent=None, min_sqft=None,
+                                    max_sqft=None, available_units=1)
+    assert out["rent"] is None, "the building's rent must not masquerade as the bucket's"
+    assert out["price_on_request"] is True
+
+    # Scoring still gets a number — that was the point of the fallback.
+    assert out["rent_for_scoring"] == 2150
+    assert isinstance(out["rent_for_scoring"], int)
+
+
+def test_priced_bucket_sets_both_fields_the_same():
+    out = project_matched_floorplan(BUILDING, bedrooms=2, bathrooms=1.0,
+                                    min_rent=3100, max_rent=3400, min_sqft=800,
+                                    max_sqft=850, available_units=2)
+    assert out["rent"] == 3100
+    assert out["rent_for_scoring"] == 3100
+    assert out["price_on_request"] is False
 
 
 def test_projection_half_bath_preserved():

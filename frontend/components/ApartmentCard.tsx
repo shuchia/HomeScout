@@ -150,8 +150,10 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
                 return (
                   <>
                     <p className="text-2xl font-bold text-gray-900">
-                      {formatRent(perBed)}
-                      <span className="text-sm font-normal text-gray-500">/bed</span>
+                      {perBed != null ? formatRent(perBed) : 'Price on request'}
+                      {perBed != null && (
+                        <span className="text-sm font-normal text-gray-500">/bed</span>
+                      )}
                     </p>
                     {wholeUnit != null && (
                       <p className="text-xs text-gray-500">&asymp; {formatRent(wholeUnit)}/unit total</p>
@@ -161,8 +163,10 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
               }
               return (
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatRent(rent)}
-                  <span className="text-sm font-normal text-gray-500">/mo</span>
+                  {rent != null ? formatRent(rent) : 'Price on request'}
+                  {rent != null && (
+                    <span className="text-sm font-normal text-gray-500">/mo</span>
+                  )}
                 </p>
               );
             })()}
@@ -189,10 +193,22 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
           const petRent = apartment.cost_breakdown?.pet_rent || 0;
           const parkingFee = apartment.cost_breakdown?.parking_fee || 0;
           const optional = petRent + parkingFee;
-          const headlineCost = apartment.true_cost_monthly - optional;
-          if (headlineCost <= rent) return null;
           const unit = apartment.pricing_model === 'per_person' ? '/person' : '/mo';
-          const extras = headlineCost - rent;
+
+          // Sum the extras from the breakdown rather than subtracting rent from
+          // the total. These are estimated from the building and its zip, so
+          // they hold even when the unit has no published price — and `rent` is
+          // null in exactly that case, which would silently turn a subtraction
+          // into the whole total.
+          const cb = apartment.cost_breakdown;
+          const extras = cb
+            ? (cb.est_electric || 0) + (cb.est_gas || 0) + (cb.est_water || 0) +
+              (cb.est_internet || 0) + (cb.est_renters_insurance || 0) +
+              (cb.est_laundry || 0) + (cb.other_monthly_fees || 0) + (cb.amenity_fee || 0)
+            : (rent != null ? apartment.true_cost_monthly - optional - rent : 0);
+          if (extras <= 0) return null;
+
+          const headlineCost = apartment.true_cost_monthly - optional;
 
           // When the matched floorplan is unpriced, `rent` is not a price we
           // are willing to show — floorplans.py falls back to the building's

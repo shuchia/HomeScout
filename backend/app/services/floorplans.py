@@ -385,21 +385,37 @@ def project_matched_floorplan(
     card, and everything downstream reflect the unit the user actually searched
     for — not the studio.
 
-    ``rent`` is always left numeric (scoring does ``rent <= budget``): the
-    bucket's ``min_rent`` when priced, else ``max_rent``, else the building's
-    original rent. The real bucket (including ``price_on_request``) is attached
-    as ``matched_floorplan`` for the display layer. See decision D1.
+    ``rent`` carries the bucket's own price — ``min_rent``, else ``max_rent`` —
+    and is **None when the bucket has no price at all**. It is never the
+    building's collapsed studio rent.
+
+    ``rent_for_scoring`` is the always-numeric value the heuristic needs, and
+    falls back to the building's rent when the bucket is unpriced.
+
+    The split exists because one field cannot honestly serve both. It used to:
+    ``rent`` fell back to the building's figure so scoring could do
+    ``rent <= budget``, and every consumer that treated it as a price published
+    a number the property never quoted. That shipped twice in one week — a card
+    reading "Price on request" above "Est. True Cost $2,700/mo", and AI
+    reasoning asserting "$3,390 advertised rent" on a listing with no published
+    price. Both read ``rent`` in good faith. Now a consumer that wants
+    something displayable gets None and has to decide what to do about it.
+
+    See decision D1.
 
     For ``per_person`` (by-the-bed) floorplans, ``min_rent`` is the per-bedroom
     share; matching/scoring stays on that per-bed price (students pay per bed),
     but ``matched_floorplan`` also carries ``per_bed_rent`` and an estimated
     ``whole_unit_rent`` (= per-bed × bedrooms) so the card can label it clearly.
     """
-    rent = min_rent
-    if rent is None:
-        rent = max_rent
-    if rent is None:
-        rent = apt.get("rent")
+    # The bucket's own price, or nothing. max_rent is a real price for this
+    # bucket (an upper bound), so it counts; the building's rent does not.
+    rent = min_rent if min_rent is not None else max_rent
+
+    # What the heuristic scores against. Falls back to the building's rent so
+    # `rent <= budget` always has a number, which is the whole reason the two
+    # are now separate fields.
+    rent_for_scoring = rent if rent is not None else apt.get("rent")
 
     per_person = pricing_model == "per_person"
     per_bed_rent = min_rent if per_person else None
@@ -409,6 +425,7 @@ def project_matched_floorplan(
 
     out = {**apt}
     out["rent"] = rent
+    out["rent_for_scoring"] = rent_for_scoring
     out["bedrooms"] = bedrooms
     out["bathrooms"] = int(bathrooms) if float(bathrooms).is_integer() else bathrooms
     if min_sqft or max_sqft:

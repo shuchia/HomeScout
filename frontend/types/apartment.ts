@@ -61,7 +61,18 @@ export interface CostBreakdown {
 export interface Apartment {
   id: string;
   address: string;
-  rent: number;
+  /**
+   * The listing's price. **Null when a matched floorplan has no published
+   * price** — never the building's collapsed rent standing in for one.
+   * Anything rendering money must handle null.
+   */
+  rent: number | null;
+  /**
+   * Always-numeric value for ranking only, falling back to the building's
+   * rent. Never display it: it is the figure that, when `rent` doubled as
+   * both, got published as an "advertised rent" the property never quoted.
+   */
+  rent_for_scoring?: number | null;
   bedrooms: number;
   bathrooms: number;
   /** Human-friendly range label like "Studio–1 BR" when the listing covers
