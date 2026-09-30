@@ -539,6 +539,7 @@ GET  /api/admin/data-collection/metrics                    # includes floorplans
 GET  /api/admin/data-collection/health
 POST /api/admin/data-collection/reset-false-verifications  # ?apply=true to write
 POST /api/admin/data-collection/normalize-boston-cities     # fold Boston neighbourhood names
+POST /api/admin/data-collection/backfill-floorplans         # build buckets for listings missing them
 GET  /api/admin/data-collection/pipeline-health            # is work actually happening?
 ```
 

@@ -923,6 +923,35 @@ async def backfill_enrichment(only_missing: bool = True, batch_size: int = 200):
     }
 
 
+@router.post("/backfill-floorplans")
+async def backfill_floorplans_endpoint(
+    only_missing: bool = Query(True),
+    batch_size: int = Query(200, ge=1, le=1000),
+):
+    """Build floorplan buckets for listings that lack them.
+
+    An active listing with no bucket is invisible to search while
+    USE_FLOORPLAN_SEARCH is on — the join has nothing to match. pipeline-health
+    reports the count as `floorplans.active_buildings_without_buckets`; this is
+    the remedy.
+
+    Buckets are normally built inline during a scrape, so a gap means listings
+    that predate that behaviour, or whose scrape failed partway.
+
+    only_missing=True (the default) only touches listings with no buckets at
+    all. Pass false to rebuild everything, which is far more expensive.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import backfill_floorplans
+    task = backfill_floorplans.apply_async(
+        kwargs={"only_missing": only_missing, "batch_size": batch_size},
+        queue="maintenance",
+    )
+    return {"status": "dispatched", "task_id": task.id, "only_missing": only_missing}
+
+
 @router.post("/normalize-boston-cities")
 async def normalize_boston_cities():
     """One-shot fix for Boston listings tagged with a neighbourhood name.
