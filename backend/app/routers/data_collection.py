@@ -711,11 +711,20 @@ async def check_pipeline_health():
                 "active_buildings_with_buckets": with_buckets,
                 "active_buildings_without_buckets": missing,
             }
-            if missing:
-                problems.append(
-                    f"{missing} active listings have no floorplan buckets — "
-                    f"invisible to search; run backfill_floorplans"
-                )
+            # Reported, deliberately not flagged. A non-zero value is the
+            # normal steady state: build_floorplan_buckets emits nothing for a
+            # building whose every floorplan has zero available units, so those
+            # listings are excluded on purpose — they would otherwise match
+            # searches for units nobody can rent.
+            #
+            # Measured 2026-09-30: 124 such listings, and a backfill over
+            # exactly those produced 0 buckets, which is the behaviour working
+            # rather than failing. An alert here would sit permanently red and
+            # train people to ignore the endpoint.
+            #
+            # A real coverage gap would look like listings that HAVE available
+            # units but no buckets. That needs a query over the available_units
+            # JSONB, which is worth writing if this is ever suspected.
         except Exception as e:
             logger.warning(f"Could not measure floorplan coverage: {e}")
 
