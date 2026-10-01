@@ -711,20 +711,26 @@ async def check_pipeline_health():
                 "active_buildings_with_buckets": with_buckets,
                 "active_buildings_without_buckets": missing,
             }
-            # Reported, deliberately not flagged. A non-zero value is the
-            # normal steady state: build_floorplan_buckets emits nothing for a
-            # building whose every floorplan has zero available units, so those
-            # listings are excluded on purpose — they would otherwise match
-            # searches for units nobody can rent.
+            # Flagged again as of 2026-10-01, because zero is now the real
+            # steady state.
             #
-            # Measured 2026-09-30: 124 such listings, and a backfill over
-            # exactly those produced 0 buckets, which is the behaviour working
-            # rather than failing. An alert here would sit permanently red and
-            # train people to ignore the endpoint.
+            # This alert was added, then removed the same day: at the time,
+            # build_floorplan_buckets emitted nothing for a fully-leased
+            # building, so 124 listings had no buckets by design and the check
+            # sat permanently red. Those buildings now get buckets marked
+            # available_units = 0, which took the count to 0 and leaves only
+            # genuine faults behind it — a building with no floorplan array and
+            # no bedroom value, or one whose floorplans are all unparseable.
             #
-            # A real coverage gap would look like listings that HAVE available
-            # units but no buckets. That needs a query over the available_units
-            # JSONB, which is worth writing if this is ever suspected.
+            # Worth knowing if this fires: a weekly sweep rebuilds buckets
+            # inline for every listing it touches, so a handful appearing
+            # mid-sweep may simply be rows not yet re-scraped. A count that
+            # persists across a full sweep is the one to chase.
+            if missing:
+                problems.append(
+                    f"{missing} active listings have no floorplan buckets — "
+                    f"invisible to search; run backfill-floorplans"
+                )
         except Exception as e:
             logger.warning(f"Could not measure floorplan coverage: {e}")
 
