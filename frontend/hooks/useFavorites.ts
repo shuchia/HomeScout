@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFavoritesStore } from '@/hooks/useFavoritesStore'
+import { MatchedFloorplan } from '@/types/apartment'
 
 /**
  * Favourites, backed by `saved_listings`.
@@ -41,7 +42,10 @@ export function useFavorites() {
     void load(user.id)
   }, [user, load, reset])
 
-  async function addFavorite(apartmentId: string): Promise<boolean> {
+  async function addFavorite(
+    apartmentId: string,
+    matchedFloorplan?: MatchedFloorplan | null,
+  ): Promise<boolean> {
     if (!user) return false
 
     // Free tier cap. Skipped while the profile is still loading, so a slow
@@ -50,7 +54,7 @@ export function useFavorites() {
       return false // Caller handles the UI feedback
     }
 
-    return add(user.id, apartmentId)
+    return add(user.id, apartmentId, matchedFloorplan)
   }
 
   async function removeFavorite(apartmentId: string): Promise<boolean> {

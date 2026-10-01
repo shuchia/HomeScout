@@ -2,13 +2,20 @@
 import { useState } from 'react'
 import { useFavorites } from '@/hooks/useFavorites'
 import { useAuth } from '@/contexts/AuthContext'
+import { MatchedFloorplan } from '@/types/apartment'
 
 interface FavoriteButtonProps {
   apartmentId: string
+  /**
+   * The floorplan this card is showing, when floorplan-aware search matched
+   * one. Saving without it saves the building, whose rent belongs to whichever
+   * plan is cheapest — not the unit on screen.
+   */
+  matchedFloorplan?: MatchedFloorplan | null
   className?: string
 }
 
-export function FavoriteButton({ apartmentId, className = '' }: FavoriteButtonProps) {
+export function FavoriteButton({ apartmentId, matchedFloorplan, className = '' }: FavoriteButtonProps) {
   const { user, signInWithGoogle } = useAuth()
   const { isFavorite, addFavorite, removeFavorite, atLimit } = useFavorites()
   const [loading, setLoading] = useState(false)
@@ -29,7 +36,7 @@ export function FavoriteButton({ apartmentId, className = '' }: FavoriteButtonPr
       if (favorited) {
         await removeFavorite(apartmentId)
       } else {
-        const success = await addFavorite(apartmentId)
+        const success = await addFavorite(apartmentId, matchedFloorplan)
         if (!success) {
           // Distinguish the tier cap from a request that simply failed. These
           // used to share one message, so a 422 from a malformed request told

@@ -84,7 +84,7 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
 
         {/* Favorite Button */}
         <div className="absolute top-2 left-2 z-30 pointer-events-auto">
-          <FavoriteButton apartmentId={id} />
+          <FavoriteButton apartmentId={id} matchedFloorplan={apartment.matched_floorplan} />
         </div>
 
         {/* Match Score Badge */}

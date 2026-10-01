@@ -199,3 +199,128 @@ class TestChangeMarker:
         marker appears for a check that found nothing."""
         assert diff_listing({"rent": 2100, "description": "old"},
                             {"rent": 2100, "description": "new"}) == {}
+
+
+class _FakeScrapedBuilding:
+    """A scraped apartments.com building with two floorplans, one unpriced."""
+
+    floor_plans = [
+        {
+            "modelId": "m1",
+            "details": ["1 bed", "1 bath", "600 sq ft"],
+            "totalPrice": "$2,400",
+            "squareFeet": "600",
+            "availability": "3 Available",
+        },
+        {
+            "modelId": "m2",
+            "details": ["2 beds", "2 baths", "950 sq ft"],
+            "totalPrice": "Call for Rent",
+            "squareFeet": "950",
+            "availability": "2 Available",
+        },
+    ]
+    available_units = []
+    bedrooms = 1
+    bathrooms = 1.0
+    rent = 2400
+    sqft = 600
+    available_date = None
+    description = ""
+    city = "Boston"
+
+
+class TestFloorplanReprojection:
+    """A saved copy that names a floorplan must be re-checked as that floorplan.
+
+    The patch the check applies is building-level, so without re-projection it
+    overwrites the bucket's rent with the building's. That is how a card reading
+    "Price on request" became a favourite reading "$3,390/mo" — and the
+    substitution was then reported to the user as a price change.
+    """
+
+    @pytest.mark.asyncio
+    async def test_unpriced_floorplan_stays_unpriced(self, monkeypatch):
+        _patch_scraper(
+            monkeypatch,
+            result=_FakeResult(listings=[_FakeScrapedBuilding()]),
+        )
+        _patch_normalizer(monkeypatch, listing={"rent": 2400, "bedrooms": 1, "sqft": 600})
+
+        saved = {
+            "rent": None,
+            "bedrooms": 2,
+            "bathrooms": 2,
+            "sqft": 950,
+            "matched_floorplan": {"bedrooms": 2, "bathrooms": 2.0, "price_on_request": True},
+        }
+        status, updated, changes = await check_listing("https://x/y/", saved)
+
+        assert status == LIVE
+        # The building's $2,400 one-bed must not become this unit's price.
+        assert updated["rent"] is None
+        assert updated["matched_floorplan"]["price_on_request"] is True
+        assert updated["bedrooms"] == 2
+        assert "rent" not in changes
+
+    @pytest.mark.asyncio
+    async def test_priced_floorplan_tracks_its_own_rent(self, monkeypatch):
+        _patch_scraper(
+            monkeypatch,
+            result=_FakeResult(listings=[_FakeScrapedBuilding()]),
+        )
+        _patch_normalizer(monkeypatch, listing={"rent": 2400, "bedrooms": 1})
+
+        saved = {
+            "rent": 2200,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "matched_floorplan": {"bedrooms": 1, "bathrooms": 1.0, "price_on_request": False},
+        }
+        _, updated, changes = await check_listing("https://x/y/", saved)
+
+        assert updated["rent"] == 2400
+        assert changes["rent"] == {"from": 2200, "to": 2400}
+
+    @pytest.mark.asyncio
+    async def test_withdrawn_floorplan_keeps_its_identity(self, monkeypatch):
+        """The building is live but no longer lists this plan. The user asked
+        about a 3-bed; answering with the building's 1-bed rent would be a
+        different listing wearing the same name."""
+        _patch_scraper(
+            monkeypatch,
+            result=_FakeResult(listings=[_FakeScrapedBuilding()]),
+        )
+        _patch_normalizer(monkeypatch, listing={"rent": 2400, "bedrooms": 1})
+
+        saved = {
+            "rent": 3100,
+            "bedrooms": 3,
+            "bathrooms": 2,
+            "matched_floorplan": {
+                "bedrooms": 3,
+                "bathrooms": 2.0,
+                "min_rent": 3100,
+                "max_rent": 3100,
+                "available_units": 1,
+            },
+        }
+        status, updated, _ = await check_listing("https://x/y/", saved)
+
+        assert status == LIVE
+        assert updated["bedrooms"] == 3
+        assert updated["matched_floorplan"]["available_units"] == 0
+        assert updated["rent"] == 3100  # still the plan's own price, not the building's
+
+    @pytest.mark.asyncio
+    async def test_building_copy_is_untouched(self, monkeypatch):
+        """A listing saved without a floorplan keeps the old building-level
+        behaviour — reprojection must not leak into that path."""
+        _patch_scraper(monkeypatch, result=_FakeResult(listings=[object()]))
+        _patch_normalizer(monkeypatch, listing={"rent": 2400})
+
+        _, updated, changes = await check_listing("https://x/y/", {"rent": 2200})
+
+        assert updated["rent"] == 2400
+        assert "matched_floorplan" not in updated
+        assert changes["rent"] == {"from": 2200, "to": 2400}

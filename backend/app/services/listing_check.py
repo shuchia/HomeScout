@@ -126,4 +126,85 @@ async def check_listing(
         if value not in (None, "", [], {}):
             updated[field] = value
 
+    # A saved copy that names a floorplan has to be re-checked as that
+    # floorplan. The patch above is building-level, so without this it would
+    # overwrite a bucket's rent with the building's — turning a price-on-request
+    # unit back into a quoted price, and reporting the substitution to the user
+    # as a price change.
+    saved_fp = current.get("matched_floorplan")
+    if saved_fp:
+        updated = _reproject_floorplan(updated, saved_fp, result.listings[0])
+
     return LIVE, updated, diff_listing(current, updated)
+
+
+def _reproject_floorplan(
+    listing: Dict[str, Any],
+    saved_fp: Dict[str, Any],
+    scraped: Any,
+) -> Dict[str, Any]:
+    """Re-apply the saved floorplan to a freshly-fetched building.
+
+    Buckets are rebuilt from the fetched payload exactly as ingestion builds
+    them, so the check measures the same thing search did. A bucket the
+    building no longer lists keeps its identity with zero units rather than
+    vanishing — the user saved a specific unit and is owed an answer about it,
+    not a silent fallback to the building's cheapest plan.
+
+    When the bucket cannot be rebuilt at all, the saved floorplan's own numbers
+    are re-applied unchanged. Leaving the building-level patch in place would be
+    worse than doing nothing: it would publish the building's rent as this
+    unit's, which is the bug this whole path exists to prevent.
+    """
+    import re
+
+    from app.services.floorplans import build_floorplan_buckets, project_matched_floorplan
+
+    try:
+        want = (int(saved_fp.get("bedrooms")), float(saved_fp.get("bathrooms")))
+    except (TypeError, ValueError):
+        return listing
+
+    def _reapply(bucket: Dict[str, Any]) -> Dict[str, Any]:
+        return project_matched_floorplan(
+            listing,
+            bedrooms=bucket["bedrooms"],
+            bathrooms=bucket["bathrooms"],
+            min_rent=bucket.get("min_rent"),
+            max_rent=bucket.get("max_rent"),
+            min_sqft=bucket.get("min_sqft"),
+            max_sqft=bucket.get("max_sqft"),
+            available_units=bucket.get("available_units"),
+            earliest_available_date=bucket.get("earliest_available_date"),
+            pricing_model=bucket.get("pricing_model"),
+        )
+
+    try:
+        fallback_date = getattr(scraped, "available_date", None)
+        if not (fallback_date and re.match(r"^\d{4}-\d{2}-\d{2}$", str(fallback_date))):
+            fallback_date = None
+
+        buckets = build_floorplan_buckets(
+            getattr(scraped, "floor_plans", None),
+            getattr(scraped, "available_units", None),
+            fallback_bedrooms=getattr(scraped, "bedrooms", None),
+            fallback_bathrooms=getattr(scraped, "bathrooms", None),
+            fallback_rent=getattr(scraped, "rent", None),
+            fallback_sqft=getattr(scraped, "sqft", None),
+            fallback_available_date=fallback_date,
+            description=getattr(scraped, "description", None),
+            city=getattr(scraped, "city", None),
+        )
+    except Exception as e:
+        logger.warning(f"Could not rebuild floorplan buckets during check: {e}")
+        return _reapply(saved_fp)
+
+    match = next(
+        (b for b in buckets if (int(b["bedrooms"]), float(b["bathrooms"])) == want),
+        None,
+    )
+    if match is None:
+        # The building is still listed but no longer publishes this plan.
+        return _reapply({**saved_fp, "available_units": 0})
+
+    return _reapply(match)

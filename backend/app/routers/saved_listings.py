@@ -29,11 +29,25 @@ router = APIRouter()
 VALID_STAGES = ("interested", "outreach_sent", "scheduled", "toured", "deciding")
 
 
+class FloorplanRef(BaseModel):
+    """Which floorplan inside the building the user was actually looking at.
+
+    A floorplan search matches a *building* on one of its buckets and the card
+    renders that bucket, so "save this" means the bucket, not the building. Sent
+    by the client because only the client knows which card was clicked — the
+    same building shows different prices to two users searching different sizes.
+    """
+
+    bedrooms: int
+    bathrooms: float
+
+
 class CreateSavedListingRequest(BaseModel):
     apartment_id: Optional[str] = None
     source_url: Optional[str] = None
     is_favorite: bool = False
     stage: Optional[str] = None
+    floorplan: Optional[FloorplanRef] = None
 
 
 class UpdateSavedListingRequest(BaseModel):
@@ -66,8 +80,20 @@ def _queue_check(saved_listing_id: str) -> None:
         logger.warning(f"Could not queue check for {saved_listing_id}: {e}")
 
 
-async def _corpus_listing(apartment_id: str) -> Optional[Dict[str, Any]]:
-    """Read a listing out of the scraped corpus, in whichever mode is active."""
+async def _corpus_listing(
+    apartment_id: str,
+    floorplan: Optional[FloorplanRef] = None,
+) -> Optional[Dict[str, Any]]:
+    """Read a listing out of the scraped corpus, in whichever mode is active.
+
+    When ``floorplan`` names a bucket, the saved copy is that bucket projected
+    onto the building — the same projection search does — rather than the
+    collapsed building row. Without it the saved copy answers a different
+    question than the card the user clicked: the building row carries a rent
+    (whatever the building's cheapest priced plan costs) even when the matched
+    floorplan is price-on-request, so a card reading "Price on request" became a
+    favourite reading "$3,390/mo" for a unit nobody had quoted.
+    """
     from app.database import is_database_enabled, get_session_context
 
     if is_database_enabled():
@@ -79,7 +105,12 @@ async def _corpus_listing(apartment_id: str) -> Optional[Dict[str, Any]]:
                 select(ApartmentModel).where(ApartmentModel.id == apartment_id)
             )
             apt = result.scalar_one_or_none()
-            return apt.to_dict() if apt else None
+            if not apt:
+                return None
+            listing = apt.to_dict()
+            if floorplan is not None:
+                listing = await _project_floorplan(session, apartment_id, listing, floorplan)
+            return listing
 
     from app.routers.apartments import _get_apartments_data
 
@@ -87,6 +118,53 @@ async def _corpus_listing(apartment_id: str) -> Optional[Dict[str, Any]]:
         if a.get("id") == apartment_id:
             return a
     return None
+
+
+async def _project_floorplan(
+    session,
+    apartment_id: str,
+    listing: Dict[str, Any],
+    ref: FloorplanRef,
+) -> Dict[str, Any]:
+    """Overlay the named bucket onto the building dict, if it still exists.
+
+    A bucket that has since disappeared leaves the building copy untouched
+    rather than inventing one; the check that runs straight after will report
+    what the source actually says.
+    """
+    from sqlalchemy import select
+    from app.models.apartment_floorplan import ApartmentFloorplanModel
+    from app.services.floorplans import project_matched_floorplan
+
+    row = (
+        await session.execute(
+            select(ApartmentFloorplanModel).where(
+                ApartmentFloorplanModel.apartment_id == apartment_id,
+                ApartmentFloorplanModel.bedrooms == ref.bedrooms,
+                ApartmentFloorplanModel.bathrooms == ref.bathrooms,
+            )
+        )
+    ).scalars().first()
+
+    if row is None:
+        logger.info(
+            f"No floorplan bucket {ref.bedrooms}bd/{ref.bathrooms}ba for {apartment_id}; "
+            "saving the building copy"
+        )
+        return listing
+
+    return project_matched_floorplan(
+        listing,
+        bedrooms=row.bedrooms,
+        bathrooms=row.bathrooms,
+        min_rent=row.min_rent,
+        max_rent=row.max_rent,
+        min_sqft=row.min_sqft,
+        max_sqft=row.max_sqft,
+        available_units=row.available_units,
+        earliest_available_date=row.earliest_available_date,
+        pricing_model=row.pricing_model,
+    )
 
 
 @router.post("/api/saved-listings", status_code=201)
@@ -113,7 +191,7 @@ async def create_saved_listing(
     listing: Dict[str, Any] = {}
     source_url = body.source_url
     if body.apartment_id:
-        listing = await _corpus_listing(body.apartment_id) or {}
+        listing = await _corpus_listing(body.apartment_id, body.floorplan) or {}
         if not listing:
             raise HTTPException(status_code=404, detail="Apartment not found")
         source_url = source_url or listing.get("source_url")
@@ -135,6 +213,13 @@ async def create_saved_listing(
                 patch["is_favorite"] = True
             if body.stage:
                 patch["stage"] = body.stage
+            # Repair a copy saved before the client sent its floorplan. Only
+            # when the stored copy names no floorplan at all: adding the
+            # identity it was missing is a correction, whereas overwriting one
+            # already recorded would silently re-point the user's saved unit.
+            if listing and not (row.get("listing") or {}).get("matched_floorplan"):
+                if listing.get("matched_floorplan"):
+                    patch["listing"] = listing
             if patch:
                 updated = (
                     supabase_admin.table("saved_listings")

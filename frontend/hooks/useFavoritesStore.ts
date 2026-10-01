@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { SavedListing } from '@/types/savedListing'
+import { MatchedFloorplan } from '@/types/apartment'
 import {
   listSavedListings,
   createSavedListing,
@@ -34,7 +35,7 @@ interface FavoritesStore {
   inFlight: Promise<void> | null
 
   load: (userId: string, opts?: { force?: boolean }) => Promise<void>
-  add: (userId: string, apartmentId: string) => Promise<boolean>
+  add: (userId: string, apartmentId: string, matchedFloorplan?: MatchedFloorplan | null) => Promise<boolean>
   remove: (apartmentId: string) => Promise<boolean>
   dismissChange: (savedListingId: string) => Promise<void>
   reset: () => void
@@ -76,11 +77,16 @@ export const useFavoritesStore = create<FavoritesStore>((set, get) => ({
     return request
   },
 
-  add: async (userId, apartmentId) => {
+  add: async (userId, apartmentId, matchedFloorplan) => {
     try {
       const { saved_listing } = await createSavedListing({
         apartmentId,
         isFavorite: true,
+        // Which plan the card was showing. The server saves the building when
+        // this is absent, and the building's rent is not this unit's rent.
+        floorplan: matchedFloorplan
+          ? { bedrooms: matchedFloorplan.bedrooms, bathrooms: matchedFloorplan.bathrooms }
+          : undefined,
       })
       set(state => ({
         favorites: state.favorites.some(f => f.id === saved_listing.id)

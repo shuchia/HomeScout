@@ -800,6 +800,8 @@ export async function createSavedListing(input: {
   sourceUrl?: string
   isFavorite?: boolean
   stage?: SavedListingStage
+  /** The floorplan bucket the user was looking at, when search matched one. */
+  floorplan?: { bedrooms: number; bathrooms: number }
 }): Promise<{ saved_listing: SavedListing; created: boolean }> {
   const response = await fetchWithAuth(`${API_URL}/api/saved-listings`, {
     method: 'POST',
@@ -809,6 +811,7 @@ export async function createSavedListing(input: {
       source_url: input.sourceUrl,
       is_favorite: input.isFavorite ?? false,
       stage: input.stage ?? null,
+      floorplan: input.floorplan ?? null,
     }),
   })
   if (!response.ok) throw new ApiError('Failed to save listing', response.status)
