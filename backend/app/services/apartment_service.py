@@ -227,7 +227,11 @@ class ApartmentService:
                     ),
                     bed_cond,
                     FP.bathrooms >= bathrooms,
-                    FP.available_units > 0,
+                    # Fully-leased buildings are included (available_units = 0)
+                    # so a place matching the search is not silently hidden —
+                    # the ordering below keeps them behind anything rentable and
+                    # the card labels them. They used to be excluded outright.
+                    FP.available_units >= 0,
                     # Budget against the matched floorplan; keep price-on-request
                     # (null min_rent) — decision D1.
                     or_(FP.min_rent <= int(budget * 1.10), FP.min_rent.is_(None)),
@@ -236,6 +240,9 @@ class ApartmentService:
             .distinct(building_key)
             .order_by(
                 building_key,
+                # Rentable first: when a building has both, DISTINCT ON must
+                # keep the bucket someone can actually move into.
+                (FP.available_units == 0),
                 FP.min_rent.is_(None),
                 FP.bedrooms,
                 FP.min_rent.asc().nullslast(),

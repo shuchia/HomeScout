@@ -122,17 +122,42 @@ def test_no_models_uses_building_fallback():
     assert (b["bedrooms"], b["bathrooms"], b["min_rent"], b["available_units"]) == (2, 1.0, 1800, 1)
 
 
-def test_models_present_but_none_available_returns_empty():
-    """A building whose every floorplan is 0-available must NOT get a phantom
-    bucket — nothing is rentable, so it should match no search."""
+def test_fully_leased_building_still_gets_buckets_marked_zero():
+    """A building with no current inventory is shown, not hidden.
+
+    It used to return no buckets at all, which made it invisible to search —
+    124 active QA listings, 8% of the corpus. A building that fits someone's
+    criteria is worth knowing about even when fully leased: you can call, join
+    a waitlist, or check back. available_units = 0 is what marks it, and the
+    search orders those behind anything rentable.
+    """
     all_unavail = [
-        _model(["Studio", "1 Bath"], "Call for Rent", "500", "0 Available units", "z1"),
-        _model(["2 Beds", "1 Bath"], "Call for Rent", "900", "0 Available units", "z2"),
+        _model(["Studio", "1 Bath"], "$2,400", "500", "0 Available units", "z1"),
+        _model(["2 Beds", "1 Bath"], "$3,100", "900", "0 Available units", "z2"),
     ]
     buckets = build_floorplan_buckets(
         all_unavail, fallback_bedrooms=0, fallback_rent=2000
     )
-    assert buckets == []
+    assert len(buckets) == 2
+    assert all(b["available_units"] == 0 for b in buckets)
+    # Real prices survive, so the card and budget filter still work.
+    assert _bucket(buckets, 2, 1.0)["min_rent"] == 3100
+
+
+def test_partially_available_building_ignores_the_leased_floorplans():
+    """The zero-unit path only fires when nothing at all is available.
+
+    A building with one rentable floorplan must not pick up phantom buckets for
+    its leased ones — those would compete with real inventory.
+    """
+    mixed = [
+        _model(["Studio", "1 Bath"], "$2,400", "500", "0 Available units", "m1"),
+        _model(["2 Beds", "1 Bath"], "$3,100", "900", "2 Available units", "m2"),
+    ]
+    buckets = build_floorplan_buckets(mixed, fallback_bedrooms=0, fallback_rent=2000)
+    assert len(buckets) == 1
+    assert buckets[0]["bedrooms"] == 2
+    assert buckets[0]["available_units"] == 2
 
 
 def test_availability_date_from_rentals():

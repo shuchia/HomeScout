@@ -256,5 +256,16 @@ class ScoringService:
             }
             scored.append(apt_with_score)
 
-        scored.sort(key=lambda x: x["heuristic_score"], reverse=True)
+        # Availability outranks score. A fully-leased building can score well on
+        # space, amenities and price and still be something nobody can move
+        # into, so it sorts behind every rentable result regardless. Mirrors the
+        # rule already given to Claude: "do not praise the value of a unit that
+        # cannot currently be rented."
+        def _rank(apt):
+            mf = apt.get("matched_floorplan") or {}
+            units = mf.get("available_units")
+            unrentable = units is not None and units <= 0
+            return (unrentable, -apt["heuristic_score"])
+
+        scored.sort(key=_rank)
         return scored

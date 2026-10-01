@@ -335,14 +335,22 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
 
         {/* Availability */}
         {(() => {
-          const hasDate = available_date && available_date.trim() !== ''
-          if (!hasDate) return null  // No data — don't show anything
+          // The matched floorplan is authoritative once a search has projected
+          // one: available_units === 0 means the building is fully leased.
+          // Checking it first matters because such a listing may carry no
+          // available_date string at all, and the old early-return then showed
+          // nothing — leaving a leased building looking like any other result.
+          const fpUnits = apartment.matched_floorplan?.available_units
+          const leased = fpUnits != null && fpUnits <= 0
 
-          const isUnavailable = available_date === 'Unavailable'
+          const hasDate = available_date && available_date.trim() !== ''
+          if (!hasDate && !leased) return null  // No data — don't show anything
+
+          const isUnavailable = leased || available_date === 'Unavailable'
           if (isUnavailable) {
             return (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-orange-600 font-medium">No units available</span>
+                <span className="text-sm text-orange-600 font-medium">No units available right now</span>
                 {apartment.source_url && (
                   <a href={apartment.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--color-primary)] hover:underline">
                     Check listing &rarr;

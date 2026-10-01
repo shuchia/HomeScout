@@ -181,6 +181,74 @@ def _rental_dates_by_model(rentals: Optional[List[Any]]) -> Dict[str, List[str]]
     return out
 
 
+def _buckets_ignoring_availability(
+    floor_plans: Optional[List[Any]],
+    dates_by_model: Dict[str, List[str]],
+    today: str,
+    fallback_bathrooms: Optional[float],
+    fallback_available_date: Optional[str],
+    description: Optional[str],
+    city: Optional[str],
+) -> List[Dict[str, Any]]:
+    """Group a fully-leased building's floorplans, with ``available_units = 0``.
+
+    Same shape as a normal bucket so the search join stays uniform; the zero
+    unit count is what marks it unrentable. Only called when the ordinary pass
+    found nothing available, so it never competes with real inventory.
+    """
+    groups: Dict[tuple, Dict[str, Any]] = {}
+    for model in floor_plans or []:
+        if not isinstance(model, dict):
+            continue
+        details = model.get("details")
+        if not isinstance(details, list) or not details:
+            continue
+        beds = parse_bedrooms(details[0])
+        if beds is None:
+            continue
+        baths = parse_bathrooms(details[1] if len(details) > 1 else None)
+        if baths is None:
+            baths = fallback_bathrooms if fallback_bathrooms is not None else 1.0
+        rent = parse_rent(model.get("totalPrice")) or parse_rent(model.get("basePrice"))
+        rent_high = parse_rent_high(model.get("totalPrice")) or parse_rent_high(model.get("basePrice"))
+        sqft = parse_sqft(model.get("squareFeet"))
+        model_id = model.get("modelId")
+
+        key = (beds, float(baths))
+        g = groups.setdefault(key, {
+            "bedrooms": beds, "bathrooms": float(baths),
+            "rents": [], "rents_high": [], "sqfts": [], "dates": [], "model_ids": [],
+        })
+        if rent is not None:
+            g["rents"].append(rent)
+        if rent_high is not None:
+            g["rents_high"].append(rent_high)
+        if sqft is not None:
+            g["sqfts"].append(sqft)
+        if model_id:
+            g["model_ids"].append(str(model_id))
+            g["dates"].extend(dates_by_model.get(str(model_id), []))
+
+    out: List[Dict[str, Any]] = []
+    for g in groups.values():
+        min_rent = min(g["rents"]) if g["rents"] else None
+        out.append({
+            "bedrooms": g["bedrooms"],
+            "bathrooms": g["bathrooms"],
+            "min_rent": min_rent,
+            "max_rent": max(g["rents_high"]) if g["rents_high"] else None,
+            "min_sqft": min(g["sqfts"]) if g["sqfts"] else None,
+            "max_sqft": max(g["sqfts"]) if g["sqfts"] else None,
+            "available_units": 0,
+            "earliest_available_date": _earliest_upcoming(g["dates"], today) or fallback_available_date,
+            "model_ids": g["model_ids"],
+            "pricing_model": _detect_bucket_pricing(
+                description, city, g["bedrooms"], g["bathrooms"], min_rent
+            ),
+        })
+    return out
+
+
 def build_floorplan_buckets(
     floor_plans: Optional[List[Any]],
     rentals: Optional[List[Any]] = None,
@@ -278,11 +346,30 @@ def build_floorplan_buckets(
         if model_id:
             g["model_ids"].append(str(model_id))
 
-    # No available floorplans. If the building carried NO floorplan array at all
-    # (zillow / craigslist / manual — the listing itself is one unit), emit one
-    # implicit bucket from building-level values so the search join is uniform.
-    # If it DID carry floorplans but none are available, emit nothing — the
-    # building genuinely has no current inventory and must not match a search.
+    # No available floorplans. Two different situations.
+    if not groups and had_any_model:
+        # The building carried floorplans but none have units right now. It used
+        # to produce no buckets at all, which made it invisible to search — 124
+        # active QA listings, 8% of the corpus, silently absent.
+        #
+        # They are emitted now with available_units = 0 so they can match a
+        # search and be shown with a "nothing available" caveat. A building that
+        # fits someone's criteria is worth knowing about even when it is fully
+        # leased: you can call, join a waitlist, or check back. What must not
+        # happen is one of these outranking somewhere you can actually rent, so
+        # the search orders zero-unit buckets last and the card labels them.
+        #
+        # Measured 2026-10-01: none of those 124 had a single future-dated unit,
+        # so this is not rescuing "free in August" inventory — apartments.com
+        # reports that as available with a future date, which already works.
+        # These are genuinely full today.
+        unavailable = _buckets_ignoring_availability(
+            floor_plans, dates_by_model, today, fallback_bathrooms,
+            fallback_available_date, description, city,
+        )
+        if unavailable:
+            return unavailable
+
     if not groups:
         if not had_any_model and fallback_bedrooms is not None:
             beds = int(fallback_bedrooms)
