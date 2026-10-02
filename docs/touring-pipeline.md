@@ -1,12 +1,23 @@
 # Touring Pipeline
 
-> Last verified: 2026-05-04 | Source of truth: this doc + the code it references
+> Last verified: 2026-10-02 | Source of truth: this doc + the code it references
+>
+> **Migration 012 (2026-09-27) dropped `tour_pipeline`.** Tours now live in `saved_listings`
+> alongside favourites — one row per (user, listing), with `stage` as pipeline position.
+> Anywhere below that still says `tour_pipeline`, read `saved_listings`; the child tables
+> reference `saved_listing_id`, not `tour_pipeline_id`.
 
 Snugd's core post-favorite flow: the touring pipeline tracks an apartment from "interested" through "decided," capturing notes, ratings, photos, and voice transcriptions along the way, with Pro AI synthesis layered on top.
 
 ## Overview
 
-A user favorites apartments → "Start Touring" creates a `tour_pipeline` row in stage **interested** → user moves through outreach/scheduling/touring → captures observations → 2+ tours triggers Decision Brief → user marks Apply / Pass / Undecided.
+A user favorites apartments → "Start Touring" **promotes the existing `saved_listings` row** to stage **interested** → user moves through outreach/scheduling/touring → captures observations → 2+ tours triggers Decision Brief → user marks Apply / Pass / Undecided.
+
+Favouriting and touring are the same record. `is_favorite` is the star, `stage` is pipeline
+position (NULL = not in the pipeline), and they are **independent** — un-starring a toured
+listing leaves it in the pipeline. `/api/tours` filters `stage IS NOT NULL`; without that
+filter every favourite would appear as a tour. Adding a tour for an already-starred listing
+promotes it; a 409 comes back only if it is already in the pipeline.
 
 ## Quick Commands
 
@@ -31,7 +42,7 @@ python -c "from app.tasks.tour_reminder_tasks import check_tour_reminders; check
 
 | Stage | How entered | Allowed transitions | UI surfaces | AI features (Pro) |
 |-------|-------------|---------------------|-------------|-------------------|
-| `interested` | "Start Touring" on a favorite | → `outreach_sent`, `scheduled` | Email tab CTA, scheduler | Generate inquiry email |
+| `interested` | "Start Touring" promotes the favourite's row | → `outreach_sent`, `scheduled` | Email tab CTA, scheduler | Generate inquiry email |
 | `outreach_sent` | User marks email sent | → `scheduled` | Awaiting-reply badge | — |
 | `scheduled` | `scheduled_date`+`scheduled_time` set | → `toured` (auto on rating) | TourScheduler, day-grouping in dashboard | Day Planner (2+ same day) |
 | `toured` | Star rating set OR manual | → `deciding` (rare) | Capture tab (notes/tags/photos), decision bar | Note enhancement, Decision Brief (2+) |
@@ -39,21 +50,28 @@ python -c "from app.tasks.tour_reminder_tasks import check_tour_reminders; check
 
 ## Tour Data Model
 
-Tour data lives in **Supabase** (no SQLAlchemy `TourModel`). Backend reads/writes via the `supabase_admin` service-role client. Schema is defined in `supabase/migrations/005_tour_pipeline.sql` and `008_tour_contact_info.sql`.
+Tour data lives in **Supabase** (no SQLAlchemy `TourModel`). Backend reads/writes via the `supabase_admin` service-role client. Schema is `supabase/migrations/011_saved_listings.sql`, `012_saved_listings_cutover.sql` and `013_saved_listing_last_change.sql`; `005`/`008` describe the superseded `tour_pipeline` shape.
 
-### `tour_pipeline`
+### `saved_listings` (was `tour_pipeline`)
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | uuid | PK |
 | `user_id` | uuid | FK → auth.users |
-| `apartment_id` | text | snapshot ID at time of favorite |
-| `stage` | text | one of `VALID_TOUR_STAGES` |
+| `apartment_id` | text | null for listings added by URL |
+| `source`, `source_url` | text | `corpus` or `url` |
+| `listing` | jsonb | **the user's own copy of the listing** — authoritative for display |
+| `dedupe_key` | text | generated; unique on (user_id, dedupe_key) so favourite+tour collapse to one row |
+| `is_favorite` | bool | the star, independent of `stage` |
+| `listing_checked_at` | timestamptz | null until the first source check |
+| `availability_status` | text | `live` / `gone` / **`unknown`** — unknown is not a soft `gone` |
+| `last_change`, `last_change_at` | jsonb, timestamptz | unacknowledged diff: `{field: {from, to}}` |
+| `stage` | text | one of `VALID_TOUR_STAGES`, **NULL = not in the pipeline** |
 | `scheduled_date` | date | tour date (separate from time) |
 | `scheduled_time` | time | tour time |
 | `tour_rating` | int | 1–5; setting this is what auto-advances stage to `toured` |
 | `outreach_sent_at`, `toured_at` | timestamptz | set automatically on stage transitions |
 | `inquiry_email_draft` | text | Claude-generated draft, persisted across regenerations |
-| `landlord_email`, `landlord_phone`, `landlord_name` | text | from `008_tour_contact_info.sql` |
+| `contact_email`, `contact_phone` | text | copied from the listing at save time |
 | `decision` | text | `applied` / `pass` / `undecided` / null |
 | `decision_reason` | text | optional free-text rationale |
 | `created_at`, `updated_at` | timestamptz | |
@@ -61,7 +79,7 @@ Tour data lives in **Supabase** (no SQLAlchemy `TourModel`). Backend reads/write
 ### `tour_notes`
 | Field | Notes |
 |-------|-------|
-| `id`, `tour_pipeline_id`, `user_id` | |
+| `id`, `saved_listing_id`, `user_id` | |
 | `content` | typed text or transcribed voice text |
 | `source` | `typed` / `voice` |
 | `transcription_status` | `pending` / `complete` / `failed` (voice notes flow through these; typed notes go straight to `complete`) |
@@ -69,10 +87,10 @@ Tour data lives in **Supabase** (no SQLAlchemy `TourModel`). Backend reads/write
 | `created_at` | |
 
 ### `tour_photos`
-`id`, `tour_pipeline_id`, `user_id`, `s3_key`, `thumbnail_s3_key`, `caption`, `created_at`. URLs are generated by backend; frontend reads `thumbnail_url` / `image_url` from the API response.
+`id`, `saved_listing_id`, `user_id`, `s3_key`, `thumbnail_s3_key`, `caption`, `created_at`. URLs are generated by backend; frontend reads `thumbnail_url` / `image_url` from the API response.
 
 ### `tour_tags`
-`id`, `tour_pipeline_id`, `user_id`, `tag` (text), `sentiment` (`pro` / `con`), `created_at`.
+`id`, `saved_listing_id`, `user_id`, `tag` (text), `sentiment` (`pro` / `con`), `created_at`.
 
 The frontend mirror in `frontend/types/tour.ts` must stay in sync.
 
@@ -139,7 +157,7 @@ Voice notes display with a microphone icon; typed notes with a pencil.
 
 ## TourScheduler
 
-Sets `tour_pipeline.scheduled_date` (date) and `scheduled_time` (time) as separate columns. The `/tours` dashboard groups by `today` / `upcoming` / `all`. When 2+ tours fall on the same date, the **Day Planner** banner appears.
+Sets `saved_listings.scheduled_date` (date) and `scheduled_time` (time) as separate columns. The `/tours` dashboard groups by `today` / `upcoming` / `all`. When 2+ tours fall on the same date, the **Day Planner** banner appears.
 
 ## DayPlanner (Pro)
 
@@ -161,7 +179,7 @@ Backed by `ClaudeService.generate_decision_brief` (Sonnet). Banner appears when 
 
 ## AI Inquiry Email (Pro)
 
-`POST /api/tours/{tour_id}/inquiry-email` generates a landlord email draft referencing the listing and the user's move-in/preferences, asking smart questions about info missing from the listing. Persisted to `tour_pipeline.inquiry_email_draft` so the user can regenerate without losing prior versions until they accept.
+`POST /api/tours/{tour_id}/inquiry-email` generates a landlord email draft referencing the listing and the user's move-in/preferences, asking smart questions about info missing from the listing. Persisted to `saved_listings.inquiry_email_draft` so the user can regenerate without losing prior versions until they accept.
 
 ## Decision Bar
 
@@ -199,7 +217,7 @@ Tap again to clear. The decision shows as a badge on the dashboard `TourCard`.
 | Decision brief blank | User hasn't searched yet — no search context to pass; trigger a search first |
 | DayPlanner missing | Need 2+ tours on the same `scheduled_date`; the `/day-plan` POST also requires you to pass `tour_ids` explicitly |
 | Reminder fired late or early | The 10-min beat tick + 25–35 min window means real fire time can vary by ~10 min |
-| Stage not advancing on rating | Confirm `tour_pipeline.stage` was previously `scheduled` — already-toured tours don't re-advance |
+| Stage not advancing on rating | Confirm `saved_listings.stage` was previously `scheduled` — already-toured tours don't re-advance |
 
 ## Next: Email Response Tracking
 

@@ -212,7 +212,8 @@ Apify actors (overridable by env var):
 | `apartment_service.py` | Search/filter core; floorplan routing behind `USE_FLOORPLAN_SEARCH` |
 | `claude_service.py` | All Anthropic calls — scoring, compare, emails, briefs, day plan |
 | `scoring_service.py` | Heuristic scoring (the non-AI path and the AI fallback) |
-| `floorplans.py` | Floorplan bucket building + per-bucket pricing |
+| `floorplans.py` | Floorplan bucket building + per-bucket pricing. `project_matched_floorplan` returns `rent` (the bucket's price, **None** if unpriced) **and** `rent_for_scoring` (always numeric) — never conflate them |
+| `listing_check.py` | Check one saved listing against its source via `scrape_url()`. Re-projects the saved floorplan after patching, or the building-level patch overwrites the bucket's rent |
 | `pricing_model_detector.py` | Per-unit vs per-person (by-the-room / co-living) detection |
 | `cost_estimator.py` | True-cost monthly + move-in calculation |
 | `commute_service.py` | Commute time computation (Google Maps) |

@@ -104,7 +104,7 @@ Consequence: **`qa.snugd.ai` and local dev serve the search app at `/`**, produc
 | `lib/useCommuteTimes.ts` | Commute times hook |
 | `hooks/useComparison.ts` | Zustand store (persisted) — comparison selection + `SearchContext` |
 | `hooks/useFavoritesStore.ts` | Zustand store owning favourites. **Shared on purpose**: `FavoriteButton` renders once per `ApartmentCard`, so per-hook state meant every card fetched the whole list — QA logs showed 11 identical `GET /api/saved-listings` in one second. `inFlight` coalesces concurrent callers onto a single request |
-| `hooks/useFavorites.ts` | Thin wrapper over that store. Each row carries its own `listing`, so there is no batch hydration and no "apartment not found" state. **Owns the free-tier 5-favorite cap** (`atLimit`) — the backend does not enforce it |
+| `hooks/useFavorites.ts` | Thin wrapper over that store. `addFavorite(id, matchedFloorplan)` — the floorplan is what makes the saved copy match the card. Each row carries its own `listing`, so there is no batch hydration and no "apartment not found" state. **Owns the free-tier 5-favorite cap** (`atLimit`) — the backend does not enforce it |
 
 **Lazy AI**: `searchApartments()` returns immediately with heuristic scores; `scoreBatch()` is a separate call that fills in Claude scoring for Pro users. Don't block first paint on it.
 
@@ -160,6 +160,7 @@ Two Vercel projects — `snugd` (production, `snugd.ai`) and `snugd-dev`. `qa.sn
 | Floorplan badges missing | `NEXT_PUBLIC_FLOORPLAN_SEARCH` is build-time; rebuild, don't just redeploy |
 | Auth spinner forever | Should be impossible — `AuthContext` has a 5 s timeout; if it happens, check that timeout wasn't removed |
 | E2E auth mock ignored | Only honored when `NODE_ENV !== 'production'` |
+| Favourite shows a rent the search card didn't | `FavoriteButton` must receive `matchedFloorplan` from `ApartmentCard`; without it the server saves the building row, whose rent belongs to whichever plan is cheapest |
 | Types drift from API | `types/*.ts` are hand-maintained against `backend/app/schemas.py` |
 | Authed requests 401 with no `JWT verification failed` in the API logs | The header was never sent, not rejected. `auth.py` returns 401 for a missing header too, and logs a warning only for an invalid one — the absent warning is the tell. Means the token store is empty; check that refresh is attempted when `getAccessToken()` is null |
 | A list endpoint is hit N times per page | A hook with per-instance state rendered per card. Favourites hit this; the fix is a shared store with an `inFlight` promise, not a `useEffect` dep tweak |

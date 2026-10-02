@@ -27,9 +27,8 @@ one card for display.**
 
 ## Data model
 
-The building row (`apartments`) stays authoritative and unchanged — favorites,
-tours, and dedup all key off it. A **child table** holds the searchable
-granularity:
+The building row (`apartments`) stays authoritative for **ingestion and dedup**,
+and is unchanged. A **child table** holds the searchable granularity:
 
 ```
 apartment_floorplans
@@ -37,7 +36,7 @@ apartment_floorplans
   bedrooms, bathrooms          -- one bucket per (beds, baths)
   min_rent, max_rent           -- range across available units; NULL = price-on-request
   min_sqft, max_sqft
-  available_units              -- summed; a bucket exists only if > 0
+  available_units              -- summed; 0 only for a fully-leased building (see below)
   earliest_available_date
   pricing_model                -- "per_unit" | "per_person"  ← the per-person hook
   UNIQUE (apartment_id, bedrooms, bathrooms)
@@ -252,3 +251,68 @@ freshness windows — but worth remembering when reconciling the two.
   noted for v1.1.
 - **Per-person whole-unit is an estimate** (`per_bed × bedrooms`); it assumes
   full occupancy and doesn't model shared common-area fees.
+
+## Later decisions (2026-09-30 → 10-02)
+
+### `rent` is the bucket's price, or nothing
+
+`project_matched_floorplan` returns **two** rent fields:
+
+| Field | Meaning | When the bucket is unpriced |
+|---|---|---|
+| `rent` | the bucket's own price: `min_rent`, else `max_rent` | **`None`** |
+| `rent_for_scoring` | the always-numeric value the heuristic compares to budget | falls back to the building's rent |
+
+One field could not honestly serve both. It used to: `rent` fell back to the
+building's figure so scoring could do `rent <= budget`, and **every consumer
+that read it as a price published a number the property never quoted.** That
+shipped twice in one week — a card reading "Price on request" above
+"Est. True Cost $2,700/mo", and AI reasoning asserting "$3,390 advertised rent"
+on a listing with no published price. Both read `rent` in good faith.
+
+A consumer that wants something displayable now gets `None` and has to decide
+what to do about it. The card shows "Price on request" and, instead of a total,
+*"Budget +$235/mo on top of the quoted rent"* — the extras are sound because
+utilities and fees are estimated from the building and its zip, not from the
+unit's rent. `claude_service.prepare_apartment_for_scoring` omits `rent`,
+`true_cost_monthly` and `cost_details` entirely for these and sends
+`price_on_request: true` plus `est_monthly_extras`; both system prompts carry a
+rule forbidding the model to state, estimate or imply a price for them.
+
+### Fully-leased buildings are shown, not hidden
+
+`build_floorplan_buckets` used to emit nothing when every floorplan had zero
+available units, so those buildings were **invisible to search** — 124 active QA
+listings, 8% of the corpus. `_buckets_ignoring_availability()` now emits buckets
+with `available_units = 0`, and they are ordered **behind anything rentable**
+twice over: in the `DISTINCT ON` tiebreak (so a building with any rentable
+bucket shows that one) and in the final score sort. The card says "No units
+available right now".
+
+This is a product decision, not a bug fix — it adds unrentable listings to
+results. The zero-unit path fires only when the ordinary pass found nothing, so
+a partially-available building never gains phantom buckets.
+
+### A saved listing is a floorplan, not a building
+
+Favouriting sent only `apartment_id`, so the server stored the collapsed
+building row — which carries a rent even when the matched floorplan is
+price-on-request, because that rent belongs to whichever plan *is* priced. A
+card reading "Price on request" became a favourite reading "$3,390/mo".
+
+The client sends `{bedrooms, bathrooms}` of the bucket it rendered, because
+**only the client knows which card was clicked** — the same building shows
+different prices to two users searching different sizes. The server projects
+that bucket with the same `project_matched_floorplan` search uses.
+
+`services/listing_check.py` re-projects after every source check, for the same
+reason: its patch is building-level, so without re-projection it would overwrite
+the bucket's rent with the building's on the first check *and report the
+substitution to the user as a price change*. Buckets are rebuilt from the
+fetched payload exactly as ingestion builds them; a plan the building no longer
+lists keeps its identity with `available_units = 0` rather than falling back to
+the cheapest one.
+
+**Existing rows cannot be backfilled** — which floorplan was clicked was never
+recorded. Un-favouriting (which deletes the row outright when nothing would
+remain) and re-favouriting is the repair.
