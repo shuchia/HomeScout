@@ -890,6 +890,21 @@ class ApifyService(BaseScraper):
         elif models_list and isinstance(models_list, list) and len(models_list) > 0:
             # Models exist but ALL have 0 available units
             available_date = "Unavailable"
+        else:
+            # No models at all. Single-unit and by-the-room listings publish
+            # only `rentals`, and those objects are keyed by `key` rather than
+            # `modelId` — so the join above can never reach them and this used
+            # to fall through leaving available_date None.
+            #
+            # The date was in the payload the whole time: 9 Hancock St carried
+            # availableDate 2026-11-01 while the card said availability could
+            # not be found. Measured 2026-10-03: 65% of listings have no
+            # models, and 86% of those have a date sitting in rentals — about
+            # 56% of the whole corpus, which matches the independently counted
+            # share of rows with an empty available_date.
+            from app.services.floorplans import earliest_rental_date
+
+            available_date = earliest_rental_date(raw.get("rentals"))
 
         # Extract contact info from listing data
         contact_phone = None

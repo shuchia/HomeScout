@@ -1102,3 +1102,96 @@ async def _backfill_floorplans(batch_size: int, only_missing: bool) -> Dict[str,
         "buildings_with_buckets": buildings_with_buckets,
         "buckets_created": buckets_created,
     }
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def backfill_available_dates(self, batch_size: int = 500, apply: bool = False) -> Dict[str, Any]:
+    """Recover availability dates already held in ``available_units``.
+
+    The scrape stored the rentals array verbatim, but the extraction in
+    ``apify_service`` was gated on ``models`` being non-empty. Single-unit and
+    by-the-room listings publish no models and key their rentals by ``key``
+    rather than ``modelId``, so their dates were dropped on the floor — 9
+    Hancock St held ``availableDate: 2026-11-01`` while the card said
+    availability could not be found.
+
+    Measured on QA 2026-10-03: 65% of listings carry no models and 86% of those
+    have a date in rentals, ~56% of the corpus. The bulk list endpoint
+    independently counted 56.1% of rows with an empty ``available_date``.
+
+    Reads from Postgres only — no Apify cost. Dry run by default; pass
+    ``apply=True`` to write. Only fills rows whose ``available_date`` is empty,
+    so a real date already present is never overwritten.
+    """
+    from app.tasks._async_runner import run_async
+
+    return run_async(_backfill_available_dates(batch_size=batch_size, apply=apply))
+
+
+async def _backfill_available_dates(batch_size: int, apply: bool) -> Dict[str, Any]:
+    from sqlalchemy import select, or_
+    from app.models.apartment import ApartmentModel
+    from app.services.floorplans import earliest_rental_date
+
+    scanned = 0
+    recoverable = 0
+    updated = 0
+    no_date_available = 0
+    samples: List[Dict[str, Any]] = []
+    last_id = ""
+
+    while True:
+        async with get_session_context() as session:
+            stmt = (
+                select(ApartmentModel)
+                .where(
+                    ApartmentModel.is_active == 1,
+                    or_(
+                        ApartmentModel.available_date.is_(None),
+                        ApartmentModel.available_date == "",
+                    ),
+                )
+                .order_by(ApartmentModel.id)
+                .limit(batch_size)
+            )
+            if last_id:
+                stmt = stmt.where(ApartmentModel.id > last_id)
+
+            rows = (await session.execute(stmt)).scalars().all()
+            if not rows:
+                break
+
+            for apt in rows:
+                scanned += 1
+                last_id = apt.id
+
+                found = earliest_rental_date(apt.available_units)
+                if not found:
+                    no_date_available += 1
+                    continue
+
+                recoverable += 1
+                if len(samples) < 10:
+                    samples.append(
+                        {"id": apt.id, "address": apt.address, "available_date": found}
+                    )
+                if apply:
+                    apt.available_date = found
+                    updated += 1
+
+            if apply:
+                await session.commit()
+
+    logger.info(
+        f"backfill_available_dates: scanned={scanned} recoverable={recoverable} "
+        f"updated={updated} apply={apply}"
+    )
+    return {
+        "status": "completed",
+        "apply": apply,
+        "scanned": scanned,
+        "recoverable": recoverable,
+        "updated": updated,
+        "no_date_in_payload": no_date_available,
+        "samples": samples,
+    }

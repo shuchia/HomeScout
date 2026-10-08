@@ -326,3 +326,145 @@ if __name__ == "__main__":
             traceback.print_exc()
     print(f"\n{len(fns) - failures}/{len(fns)} passed")
     raise SystemExit(1 if failures else 0)
+
+
+class TestRentLabelPayloadShape:
+    """apartments.com emits two model shapes; the actor passes through whichever
+    the property page uses.
+
+    Reading only totalPrice/basePrice turned every newly-captured priced
+    floorplan into "price on request". Measured on QA 2026-10-03: 38 of 781
+    models (4.9%) carried a price *only* in rentLabel, and zero models were
+    genuinely unpriced — so every price-on-request card in that sample was a
+    parse failure, not a property withholding a price.
+    """
+
+    def test_rent_label_is_read(self):
+        from app.services.floorplans import build_floorplan_buckets
+
+        buckets = build_floorplan_buckets([
+            {
+                "modelId": "7z0mc3z",
+                "details": ["1 Bed", "1 Bath"],
+                "rentLabel": "$4,188",
+                "squareFeet": "631",
+                "availability": "1 Available units",
+            },
+        ])
+        assert len(buckets) == 1
+        assert buckets[0]["min_rent"] == 4188
+        assert buckets[0]["max_rent"] == 4188
+
+    def test_rent_label_range(self):
+        from app.services.floorplans import build_floorplan_buckets
+
+        buckets = build_floorplan_buckets([
+            {
+                "modelId": "m1",
+                "details": ["Studio", "1 Bath"],
+                "rentLabel": "$3,500 - 3,630",
+                "availability": "2 Available units",
+            },
+        ])
+        assert buckets[0]["min_rent"] == 3500
+        assert buckets[0]["max_rent"] == 3630
+
+    def test_old_fields_still_win(self):
+        """A payload carrying both must keep the established precedence."""
+        from app.services.floorplans import model_price
+
+        low, high = model_price(
+            {"totalPrice": "$2,000", "basePrice": "$2,100", "rentLabel": "$9,999"}
+        )
+        assert (low, high) == (2000, 2000)
+
+    def test_genuinely_unpriced_stays_unpriced(self):
+        """"Call for Rent" in any field must remain price-on-request — the whole
+        point is that unknown and unread stop being the same thing."""
+        from app.services.floorplans import build_floorplan_buckets
+
+        buckets = build_floorplan_buckets([
+            {
+                "modelId": "m1",
+                "details": ["2 Beds", "2 Baths"],
+                "rentLabel": "Call for Rent",
+                "availability": "1 Available units",
+            },
+        ])
+        assert buckets[0]["min_rent"] is None
+
+    def test_rent_label_on_fully_leased_building(self):
+        """The zero-available path parses prices too, or a fully-leased building
+        in the new format shows no price at all."""
+        from app.services.floorplans import build_floorplan_buckets
+
+        buckets = build_floorplan_buckets([
+            {
+                "modelId": "m1",
+                "details": ["1 Bed", "1 Bath"],
+                "rentLabel": "$2,750",
+                "availability": "0 Available units",
+            },
+        ])
+        assert len(buckets) == 1
+        assert buckets[0]["available_units"] == 0
+        assert buckets[0]["min_rent"] == 2750
+
+
+class TestRentalsWithoutModels:
+    """Single-unit and by-the-room listings publish no `models` at all.
+
+    Their rental objects are keyed by `key`, not `modelId`, so the model join
+    can never reach them. 9 Hancock St carried availableDate 2026-11-01 while
+    the card said availability could not be found.
+    """
+
+    HANCOCK = [{
+        "key": "zehmbdy",
+        "beds": 1,
+        "baths": 1,
+        "details": ["1 Bed", "1 Bath"],
+        "basePrice": 1625,
+        "totalPrice": 1625,
+        "unitCount": 1,
+        "squareFeet": 1100,
+        "availability": "11/01/26",
+        "availableDate": "2026-11-01T00:00:00-04:00",
+    }]
+
+    def test_rental_dates_needs_no_model_id(self):
+        from app.services.floorplans import rental_dates
+
+        assert rental_dates(self.HANCOCK) == ["2026-11-01"]
+
+    def test_fallback_bucket_gets_the_date(self):
+        from app.services.floorplans import build_floorplan_buckets
+
+        buckets = build_floorplan_buckets(
+            [],                      # no models — the whole point
+            self.HANCOCK,
+            fallback_bedrooms=1,
+            fallback_bathrooms=1.0,
+            fallback_rent=1625,
+            fallback_available_date=None,
+            today="2026-10-03",
+        )
+        assert len(buckets) == 1
+        assert buckets[0]["earliest_available_date"] == "2026-11-01"
+
+    def test_explicit_fallback_date_still_wins(self):
+        from app.services.floorplans import build_floorplan_buckets
+
+        buckets = build_floorplan_buckets(
+            [], self.HANCOCK,
+            fallback_bedrooms=1, fallback_bathrooms=1.0, fallback_rent=1625,
+            fallback_available_date="2026-10-15", today="2026-10-03",
+        )
+        assert buckets[0]["earliest_available_date"] == "2026-10-15"
+
+    def test_no_rentals_no_date(self):
+        from app.services.floorplans import earliest_rental_date
+
+        assert earliest_rental_date(None) is None
+        assert earliest_rental_date([]) is None
+        assert earliest_rental_date([{"key": "x"}]) is None

@@ -181,6 +181,60 @@ def _rental_dates_by_model(rentals: Optional[List[Any]]) -> Dict[str, List[str]]
     return out
 
 
+# Price fields on a floorplan model, in precedence order.
+#
+# apartments.com payloads come in two shapes and the actor emits whichever the
+# property page uses. The older one carries ``totalPrice``/``basePrice``; newer
+# captures carry ``rentLabel`` instead, with no price fields at all. Reading
+# only the first pair silently turned every newly-captured priced floorplan
+# into "price on request" — measured 2026-10-03 at 4.9% of models and rising
+# with every sweep, with *zero* models genuinely lacking a price.
+#
+# A property uses one shape or the other, never both (80 listings sampled, 0
+# mixed), so this is a fallback chain rather than a reconciliation.
+_MODEL_PRICE_FIELDS = ("totalPrice", "basePrice", "rentLabel")
+
+
+def model_price(model: Dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
+    """``(low, high)`` price for one floorplan model, across payload shapes.
+
+    Returns ``(None, None)`` when the model is genuinely price-on-request —
+    which must stay distinguishable from "we could not read the field".
+    """
+    for field in _MODEL_PRICE_FIELDS:
+        raw = model.get(field)
+        low = parse_rent(raw)
+        if low is not None:
+            return low, parse_rent_high(raw)
+    return None, None
+
+
+def rental_dates(rentals: Optional[List[Any]]) -> List[str]:
+    """Every ``YYYY-MM-DD`` availability date on a building's rentals array.
+
+    Unlike :func:`_rental_dates_by_model` this does not need a ``modelId``.
+    Single-unit and by-the-room listings carry no ``models`` at all and their
+    rental objects are keyed by ``key``, so the model join can never reach
+    them — which is how ~56% of the corpus ended up with no availability date
+    while holding one in ``available_units[].availableDate``.
+    """
+    out: List[str] = []
+    if not isinstance(rentals, list):
+        return out
+    for r in rentals:
+        if not isinstance(r, dict):
+            continue
+        raw = r.get("availableDate")
+        if isinstance(raw, str) and len(raw) >= 10:
+            out.append(raw[:10])
+    return out
+
+
+def earliest_rental_date(rentals: Optional[List[Any]], today: Optional[str] = None) -> Optional[str]:
+    """Earliest upcoming availability date across a building's rentals."""
+    return _earliest_upcoming(rental_dates(rentals), today or date.today().isoformat())
+
+
 def _buckets_ignoring_availability(
     floor_plans: Optional[List[Any]],
     dates_by_model: Dict[str, List[str]],
@@ -209,8 +263,7 @@ def _buckets_ignoring_availability(
         baths = parse_bathrooms(details[1] if len(details) > 1 else None)
         if baths is None:
             baths = fallback_bathrooms if fallback_bathrooms is not None else 1.0
-        rent = parse_rent(model.get("totalPrice")) or parse_rent(model.get("basePrice"))
-        rent_high = parse_rent_high(model.get("totalPrice")) or parse_rent_high(model.get("basePrice"))
+        rent, rent_high = model_price(model)
         sqft = parse_sqft(model.get("squareFeet"))
         model_id = model.get("modelId")
 
@@ -309,11 +362,7 @@ def build_floorplan_buckets(
         baths = parse_bathrooms(details[1] if len(details) > 1 else None)
         if baths is None:
             baths = fallback_bathrooms if fallback_bathrooms is not None else 1.0
-        rent = parse_rent(model.get("totalPrice"))
-        rent_high = parse_rent_high(model.get("totalPrice"))
-        if rent is None:
-            rent = parse_rent(model.get("basePrice"))
-            rent_high = parse_rent_high(model.get("basePrice"))
+        rent, rent_high = model_price(model)
         sqft = parse_sqft(model.get("squareFeet"))
         model_id = model.get("modelId")
 
@@ -383,7 +432,12 @@ def build_floorplan_buckets(
                     "min_sqft": fallback_sqft,
                     "max_sqft": fallback_sqft,
                     "available_units": 1,
-                    "earliest_available_date": fallback_available_date,
+                    # A listing with no models still carries its date in
+                    # `rentals`; without this the single fallback bucket has no
+                    # date and the card reads "availability unknown".
+                    "earliest_available_date": (
+                        fallback_available_date or earliest_rental_date(rentals, today)
+                    ),
                     "model_ids": [],
                     "pricing_model": _detect_bucket_pricing(
                         description, city, beds, baths, fallback_rent

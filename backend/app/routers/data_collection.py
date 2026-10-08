@@ -967,6 +967,37 @@ async def backfill_floorplans_endpoint(
     return {"status": "dispatched", "task_id": task.id, "only_missing": only_missing}
 
 
+@router.post("/backfill-available-dates")
+async def backfill_available_dates_endpoint(
+    apply: bool = Query(False),
+    batch_size: int = Query(500, ge=1, le=1000),
+):
+    """Recover availability dates already sitting in `available_units`.
+
+    The scrape stored the rentals array verbatim but the extraction was gated
+    on `models` being non-empty. Single-unit and by-the-room listings publish
+    no models and key their rentals by `key` rather than `modelId`, so their
+    dates were dropped — 9 Hancock St held availableDate 2026-11-01 while the
+    card said availability could not be found.
+
+    Reads from Postgres only, so there is no Apify cost. Dry run by default:
+    it reports how many rows are recoverable without writing. Pass apply=true
+    to persist. Rows that already carry a date are never touched.
+
+    Run `backfill-floorplans?only_missing=false` afterwards so the rebuilt
+    buckets pick the recovered dates up.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import backfill_available_dates
+    task = backfill_available_dates.apply_async(
+        kwargs={"apply": apply, "batch_size": batch_size},
+        queue="maintenance",
+    )
+    return {"status": "dispatched", "task_id": task.id, "apply": apply}
+
+
 @router.post("/normalize-boston-cities")
 async def normalize_boston_cities():
     """One-shot fix for Boston listings tagged with a neighbourhood name.

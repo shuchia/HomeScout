@@ -193,3 +193,68 @@ def test_past_dates_collapse_to_now(scraper):
     )
     listing = scraper._normalize_apartments_com_listing(raw)
     assert listing.available_date == "Now"
+
+
+# --- Listings with no models at all (single-unit / by-the-room) ---
+#
+# These publish only `rentals`, and those objects are keyed by `key` rather
+# than `modelId`, so the model join can never reach them. The extraction used
+# to fall through every branch and leave available_date None.
+#
+# Measured on QA 2026-10-03: 65% of listings carry no models, and 86% of those
+# have a date sitting in rentals — ~56% of the corpus, matching the
+# independently counted share of rows with an empty available_date.
+
+_HANCOCK_RENTAL = {
+    "key": "zehmbdy",
+    "beds": 1,
+    "baths": 1,
+    "details": ["1 Bed", "1 Bath"],
+    "basePrice": 1625,
+    "totalPrice": 1625,
+    "unitCount": 1,
+    "squareFeet": 1100,
+    "availability": "11/01/26",
+    "availableDate": "2099-11-01T00:00:00-04:00",
+}
+
+
+def test_no_models_reads_date_from_rentals(scraper):
+    """The 9 Hancock St case: date present in rentals, no models array."""
+    raw = _make_raw(rentals=[_HANCOCK_RENTAL])
+    listing = scraper._normalize_apartments_com_listing(raw)
+    assert listing is not None
+    assert listing.available_date == "2099-11-01"
+
+
+def test_no_models_picks_earliest_upcoming(scraper):
+    raw = _make_raw(rentals=[
+        {"key": "a", "availableDate": "2099-12-01T00:00:00-04:00"},
+        {"key": "b", "availableDate": "2099-09-15T00:00:00-04:00"},
+    ])
+    listing = scraper._normalize_apartments_com_listing(raw)
+    assert listing.available_date == "2099-09-15"
+
+
+def test_no_models_no_rentals_leaves_date_unset(scraper):
+    """Nothing to go on must stay unset, not become a guess."""
+    raw = _make_raw()
+    listing = scraper._normalize_apartments_com_listing(raw)
+    assert listing is not None
+    assert not listing.available_date
+
+
+def test_empty_models_list_is_not_treated_as_unavailable(scraper):
+    """An empty models array is 'this listing has no floorplans', not
+    'every floorplan is fully leased' — the latter is what "Unavailable"
+    means and it must not be asserted here."""
+    raw = _make_raw(models=[], rentals=[_HANCOCK_RENTAL])
+    listing = scraper._normalize_apartments_com_listing(raw)
+    assert listing.available_date == "2099-11-01"
+
+
+def test_models_all_zero_units_still_unavailable(scraper):
+    """The existing contract must not regress: models present but all leased."""
+    raw = _make_raw(models=[{"modelId": "m1", "availability": "0 Available units"}])
+    listing = scraper._normalize_apartments_com_listing(raw)
+    assert listing.available_date == "Unavailable"
