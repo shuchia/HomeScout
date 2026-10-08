@@ -4,12 +4,49 @@ Uses content hashing and fuzzy address matching.
 """
 import hashlib
 import logging
+import re
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
 from app.services.normalization.address_standardizer import AddressStandardizer
 
 logger = logging.getLogger(__name__)
+
+
+# apartments.com property id, the last path segment of a listing URL:
+# https://www.apartments.com/south-standard/j5ve2k4/ -> j5ve2k4
+_URL_ID = re.compile(r"/([a-z0-9]{5,12})/?$", re.I)
+
+
+def source_key(listing: Dict[str, Any]) -> Optional[str]:
+    """The source's own stable identifier for a listing, as ``source:id``.
+
+    Both the content hash and the fuzzy matcher key on *rent*, so a building
+    whose advertised headline price moves enough is inserted as a brand new
+    row. The source id does not move. Measured on QA 2026-10-03: 583 of 3,737
+    rows (15.6%) were repeat captures of a property already in the corpus,
+    every market between 12.7% and 26%, accumulating over a median 50 days.
+    235 Old Colony was present twice under ``j5ve2k4`` with its URL slug
+    changed from ``south-standard`` to ``south-standard-boston-ma``.
+
+    ``external_id`` is preferred; the URL token is a fallback so this works
+    even where external_id was never populated. Returns None when neither is
+    available, leaving the hash and fuzzy paths to decide.
+    """
+    source = (listing.get("source") or "").strip().lower()
+    if not source:
+        return None
+
+    ext = (listing.get("external_id") or "").strip()
+    if ext:
+        return f"{source}:{ext}"
+
+    url = (listing.get("source_url") or "").strip()
+    if url:
+        m = _URL_ID.search(url.split("?")[0])
+        if m:
+            return f"{source}:{m.group(1).lower()}"
+    return None
 
 
 @dataclass
@@ -26,9 +63,10 @@ class DeduplicationService:
     """
     Service for detecting and handling duplicate apartment listings.
 
-    Uses two methods:
-    1. Content hash - SHA256 of normalized address + rent + beds/baths
-    2. Fuzzy matching - Address similarity > 90% with same rent/beds
+    Uses three methods, in order of confidence:
+    1. Source key - the source's own stable id for the listing (exact)
+    2. Content hash - SHA256 of normalized address + rent + beds/baths
+    3. Fuzzy matching - Address similarity > 90% with same rent/beds
 
     Deduplication strategy:
     - Keep the listing with highest data quality score
@@ -73,7 +111,8 @@ class DeduplicationService:
         self,
         listing: Dict[str, Any],
         existing_hashes: Dict[str, str],
-        existing_listings: Optional[List[Dict[str, Any]]] = None
+        existing_listings: Optional[List[Dict[str, Any]]] = None,
+        existing_source_keys: Optional[Dict[str, str]] = None,
     ) -> DeduplicationResult:
         """
         Check if a listing is a duplicate.
@@ -82,11 +121,27 @@ class DeduplicationService:
             listing: Listing to check
             existing_hashes: Map of content_hash -> listing_id
             existing_listings: Optional list of existing listings for fuzzy matching
+            existing_source_keys: Optional map of source_key -> listing_id
 
         Returns:
             DeduplicationResult
         """
         content_hash = self.generate_content_hash(listing)
+
+        # Source id first: it is exact and, unlike the two checks below, does
+        # not move when the advertised rent does. Without it a price change
+        # large enough to clear the hash and the 10% fuzzy window inserts the
+        # same property again.
+        if existing_source_keys:
+            key = source_key(listing)
+            if key and key in existing_source_keys:
+                return DeduplicationResult(
+                    is_duplicate=True,
+                    content_hash=content_hash,
+                    matched_id=existing_source_keys[key],
+                    match_reason="source_key",
+                    similarity_score=1.0,
+                )
 
         # Check exact hash match
         if content_hash in existing_hashes:
@@ -229,7 +284,8 @@ class DeduplicationService:
         self,
         listings: List[Dict[str, Any]],
         existing_hashes: Optional[Dict[str, str]] = None,
-        existing_listings: Optional[List[Dict[str, Any]]] = None
+        existing_listings: Optional[List[Dict[str, Any]]] = None,
+        existing_source_keys: Optional[Dict[str, str]] = None,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], int]:
         """
         Deduplicate a batch of listings.
@@ -254,7 +310,9 @@ class DeduplicationService:
 
         for i, listing in enumerate(listings):
             # Check against existing data
-            result = self.check_duplicate(listing, existing_hashes, existing_listings)
+            result = self.check_duplicate(
+                listing, existing_hashes, existing_listings, existing_source_keys
+            )
 
             if result.is_duplicate:
                 duplicates.append({
@@ -330,6 +388,7 @@ class DeduplicationService:
         listings: List[Dict[str, Any]],
         existing_hashes: Dict[str, str],
         existing_listings: Optional[List[Dict[str, Any]]] = None,
+        existing_source_keys: Optional[Dict[str, str]] = None,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Deduplicate a batch, returning new listings, updates for re-seen, and skipped duplicates.
@@ -350,10 +409,24 @@ class DeduplicationService:
         updates = []
         skipped = []
         batch_hashes = {}  # Track hashes within this batch
+        batch_keys = {}    # Track source keys within this batch
+        existing_source_keys = existing_source_keys or {}
 
         for listing in listings:
             content_hash = self.generate_content_hash(listing)
             listing["content_hash"] = content_hash
+
+            # The source's own id, checked before the rent-sensitive paths —
+            # a re-seen property whose price moved is an update, not a new row.
+            key = source_key(listing)
+            if key and key in existing_source_keys:
+                updates.append(
+                    self._build_reseen_update(listing, existing_source_keys[key], content_hash)
+                )
+                continue
+            if key and key in batch_keys:
+                skipped.append(listing)
+                continue
 
             # Check against existing DB data
             if content_hash in existing_hashes:
@@ -364,7 +437,9 @@ class DeduplicationService:
 
             # Check fuzzy match against existing
             if existing_listings:
-                dup_result = self.check_duplicate(listing, existing_hashes, existing_listings)
+                dup_result = self.check_duplicate(
+                    listing, existing_hashes, existing_listings, existing_source_keys
+                )
                 if dup_result.is_duplicate and dup_result.matched_id:
                     updates.append(
                         self._build_reseen_update(listing, dup_result.matched_id, content_hash)
@@ -377,6 +452,8 @@ class DeduplicationService:
                 continue
 
             batch_hashes[content_hash] = True
+            if key:
+                batch_keys[key] = True
             new_listings.append(listing)
 
         logger.info(

@@ -195,12 +195,15 @@ async def _scrape_city(
             # Get existing hashes from database if enabled
             existing_hashes = {}
             existing_listings = []
+            existing_source_keys = {}
 
             if is_database_enabled():
-                existing_hashes, existing_listings = await _get_existing_data(city)
+                existing_hashes, existing_listings, existing_source_keys = (
+                    await _get_existing_data(city)
+                )
 
             unique, duplicates, _ = deduplicator.deduplicate_batch(
-                normalized, existing_hashes, existing_listings
+                normalized, existing_hashes, existing_listings, existing_source_keys
             )
 
             result["new"] = len(unique)
@@ -225,9 +228,11 @@ async def _get_existing_data(city: str):
     """
     from sqlalchemy import select
     from app.models.apartment import ApartmentModel
+    from app.services.deduplication.deduplicator import source_key
 
     existing_hashes = {}
     existing_listings = []
+    existing_source_keys = {}
 
     try:
         async with get_session_context() as session:
@@ -243,6 +248,28 @@ async def _get_existing_data(city: str):
             for row in result:
                 existing_hashes[row.content_hash] = row.id
 
+            # Source ids, globally and including inactive rows for the same
+            # reason the hashes are: a decayed row still occupies the identity.
+            # This is what stops a property being re-inserted when its
+            # advertised rent moves past the hash and the 10% fuzzy window.
+            stmt = select(
+                ApartmentModel.id,
+                ApartmentModel.source,
+                ApartmentModel.external_id,
+                ApartmentModel.source_url,
+            )
+            result = await session.execute(stmt)
+            for row in result:
+                key = source_key({
+                    "source": row.source,
+                    "external_id": row.external_id,
+                    "source_url": row.source_url,
+                })
+                # First writer wins: the oldest row keeps the identity, so a
+                # re-see updates it rather than hopping between duplicates.
+                if key and key not in existing_source_keys:
+                    existing_source_keys[key] = row.id
+
             # Get city-scoped listings for fuzzy address matching
             stmt = select(ApartmentModel).where(
                 ApartmentModel.city.ilike(f"%{city}%"),
@@ -255,7 +282,7 @@ async def _get_existing_data(city: str):
     except Exception as e:
         logger.warning(f"Could not get existing data: {e}")
 
-    return existing_hashes, existing_listings
+    return existing_hashes, existing_listings, existing_source_keys
 
 
 async def _save_listings(listings: List[Dict[str, Any]], job_id: str):
@@ -439,10 +466,12 @@ async def _scrape_market(task, market_id: str) -> Dict[str, Any]:
         dup_count = 0
 
         if normalized:
-            existing_hashes, existing_listings = await _get_existing_data(city)
+            existing_hashes, existing_listings, existing_source_keys = (
+                await _get_existing_data(city)
+            )
 
             new_listings, updates, dups = deduplicator.deduplicate_batch_with_updates(
-                normalized, existing_hashes, existing_listings
+                normalized, existing_hashes, existing_listings, existing_source_keys
             )
 
             new_count = len(new_listings)

@@ -998,6 +998,33 @@ async def backfill_available_dates_endpoint(
     return {"status": "dispatched", "task_id": task.id, "apply": apply}
 
 
+@router.post("/merge-duplicate-properties")
+async def merge_duplicate_properties_endpoint(apply: bool = Query(False)):
+    """Collapse rows that are repeat captures of one source listing.
+
+    Measured on QA 2026-10-03: 583 of 3,737 rows (15.6%) were duplicates of a
+    property already held, accumulating over a median 50 days because both the
+    content hash and the fuzzy matcher key on rent. Ingestion now dedupes on
+    the source id, so this is a one-off backlog clear.
+
+    Losers are **deactivated, not deleted** — `saved_listings.apartment_id`
+    lives in Supabase and points at these ids across a database boundary, so
+    deleting would orphan favourites and tours. Deactivating removes them from
+    search and is reversible.
+
+    Dry run by default; the response lists what would change. Pass apply=true
+    to write.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import merge_duplicate_properties
+    task = merge_duplicate_properties.apply_async(
+        kwargs={"apply": apply}, queue="maintenance"
+    )
+    return {"status": "dispatched", "task_id": task.id, "apply": apply}
+
+
 @router.post("/normalize-boston-cities")
 async def normalize_boston_cities():
     """One-shot fix for Boston listings tagged with a neighbourhood name.

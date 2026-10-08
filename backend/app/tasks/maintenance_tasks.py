@@ -1195,3 +1195,112 @@ async def _backfill_available_dates(batch_size: int, apply: bool) -> Dict[str, A
         "no_date_in_payload": no_date_available,
         "samples": samples,
     }
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def merge_duplicate_properties(self, apply: bool = False) -> Dict[str, Any]:
+    """Collapse rows that are repeat captures of one source listing.
+
+    The content hash and the fuzzy matcher both key on rent, so a property
+    whose advertised price moved far enough was inserted again. Measured on QA
+    2026-10-03: 583 of 3,737 rows (15.6%), every market between 12.7% and 26%,
+    accumulating over a median 50 days. Ingestion now dedupes on the source id
+    (see deduplicator.source_key), which stops new ones; this clears the
+    backlog.
+
+    Losers are **deactivated, not deleted**. `saved_listings.apartment_id`
+    lives in Supabase and references these ids across a database boundary, so
+    no transaction can repoint it — deleting would orphan every favourite and
+    tour pointing at a merged row. is_active = 0 takes them out of search
+    (which is the whole point) while leaving the id resolvable, and is
+    reversible if a merge turns out to be wrong.
+
+    The survivor is the row search would have shown anyway: freshest, then
+    most-seen, then oldest. It inherits the group's earliest first_seen_at and
+    the sum of times_seen, so the longitudinal signal survives the merge.
+
+    Dry run by default.
+    """
+    from app.tasks._async_runner import run_async
+
+    return run_async(_merge_duplicate_properties(apply=apply))
+
+
+async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
+    from collections import defaultdict
+    from sqlalchemy import select
+    from app.models.apartment import ApartmentModel
+    from app.services.deduplication.deduplicator import source_key
+
+    groups: Dict[str, List[Any]] = defaultdict(list)
+
+    async with get_session_context() as session:
+        rows = (
+            await session.execute(
+                select(ApartmentModel).where(ApartmentModel.is_active == 1)
+            )
+        ).scalars().all()
+
+        for apt in rows:
+            key = source_key(
+                {
+                    "source": apt.source,
+                    "external_id": apt.external_id,
+                    "source_url": apt.source_url,
+                }
+            )
+            if key:
+                groups[key].append(apt)
+
+        dup_groups = {k: v for k, v in groups.items() if len(v) > 1}
+
+        deactivated = 0
+        samples: List[Dict[str, Any]] = []
+
+        for key, members in dup_groups.items():
+            members.sort(
+                key=lambda a: (
+                    -(a.freshness_confidence or 0),
+                    -(a.times_seen or 0),
+                    a.first_seen_at or datetime.max,
+                )
+            )
+            survivor, losers = members[0], members[1:]
+
+            seen_dates = [a.first_seen_at for a in members if a.first_seen_at]
+            earliest = min(seen_dates) if seen_dates else survivor.first_seen_at
+            total_seen = sum((a.times_seen or 0) for a in members)
+
+            if len(samples) < 10:
+                samples.append({
+                    "source_key": key,
+                    "address": survivor.address,
+                    "survivor": survivor.id,
+                    "survivor_rent": survivor.rent,
+                    "deactivating": [a.id for a in losers],
+                    "rents": [a.rent for a in members],
+                    "times_seen_total": total_seen,
+                })
+
+            if apply:
+                survivor.first_seen_at = earliest
+                survivor.times_seen = total_seen
+                for a in losers:
+                    a.is_active = 0
+            deactivated += len(losers)
+
+        if apply:
+            await session.commit()
+
+    logger.info(
+        f"merge_duplicate_properties: groups={len(dup_groups)} "
+        f"deactivated={deactivated} apply={apply}"
+    )
+    return {
+        "status": "completed",
+        "apply": apply,
+        "active_rows_scanned": len(rows),
+        "duplicate_groups": len(dup_groups),
+        "rows_deactivated": deactivated,
+        "samples": samples,
+    }
