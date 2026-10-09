@@ -1395,6 +1395,7 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
     plan: List[Dict[str, Any]] = []
 
     hashes_to_clear: List[str] = []
+    newly_deactivated = 0
 
     for key, members in dup_groups.items():
         members.sort(
@@ -1415,6 +1416,7 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
         earliest = min(seen_dates) if seen_dates else survivor.first_seen_at
         total_seen = sum((r.times_seen or 0) for r in members)
 
+        newly_deactivated += sum(1 for r in losers if r.is_active)
         plan.append({
             "survivor_id": survivor.id,
             "loser_ids": [r.id for r in losers],
@@ -1471,14 +1473,19 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
 
     logger.info(
         f"merge_duplicate_properties: scanned={scanned} groups={len(dup_groups)} "
-        f"deactivated={deactivated} apply={apply}"
+        f"losers={deactivated} newly_deactivated={newly_deactivated} "
+        f"hashes_cleared={len(hashes_to_clear)} apply={apply}"
     )
     return {
         "status": "completed",
         "apply": apply,
         "active_rows_scanned": scanned,
         "duplicate_groups": len(dup_groups),
+        # Split deliberately. `rows_deactivated` counts every loser in every
+        # group, which includes rows a previous run already deactivated — it
+        # read as "2,197 listings just removed" when the real figure was zero.
         "rows_deactivated": deactivated,
+        "newly_deactivated": newly_deactivated,
         "hashes_cleared": len(hashes_to_clear),
         "samples": samples,
     }

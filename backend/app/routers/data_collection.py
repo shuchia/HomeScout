@@ -650,6 +650,54 @@ async def backfill_pricing_model_endpoint(
     return {"status": "dispatched", "task_id": task.id, "apply": apply}
 
 
+@router.post("/reset-circuit-breakers")
+async def reset_circuit_breakers(market_id: Optional[str] = Query(None)):
+    """Clear consecutive_failures so the scheduled dispatcher resumes.
+
+    dispatcher.py skips any market with 3+ consecutive failures. That is the
+    right behaviour while a fault is live, but the counter does not clear
+    itself: once the cause is fixed, scraping stays blocked until
+    cleanup_maintenance runs at 3 AM UTC.
+
+    After the 2026-10-09 ingestion break every market sat at 4 failures with
+    no way to resume them, because consecutive_failures is not an updatable
+    field on the market endpoint and cleanup_maintenance has no HTTP trigger.
+    Waiting a day with scraping down is not a reasonable recovery path.
+
+    Fix the cause first, then verify with a manual scrape — that route
+    bypasses the breaker — and only then reset.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from sqlalchemy import update, select
+    from app.models.market_config import MarketConfigModel
+    from app.database import get_session_context
+
+    async with get_session_context() as session:
+        stmt = update(MarketConfigModel).where(
+            MarketConfigModel.consecutive_failures > 0
+        )
+        if market_id:
+            stmt = stmt.where(MarketConfigModel.id == market_id)
+        result = await session.execute(stmt.values(consecutive_failures=0))
+        await session.commit()
+
+        remaining = (
+            await session.execute(
+                select(MarketConfigModel.id).where(
+                    MarketConfigModel.consecutive_failures >= 3
+                )
+            )
+        ).scalars().all()
+
+    return {
+        "status": "reset",
+        "markets_cleared": result.rowcount,
+        "still_tripped": list(remaining),
+    }
+
+
 @router.post("/corpus-audit")
 async def corpus_audit_endpoint(
     sample_size: int = Query(40, ge=5, le=300),
