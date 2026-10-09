@@ -126,14 +126,48 @@ class TestProximitySearchSchema:
 
     @patch("app.main.apartment_service")
     @patch("app.main.TierService")
-    def test_max_distance_filters_for_pro(self, mock_tier, mock_svc):
+    def test_max_distance_passed_to_the_query_for_pro(self, mock_tier, mock_svc):
+        """The radius is pushed into the query, not applied to the page.
+
+        It used to filter the ten rows already chosen by score, so "within 1
+        mile" meant "whichever of the top ten qualify" — and has_more had to be
+        forced False, because paging a post-filtered slice is meaningless. The
+        endpoint's job is now to forward `near`; the filtering is asserted
+        against the service below.
+        """
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         mock_tier.get_user_tier = AsyncMock(return_value="pro")
-        mock_svc.get_apartments_paginated = AsyncMock(return_value=([SAMPLE_APT_CLOSE, SAMPLE_APT_FAR], 2, False, "exact"))
+        mock_svc.get_apartments_paginated = AsyncMock(
+            return_value=([SAMPLE_APT_CLOSE], 1, False, "exact")
+        )
 
         body = {**SEARCH_BODY_WITH_PROXIMITY, "max_distance_miles": 1.0}
         response = client.post("/api/search", json=body)
-        apts = response.json()["apartments"]
-        assert len(apts) == 1
-        assert apts[0]["id"] == "apt-close"
+        assert response.status_code == 200
+        assert mock_svc.get_apartments_paginated.await_args.kwargs["near"] == (
+            SEARCH_BODY_WITH_PROXIMITY["near_lat"],
+            SEARCH_BODY_WITH_PROXIMITY["near_lng"],
+            1.0,
+        )
+        app.dependency_overrides.clear()
+
+    @patch("app.main.apartment_service")
+    @patch("app.main.TierService")
+    def test_no_radius_for_free_tier(self, mock_tier, mock_svc):
+        """Radius is Pro-only. A free user still gets distances annotated, but
+        nothing is filtered out and has_more stays meaningful."""
+        app.dependency_overrides[get_optional_user] = _mock_free_user
+        mock_tier.get_user_tier = AsyncMock(return_value="free")
+        mock_tier.check_search_limit = AsyncMock(return_value=(True, 2))
+        mock_tier.increment_search_count = AsyncMock()
+        mock_svc.get_apartments_paginated = AsyncMock(
+            return_value=([SAMPLE_APT_CLOSE, SAMPLE_APT_FAR], 2, True, "exact")
+        )
+
+        body = {**SEARCH_BODY_WITH_PROXIMITY, "max_distance_miles": 1.0}
+        response = client.post("/api/search", json=body)
+        data = response.json()
+        assert mock_svc.get_apartments_paginated.await_args.kwargs["near"] is None
+        assert len(data["apartments"]) == 2
+        assert data["has_more"] is True
         app.dependency_overrides.clear()

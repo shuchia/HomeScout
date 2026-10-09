@@ -200,6 +200,21 @@ async def search_apartments(
                 detail="Daily search limit reached. Upgrade to Pro for unlimited searches.",
             )
 
+    # Proximity is Pro-only and is pushed into the query, not applied to the
+    # page afterwards. Done after pagination it filtered ten already-chosen
+    # rows, so "within 5 miles" meant "whichever of the top ten happen to
+    # qualify" — a Fenway search returned nothing out of 35 matches — and
+    # has_more had to be forced False because paging a post-filtered slice is
+    # meaningless. Now total_count and has_more describe the radius set.
+    near = None
+    if (
+        request.near_lat is not None
+        and request.near_lng is not None
+        and request.max_distance_miles
+        and tier == "pro"
+    ):
+        near = (request.near_lat, request.near_lng, request.max_distance_miles)
+
     try:
         page_results, total_count, has_more, match_type = await apartment_service.get_apartments_paginated(
             city=request.city,
@@ -212,6 +227,7 @@ async def search_apartments(
             page=request.page,
             page_size=request.page_size,
             bedroom_mode=request.bedroom_mode,
+            near=near,
         )
 
         # Set heuristic scores, null out AI fields (AI backfilled by score-batch)
@@ -243,12 +259,15 @@ async def search_apartments(
                 else:
                     result_dicts.append(apt.__dict__)
 
-            max_dist = request.max_distance_miles if tier == "pro" else None
-            result_dicts = add_distances(result_dicts, request.near_lat, request.near_lng, max_dist)
+            # Annotate only. When `near` is set the radius has already been
+            # applied in the query and distance_miles is already present;
+            # re-running it here is a no-op. When it is not set (free or
+            # anonymous, or no radius chosen) this still adds the distance for
+            # display without filtering anything out.
+            result_dicts = add_distances(
+                result_dicts, request.near_lat, request.near_lng, None
+            )
             apartments_out = result_dicts
-            if max_dist:
-                total_count = len(result_dicts)
-                has_more = False
 
         # Add true cost data (breakdown sent to all users — fee data is public)
         from app.routers.apartments import _add_cost_breakdown

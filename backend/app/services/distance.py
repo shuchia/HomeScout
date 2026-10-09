@@ -17,6 +17,38 @@ def haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float
     return R * 2 * math.asin(math.sqrt(a))
 
 
+# Degrees of latitude per mile is near-constant; longitude narrows with
+# latitude, so the longitude span has to be divided by cos(lat).
+_MILES_PER_DEGREE_LAT = 69.0
+
+
+def bounding_box(lat: float, lng: float, miles: float):
+    """A lat/lng box guaranteed to contain every point within ``miles``.
+
+    A cheap SQL prefilter so the radius can be applied *before* pagination
+    rather than after. It is deliberately a superset — the corners of a box
+    sit further out than the circle it encloses — so the exact haversine
+    filter still has to run on what comes back. Getting those the wrong way
+    round silently drops listings near the edge.
+
+    Returns ``(min_lat, max_lat, min_lng, max_lng)``.
+    """
+    lat_delta = miles / _MILES_PER_DEGREE_LAT
+
+    # cos() collapses toward the poles, which would make the longitude span
+    # explode or divide by zero. Clamp so the box stays finite; at these
+    # latitudes it never binds, and a too-wide box is merely slower, not wrong.
+    cos_lat = max(math.cos(math.radians(lat)), 0.01)
+    lng_delta = miles / (_MILES_PER_DEGREE_LAT * cos_lat)
+
+    return (
+        lat - lat_delta,
+        lat + lat_delta,
+        lng - lng_delta,
+        lng + lng_delta,
+    )
+
+
 def add_distances(
     apartments: List[Dict],
     near_lat: float,

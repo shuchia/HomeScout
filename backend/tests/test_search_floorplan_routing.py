@@ -50,8 +50,10 @@ async def test_flag_on_routes_to_floorplan_with_mode(service):
         )
     floorplan.assert_awaited_once()
     building.assert_not_awaited()
-    # bedroom_mode threaded through to the floorplan impl.
-    assert floorplan.await_args.args[-1] == "plus"
+    # bedroom_mode threaded through to the floorplan impl. Checked by value
+    # rather than position: `near` now follows it in the signature, and
+    # asserting args[-1] made this test fail for a change it does not cover.
+    assert "plus" in floorplan.await_args.args
     assert out == [{"id": "f"}]
 
 

@@ -85,6 +85,7 @@ class ApartmentService:
         property_type: str,
         move_in_date: str,
         bedroom_mode: str = "exact",
+        near: Optional[Tuple[float, float, float]] = None,
     ) -> List[Dict]:
         """Search apartments in PostgreSQL database.
 
@@ -95,10 +96,10 @@ class ApartmentService:
         """
         if USE_FLOORPLAN_SEARCH:
             return await self._search_database_floorplan(
-                city, budget, bedrooms, bathrooms, property_type, bedroom_mode
+                city, budget, bedrooms, bathrooms, property_type, bedroom_mode, near
             )
         return await self._search_database_building(
-            city, budget, bedrooms, bathrooms, property_type
+            city, budget, bedrooms, bathrooms, property_type, near
         )
 
     async def _search_database_building(
@@ -108,6 +109,7 @@ class ApartmentService:
         bedrooms: int,
         bathrooms: int,
         property_type: str,
+        near: Optional[Tuple[float, float, float]] = None,
     ) -> List[Dict]:
         """Legacy building-level search: one row per building, bedroom matched on
         the building's collapsed ``bedrooms`` value."""
@@ -130,6 +132,7 @@ class ApartmentService:
                         ApartmentModel.city.ilike(city_name),
                         ApartmentModel.address.ilike(f"%{city}%"),
                     ),
+                    *self._bbox_predicates(near),
                 )
             )
 
@@ -146,6 +149,7 @@ class ApartmentService:
         bathrooms: int,
         property_type: str,
         bedroom_mode: str = "exact",
+        near: Optional[Tuple[float, float, float]] = None,
     ) -> List[Dict]:
         """Floorplan-aware search (docs/floorplan-search-design.md).
 
@@ -168,7 +172,8 @@ class ApartmentService:
                 FP.bedrooms >= bedrooms if bedroom_mode == "plus" else FP.bedrooms == bedrooms
             )
             rows = await self._floorplan_rows(
-                session, city, city_name, property_types, budget, bathrooms, primary_cond
+                session, city, city_name, property_types, budget, bathrooms,
+                primary_cond, near
             )
             if rows:
                 apartments = self._project_floorplan_rows(rows, match_type=bedroom_mode)
@@ -180,25 +185,51 @@ class ApartmentService:
             # bath filters, and tag results so the UI can label "no exact NBR —
             # showing nearby options." Fires only when the primary is empty.
             for delta in range(1, 4):
-                near = sorted({b for b in (bedrooms - delta, bedrooms + delta) if b >= 0})
-                if not near:
+                # Named near_beds, not near: `near` is the proximity filter.
+                near_beds = sorted({b for b in (bedrooms - delta, bedrooms + delta) if b >= 0})
+                if not near_beds:
                     continue
                 rows = await self._floorplan_rows(
                     session, city, city_name, property_types, budget, bathrooms,
-                    FP.bedrooms.in_(near),
+                    FP.bedrooms.in_(near_beds), near,
                 )
                 if rows:
                     apartments = self._project_floorplan_rows(rows, match_type="near_miss")
                     logger.info(
-                        f"Database search (floorplan/near_miss beds={near}) returned {len(apartments)}"
+                        f"Database search (floorplan/near_miss beds={near_beds}) returned {len(apartments)}"
                     )
                     return apartments
 
             logger.info("Database search (floorplan) returned 0 (no exact or near-miss)")
             return []
 
+    @staticmethod
+    def _bbox_predicates(near):
+        """SQL predicates confining results to a box around ``near``.
+
+        ``near`` is ``(lat, lng, miles)`` or None. Returns an empty tuple when
+        there is no proximity filter, so callers can splat it unconditionally.
+
+        Rows without coordinates are excluded: a listing we cannot place
+        cannot be shown as satisfying "within N miles of here".
+        """
+        if not near:
+            return ()
+        from app.models.apartment import ApartmentModel
+        from app.services.distance import bounding_box
+
+        lat, lng, miles = near
+        min_lat, max_lat, min_lng, max_lng = bounding_box(lat, lng, miles)
+        return (
+            ApartmentModel.latitude.isnot(None),
+            ApartmentModel.longitude.isnot(None),
+            ApartmentModel.latitude.between(min_lat, max_lat),
+            ApartmentModel.longitude.between(min_lng, max_lng),
+        )
+
     async def _floorplan_rows(
-        self, session, city, city_name, property_types, budget, bathrooms, bed_cond
+        self, session, city, city_name, property_types, budget, bathrooms, bed_cond,
+        near=None,
     ):
         """Run the floorplan join for a bedroom condition; return (apt, fp) rows,
         one per physical building (DISTINCT ON normalized address, cheapest
@@ -235,6 +266,13 @@ class ApartmentService:
                     # Budget against the matched floorplan; keep price-on-request
                     # (null min_rent) — decision D1.
                     or_(FP.min_rent <= int(budget * 1.10), FP.min_rent.is_(None)),
+                    # Proximity, as a bounding box. Cheap and indexable; the
+                    # exact haversine runs afterwards on the (smaller) result.
+                    # It has to be here rather than after pagination, or the
+                    # radius filters a page instead of the result set — which
+                    # is how a 5-mile search returned nothing out of 35
+                    # matches and offered no way to page further.
+                    *self._bbox_predicates(near),
                 )
             )
             .distinct(building_key)
@@ -329,10 +367,16 @@ class ApartmentService:
         property_type: str,
         move_in_date: str,
         bedroom_mode: str = "exact",
+        near: Optional[Tuple[float, float, float]] = None,
     ) -> List[Dict]:
         """
         Filter apartments based on basic search criteria.
         Uses database if enabled, otherwise falls back to JSON.
+
+        ``near`` is ``(lat, lng, miles)``. The query narrows to a bounding box
+        and the exact circle is applied here, before anything is scored or
+        paginated — so the caller's total and has_more describe the set the
+        user actually asked for.
 
         Args:
             city: City to search in
@@ -348,15 +392,26 @@ class ApartmentService:
             List of filtered apartments
         """
         if self._use_database:
-            return await self._search_database(
+            results = await self._search_database(
                 city, budget, bedrooms, bathrooms,
-                property_type, move_in_date, bedroom_mode=bedroom_mode,
+                property_type, move_in_date, bedroom_mode=bedroom_mode, near=near,
             )
         else:
-            return self._search_json(
+            results = self._search_json(
                 city, budget, bedrooms, bathrooms,
                 property_type, move_in_date
             )
+
+        if near:
+            # The box is a superset — its corners reach ~1.4x the radius — so
+            # the exact circle is applied here. Also annotates distance_miles
+            # and orders by it, which the caller used to do after paginating.
+            from app.services.distance import add_distances
+
+            lat, lng, miles = near
+            results = add_distances(results, lat, lng, miles)
+
+        return results
 
     async def get_apartments_paginated(
         self,
@@ -370,6 +425,7 @@ class ApartmentService:
         page: int = 1,
         page_size: int = 10,
         bedroom_mode: str = "exact",
+        near: Optional[Tuple[float, float, float]] = None,
     ) -> Tuple[List[Dict], int, bool, str]:
         """
         Get paginated heuristic-scored apartments.
@@ -384,7 +440,14 @@ class ApartmentService:
 
         # Build cache key from search params (excluding page). bedroom_mode is
         # included so a "3+" search doesn't reuse an "exact 3" cached page.
-        raw = f"{city}:{budget}:{bedrooms}:{bathrooms}:{property_type}:{move_in_date}:{other_preferences or ''}:{bedroom_mode}"
+        # `near` belongs in the key: a radius search and an unfiltered one
+        # over the same city are different result sets, and sharing a cache
+        # entry would serve one as the other.
+        near_key = f"{near[0]:.4f},{near[1]:.4f},{near[2]}" if near else ""
+        raw = (
+            f"{city}:{budget}:{bedrooms}:{bathrooms}:{property_type}:"
+            f"{move_in_date}:{other_preferences or ''}:{bedroom_mode}:{near_key}"
+        )
         cache_key = f"search_pages:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
         # Try cache first (for page 2+ or even page 1 re-hits)
@@ -413,7 +476,7 @@ class ApartmentService:
             filtered = await self.search_apartments(
                 city=city, budget=budget, bedrooms=bedrooms,
                 bathrooms=bathrooms, property_type=property_type,
-                move_in_date=move_in_date, bedroom_mode=bedroom_mode,
+                move_in_date=move_in_date, bedroom_mode=bedroom_mode, near=near,
             )
 
             if not filtered:
