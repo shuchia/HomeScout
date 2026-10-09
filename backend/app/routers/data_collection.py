@@ -553,12 +553,21 @@ _INVARIANT_BASELINE_KEY = "invariants:baseline"
 
 async def _invariant_redis():
     """Redis handle, or None. Never raises: a missing baseline must degrade to
-    'no drift reported', never to a failed health check."""
-    try:
-        from app.services.apartment_service import apartment_service
+    'no drift reported', never to a failed health check.
 
-        return apartment_service._redis
-    except Exception:
+    Builds its own client rather than borrowing ApartmentService's. There is
+    no module-level instance to borrow — main.py and the routers each
+    construct their own — so the import failed, the bare except swallowed the
+    ImportError, and the baseline endpoint reported "Redis not available"
+    while Redis was perfectly healthy. The exception is logged now; a handler
+    that hides why it failed is worse than one that fails loudly.
+    """
+    try:
+        import redis.asyncio as aioredis
+
+        return aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+    except Exception as e:
+        logger.warning(f"Invariant baseline store unavailable: {e}")
         return None
 
 
