@@ -4,7 +4,7 @@ Celery tasks for maintenance and cleanup operations.
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.celery_app import celery_app
 from app.database import get_session_context, is_database_enabled
@@ -315,68 +315,96 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
         #
         # Every pipeline fault found in 2026 produced output that *looked like
         # data*: an Akamai 403 read as "verified", a payload field that moved
-        # read as "price on request", availability gated on a key that single
-        # unit listings never carry read as "date unknown", a 100-row config
-        # cap read as "this market only has 100 listings". None raised an
-        # error, and /health stayed green through all of them.
+        # read as "price on request", availability gated on a key that
+        # single-unit listings never carry read as "date unknown", a 100-row
+        # config cap read as "this market only has 100 listings". None raised,
+        # and /health stayed green through all of them.
         #
         # These ratios are the cheapest thing that would have caught four of
-        # the nine. They are not thresholds — the absolute values are
-        # legitimately different per market and per week. What matters is a
-        # *step change* against the previous snapshot, which pipeline-health
-        # compares. A parser that stops reading a field moves one of these
-        # ratios hard and immediately.
-        active = metrics.get("active_listings") or 0
-
-        no_date = (
-            await session.execute(
-                select(func.count(ApartmentModel.id)).where(
-                    ApartmentModel.is_active == 1,
-                    or_(
-                        ApartmentModel.available_date.is_(None),
-                        ApartmentModel.available_date == "",
-                    ),
-                )
-            )
-        ).scalar() or 0
-
-        # A listing with no floorplans is normal (single-unit and by-the-room
-        # listings carry none); a *change* in how many is not.
-        no_models = (
-            await session.execute(
-                select(func.count(ApartmentModel.id)).where(
-                    ApartmentModel.is_active == 1,
-                    or_(
-                        ApartmentModel.floor_plans.is_(None),
-                        func.jsonb_array_length(
-                            func.cast(ApartmentModel.floor_plans, JSONB)
-                        ) == 0,
-                    ),
-                )
-            )
-        ).scalar() or 0
-
-        no_rent = (
-            await session.execute(
-                select(func.count(ApartmentModel.id)).where(
-                    ApartmentModel.is_active == 1,
-                    or_(ApartmentModel.rent.is_(None), ApartmentModel.rent <= 1),
-                )
-            )
-        ).scalar() or 0
-
+        # the nine. They are not thresholds — the absolute values differ
+        # legitimately between markets. What matters is a *step change*.
+        #
+        # Computed PER CITY as well as overall, because a global ratio cannot
+        # survive the corpus growing. Adding a market with a different
+        # character (more by-the-room listings, more price-on-request) shifts
+        # every global ratio at once, which both raises a false alarm and
+        # masks a real regression somewhere else. Per-city baselines are
+        # independent: a new city simply has none until it is blessed, and the
+        # existing ones keep working untouched.
         def _pct(n: int, d: int) -> float:
             return round(100.0 * n / d, 2) if d else 0.0
 
+        no_date_cond = or_(
+            ApartmentModel.available_date.is_(None),
+            ApartmentModel.available_date == "",
+        )
+        no_models_cond = or_(
+            ApartmentModel.floor_plans.is_(None),
+            func.jsonb_array_length(func.cast(ApartmentModel.floor_plans, JSONB)) == 0,
+        )
+        no_rent_cond = or_(ApartmentModel.rent.is_(None), ApartmentModel.rent <= 1)
+
+        per_city_rows = (
+            await session.execute(
+                select(
+                    ApartmentModel.city,
+                    func.count(ApartmentModel.id),
+                    func.count(func.nullif(no_date_cond, False)),
+                    func.count(func.nullif(no_models_cond, False)),
+                    func.count(func.nullif(no_rent_cond, False)),
+                )
+                .where(ApartmentModel.is_active == 1, ApartmentModel.city.isnot(None))
+                .group_by(ApartmentModel.city)
+            )
+        ).all()
+
+        bucket_rows = (
+            await session.execute(
+                select(
+                    ApartmentModel.city,
+                    func.count(ApartmentFloorplanModel.id),
+                    func.count(
+                        func.nullif(ApartmentFloorplanModel.min_rent.is_(None), False)
+                    ),
+                )
+                .select_from(ApartmentFloorplanModel)
+                .join(
+                    ApartmentModel,
+                    ApartmentModel.id == ApartmentFloorplanModel.apartment_id,
+                )
+                .where(ApartmentModel.is_active == 1, ApartmentModel.city.isnot(None))
+                .group_by(ApartmentModel.city)
+            )
+        ).all()
+        buckets_by_city = {r[0]: (r[1], r[2]) for r in bucket_rows}
+
+        by_city: Dict[str, Any] = {}
+        tot_date = tot_models = tot_rent = 0
+        for city, n, nd, nm, nr in per_city_rows:
+            tot_date += nd
+            tot_models += nm
+            tot_rent += nr
+            b_total, b_unpriced = buckets_by_city.get(city, (0, 0))
+            by_city[city] = {
+                "active_listings": n,
+                "pct_buckets_price_on_request": _pct(b_unpriced, b_total),
+                "pct_listings_without_available_date": _pct(nd, n),
+                "pct_listings_without_floorplans": _pct(nm, n),
+                "pct_listings_without_rent": _pct(nr, n),
+            }
+
         metrics["invariants"] = {
-            "active_listings": active,
-            "pct_buckets_price_on_request": _pct(unpriced, buckets_total),
-            "pct_listings_without_available_date": _pct(no_date, active),
-            "pct_listings_without_floorplans": _pct(no_models, active),
-            "pct_listings_without_rent": _pct(no_rent, active),
-            "buildings_without_buckets": metrics["floorplans"][
-                "active_buildings_without_buckets"
-            ],
+            "overall": {
+                "active_listings": active,
+                "pct_buckets_price_on_request": _pct(unpriced, buckets_total),
+                "pct_listings_without_available_date": _pct(tot_date, active),
+                "pct_listings_without_floorplans": _pct(tot_models, active),
+                "pct_listings_without_rent": _pct(tot_rent, active),
+                "buildings_without_buckets": metrics["floorplans"][
+                    "active_buildings_without_buckets"
+                ],
+            },
+            "by_city": by_city,
         }
 
         stmt = select(func.count(ScrapeJobModel.id)).where(
@@ -1409,3 +1437,130 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
         "rows_deactivated": deactivated,
         "samples": samples,
     }
+
+
+@celery_app.task(bind=True, max_retries=1, soft_time_limit=3600)
+def corpus_audit(self, sample_size: int = 40, city: Optional[str] = None) -> Dict[str, Any]:
+    """Check a random sample of the corpus against its source.
+
+    This is the answer to "does the corpus look right", and it is deliberately
+    not a human comparing cards to apartments.com by hand. That does not scale
+    past a handful of listings, is not repeatable, and cannot be run again
+    after a parser change to prove the fix held.
+
+    Each sampled listing is re-fetched through the same `scrape_url()` the
+    saved-listing check uses — Apify's infrastructure, so no Akamai problem —
+    normalized through the same normalizer, and diffed on the fields that
+    matter. ~$0.0005 per listing: a 40-listing audit costs about two cents and
+    a 200-listing one about ten.
+
+    What it reports is an *agreement rate* per field. A parser that has
+    stopped reading something shows up as that field disagreeing on nearly
+    every listing, which is a very different signature from a market where
+    prices genuinely moved (a few listings, in both directions).
+
+    Run this before blessing an invariants baseline. Blessing a corpus that is
+    already wrong pins the breakage as normal and the drift check will never
+    fire.
+    """
+    from app.tasks._async_runner import run_async
+
+    return run_async(_corpus_audit(sample_size=sample_size, city=city))
+
+
+async def _corpus_audit(sample_size: int, city: Optional[str]) -> Dict[str, Any]:
+    from collections import Counter
+    from sqlalchemy import select, func
+    from app.models.apartment import ApartmentModel
+    from app.services.listing_check import check_listing, LIVE, GONE, UNKNOWN
+
+    async with get_session_context() as session:
+        stmt = (
+            select(
+                ApartmentModel.id,
+                ApartmentModel.address,
+                ApartmentModel.city,
+                ApartmentModel.source_url,
+                ApartmentModel.rent,
+                ApartmentModel.bedrooms,
+                ApartmentModel.bathrooms,
+                ApartmentModel.sqft,
+                ApartmentModel.available_date,
+            )
+            .where(
+                ApartmentModel.is_active == 1,
+                ApartmentModel.source_url.isnot(None),
+            )
+            .order_by(func.random())
+            .limit(sample_size)
+        )
+        if city:
+            stmt = stmt.where(ApartmentModel.city == city)
+        rows = (await session.execute(stmt)).all()
+
+    status_counts: Counter = Counter()
+    field_disagreements: Counter = Counter()
+    field_checked: Counter = Counter()
+    examples: List[Dict[str, Any]] = []
+
+    for row in rows:
+        current = {
+            "rent": row.rent,
+            "bedrooms": row.bedrooms,
+            "bathrooms": row.bathrooms,
+            "sqft": row.sqft,
+            "available_date": row.available_date,
+        }
+        try:
+            status, updated, changes = await check_listing(row.source_url, current)
+        except Exception as e:
+            logger.warning(f"corpus_audit: check failed for {row.id}: {e}")
+            status_counts[UNKNOWN] += 1
+            continue
+
+        status_counts[status] += 1
+        if status != LIVE or not updated:
+            continue
+
+        for field in ("rent", "bedrooms", "bathrooms", "sqft", "available_date"):
+            # Only count a field the source actually answered on; a field it
+            # did not return is not a disagreement, and conflating the two is
+            # the mistake this whole exercise exists to stop making.
+            if updated.get(field) in (None, "", 0):
+                continue
+            field_checked[field] += 1
+            if field in changes:
+                field_disagreements[field] += 1
+
+        if changes and len(examples) < 10:
+            examples.append({
+                "address": row.address,
+                "city": row.city,
+                "changes": changes,
+            })
+
+    agreement = {}
+    for field, checked in field_checked.items():
+        bad = field_disagreements.get(field, 0)
+        agreement[field] = {
+            "checked": checked,
+            "disagreed": bad,
+            "agreement_pct": round(100.0 * (checked - bad) / checked, 1) if checked else None,
+        }
+
+    reachable = status_counts[LIVE]
+    result = {
+        "status": "completed",
+        "sampled": len(rows),
+        "city": city,
+        "source_status": dict(status_counts),
+        "reachable": reachable,
+        "field_agreement": agreement,
+        "examples": examples,
+        "estimated_cost_usd": round(len(rows) * 0.0005, 4),
+    }
+    logger.info(
+        f"corpus_audit: sampled={len(rows)} live={reachable} "
+        f"agreement={ {k: v['agreement_pct'] for k, v in agreement.items()} }"
+    )
+    return result

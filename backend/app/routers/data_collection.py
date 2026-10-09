@@ -573,17 +573,111 @@ async def _get_invariant_baseline() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _compare_invariants(
+    current: Dict[str, Any], baseline: Dict[str, Any], problems: List[str]
+) -> tuple:
+    """Compare current ratios to the blessed baseline, overall and per city.
+
+    Per city matters: a global ratio cannot survive the corpus growing. Adding
+    one market with a different character shifts every global number at once,
+    which raises a false alarm and masks a real regression elsewhere at the
+    same time. A city with no baseline is reported as unblessed rather than
+    compared against nothing.
+    """
+    drift: Dict[str, Any] = {}
+
+    def _diff(scope: str, now: Dict[str, Any], was: Dict[str, Any]) -> Dict[str, Any]:
+        out = {}
+        for field, now_val in (now or {}).items():
+            if not field.startswith("pct_"):
+                continue
+            prev = (was or {}).get(field)
+            if prev is None or not isinstance(now_val, (int, float)):
+                continue
+            delta = round(now_val - prev, 2)
+            out[field] = {"baseline": prev, "now": now_val, "delta": delta}
+            if abs(delta) >= INVARIANT_STEP_PCT:
+                problems.append(
+                    f"[{scope}] {field} moved {delta:+.1f} points "
+                    f"({prev}% → {now_val}%) — check the parser before the data"
+                )
+        return out
+
+    drift["overall"] = _diff(
+        "overall", current.get("overall", {}), baseline.get("overall", {})
+    )
+
+    base_cities = baseline.get("by_city", {}) or {}
+    now_cities = current.get("by_city", {}) or {}
+    per_city = {}
+    unblessed = []
+    for city, now in now_cities.items():
+        was = base_cities.get(city)
+        if not was:
+            unblessed.append(city)
+            continue
+        # Ignore a city too small for a ratio to mean anything.
+        if (now.get("active_listings") or 0) < 25:
+            continue
+        per_city[city] = _diff(city, now, was)
+    drift["by_city"] = per_city
+    return drift, unblessed
+
+
+@router.post("/corpus-audit")
+async def corpus_audit_endpoint(
+    sample_size: int = Query(40, ge=5, le=300),
+    city: Optional[str] = Query(None),
+):
+    """Check a random sample of the corpus against its source.
+
+    The honest answer to "does the corpus look right". Re-fetches each sampled
+    listing through the same scrape_url() the saved-listing check uses and
+    reports a per-field agreement rate.
+
+    Read the shape, not just the number. A parser that stopped reading a field
+    disagrees on nearly *every* listing; a market where prices genuinely moved
+    disagrees on a few, in both directions.
+
+    ~$0.0005 per listing — 40 listings is about two cents. Costs real money
+    and takes 10-20s per listing, so it is a deliberate action, not a cron.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import corpus_audit
+    task = corpus_audit.apply_async(
+        kwargs={"sample_size": sample_size, "city": city}, queue="maintenance"
+    )
+    return {
+        "status": "dispatched",
+        "task_id": task.id,
+        "sample_size": sample_size,
+        "city": city,
+        "estimated_cost_usd": round(sample_size * 0.0005, 4),
+    }
+
+
 @router.post("/invariants/baseline")
-async def set_invariant_baseline():
+async def set_invariant_baseline(city: Optional[str] = Query(None)):
     """Bless the current ingestion ratios as the reference point.
 
     Drift is measured against a baseline a human set, not against the previous
     run. A self-updating baseline tracks whatever the pipeline is doing,
-    including the thing that has quietly broken — which is exactly how the
-    availability gap and the rentLabel change went unnoticed for weeks.
+    including the thing that has quietly broken — which is how the
+    availability gap went unnoticed for months.
 
-    Call this when the corpus has been checked and looks right. Until it is
-    called, pipeline-health reports the ratios but no drift.
+    Pass `city` to bless one market only. That is the normal case when adding
+    a market: its ratios are new and unmeasured, while every existing market
+    already has a baseline that may be actively catching something. Blessing
+    everything would overwrite those.
+
+    Without `city`, the overall ratios and every city are blessed at once —
+    use that for a first run, or after a fix you have verified.
+
+    Verify before blessing: run `corpus-audit` to check a sample of listings
+    against their source. Blessing an already-broken corpus pins the breakage
+    as normal and the check will never fire.
     """
     if not is_database_enabled():
         raise HTTPException(status_code=503, detail="Database not enabled")
@@ -591,16 +685,40 @@ async def set_invariant_baseline():
     from datetime import datetime, timezone
     from app.tasks.maintenance_tasks import compute_metrics_snapshot
 
-    snap = await compute_metrics_snapshot()
-    inv = dict(snap.get("invariants", {}) or {})
-    inv["_set_at"] = datetime.now(timezone.utc).isoformat()
-
     r = await _invariant_redis()
     if not r:
         raise HTTPException(status_code=503, detail="Redis not available")
+
+    snap = await compute_metrics_snapshot()
+    inv = snap.get("invariants", {}) or {}
+    now = datetime.now(timezone.utc).isoformat()
+
+    if city:
+        by_city = (inv.get("by_city") or {})
+        if city not in by_city:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active listings for city '{city}' — nothing to bless",
+            )
+        existing = await _get_invariant_baseline() or {}
+        existing.setdefault("by_city", {})[city] = by_city[city]
+        existing["_set_at"] = now
+        await r.set(_INVARIANT_BASELINE_KEY, json.dumps(existing))
+        return {"status": "baseline set", "scope": city, "baseline": by_city[city]}
+
+    blessed = {
+        "overall": inv.get("overall", {}),
+        "by_city": inv.get("by_city", {}),
+        "_set_at": now,
+    }
     # No TTL: a baseline that silently expires takes the alerting with it.
-    await r.set(_INVARIANT_BASELINE_KEY, json.dumps(inv))
-    return {"status": "baseline set", "baseline": inv}
+    await r.set(_INVARIANT_BASELINE_KEY, json.dumps(blessed))
+    return {
+        "status": "baseline set",
+        "scope": "all",
+        "cities": sorted(blessed["by_city"]),
+        "overall": blessed["overall"],
+    }
 
 
 @router.get("/pipeline-health")
@@ -818,27 +936,18 @@ async def check_pipeline_health():
             baseline = await _get_invariant_baseline()
 
             if baseline:
-                drift = {}
-                for field, now_val in invariants.items():
-                    if not field.startswith("pct_"):
-                        continue
-                    was = baseline.get(field)
-                    if was is None:
-                        continue
-                    delta = round(now_val - was, 2)
-                    drift[field] = {"baseline": was, "now": now_val, "delta": delta}
-                    if abs(delta) >= INVARIANT_STEP_PCT:
-                        problems.append(
-                            f"{field} moved {delta:+.1f} points "
-                            f"({was}% → {now_val}%) — check the parser before the data"
-                        )
+                drift, unblessed = _compare_invariants(invariants, baseline, problems)
                 invariants["drift"] = drift
                 invariants["baseline_set_at"] = baseline.get("_set_at")
+                if unblessed:
+                    # Informational, not a problem: a newly added market has no
+                    # baseline yet and that is the expected state, not a fault.
+                    invariants["cities_without_baseline"] = sorted(unblessed)
             else:
                 invariants["drift"] = None
                 invariants["note"] = (
-                    "no baseline set — POST /invariants/baseline once the corpus "
-                    "looks right, then drift is reported against it"
+                    "no baseline set — run a corpus audit, then "
+                    "POST /invariants/baseline to bless the current ratios"
                 )
         except Exception as e:
             logger.warning(f"Could not evaluate ingestion invariants: {e}")

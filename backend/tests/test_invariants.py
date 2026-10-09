@@ -88,3 +88,88 @@ class TestStepThreshold:
     def test_ignores_ordinary_week_to_week_movement(self):
         assert abs(12.4 - 11.1) < INVARIANT_STEP_PCT
         assert abs(4.9 - 5.2) < INVARIANT_STEP_PCT
+
+
+class TestPerCityBaselines:
+    """A global ratio cannot survive the corpus growing.
+
+    Adding a market with a different character — more by-the-room listings,
+    more price-on-request — shifts every global ratio at once. That both
+    raises a false alarm and masks a real regression elsewhere at the same
+    time. Per-city baselines are independent.
+    """
+
+    from app.routers.data_collection import _compare_invariants as _cmp
+
+    def _current(self, cities):
+        return {"overall": {"pct_listings_without_rent": 2.0}, "by_city": cities}
+
+    def test_new_city_is_unblessed_not_a_problem(self):
+        """Adding Austin must not fire an alert — it has no baseline, which is
+        the expected state for a market that was just added."""
+        from app.routers.data_collection import _compare_invariants
+
+        problems = []
+        current = self._current({
+            "Boston": {"active_listings": 500, "pct_listings_without_rent": 2.0},
+            "Austin": {"active_listings": 300, "pct_listings_without_rent": 44.0},
+        })
+        baseline = {
+            "overall": {"pct_listings_without_rent": 2.0},
+            "by_city": {"Boston": {"pct_listings_without_rent": 2.0}},
+        }
+        drift, unblessed = _compare_invariants(current, baseline, problems)
+        assert unblessed == ["Austin"]
+        assert problems == []
+        assert "Austin" not in drift["by_city"]
+
+    def test_existing_city_regression_still_caught_alongside_a_new_city(self):
+        """The point of per-city: a new market must not drown out a real
+        regression in an established one."""
+        from app.routers.data_collection import _compare_invariants
+
+        problems = []
+        current = self._current({
+            "Boston": {"active_listings": 500, "pct_listings_without_rent": 30.0},
+            "Austin": {"active_listings": 300, "pct_listings_without_rent": 44.0},
+        })
+        baseline = {
+            "overall": {},
+            "by_city": {"Boston": {"pct_listings_without_rent": 2.0}},
+        }
+        drift, unblessed = _compare_invariants(current, baseline, problems)
+        assert unblessed == ["Austin"]
+        assert len(problems) == 1 and "Boston" in problems[0]
+        assert drift["by_city"]["Boston"]["pct_listings_without_rent"]["delta"] == 28.0
+
+    def test_small_city_is_not_judged_on_ratios(self):
+        """A market with a handful of listings swings wildly on one row."""
+        from app.routers.data_collection import _compare_invariants
+
+        problems = []
+        current = self._current({
+            "Bryn Mawr": {"active_listings": 8, "pct_listings_without_rent": 50.0},
+        })
+        baseline = {"overall": {}, "by_city": {"Bryn Mawr": {"pct_listings_without_rent": 0.0}}}
+        _compare_invariants(current, baseline, problems)
+        assert problems == []
+
+    def test_overall_drift_is_still_reported(self):
+        from app.routers.data_collection import _compare_invariants
+
+        problems = []
+        current = {"overall": {"pct_listings_without_available_date": 56.0}, "by_city": {}}
+        baseline = {"overall": {"pct_listings_without_available_date": 0.0}, "by_city": {}}
+        drift, _ = _compare_invariants(current, baseline, problems)
+        assert len(problems) == 1 and "overall" in problems[0]
+        assert drift["overall"]["pct_listings_without_available_date"]["delta"] == 56.0
+
+    def test_non_pct_fields_are_not_compared(self):
+        """active_listings legitimately changes every sweep."""
+        from app.routers.data_collection import _compare_invariants
+
+        problems = []
+        current = {"overall": {"active_listings": 9999}, "by_city": {}}
+        baseline = {"overall": {"active_listings": 10}, "by_city": {}}
+        _compare_invariants(current, baseline, problems)
+        assert problems == []
