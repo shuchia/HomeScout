@@ -338,9 +338,16 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
             ApartmentModel.available_date.is_(None),
             ApartmentModel.available_date == "",
         )
+        # jsonb_array_length raises "cannot get array length of a scalar" on any
+        # row whose floor_plans is not an array — JSON null, an object, or a
+        # bare value, all of which exist in the corpus. The typeof guard has to
+        # come first; without it this 500s /metrics for the whole corpus
+        # because one row is shaped differently.
+        _fp = func.cast(ApartmentModel.floor_plans, JSONB)
         no_models_cond = or_(
             ApartmentModel.floor_plans.is_(None),
-            func.jsonb_array_length(func.cast(ApartmentModel.floor_plans, JSONB)) == 0,
+            func.jsonb_typeof(_fp) != "array",
+            func.jsonb_array_length(_fp) == 0,
         )
         no_rent_cond = or_(ApartmentModel.rent.is_(None), ApartmentModel.rent <= 1)
         # Per-person share. Watched because getting this wrong is silent and

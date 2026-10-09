@@ -981,7 +981,15 @@ async def check_pipeline_health():
                     "POST /invariants/baseline to bless the current ratios"
                 )
         except Exception as e:
+            # Reported as a problem, not just logged. An empty invariants dict
+            # reads as "nothing to report", which is precisely the failure
+            # shape this check exists to catch — and it already happened: a
+            # jsonb_array_length over a non-array row 500'd /metrics while
+            # pipeline-health stayed green because it swallowed the exception
+            # here.
             logger.warning(f"Could not evaluate ingestion invariants: {e}")
+            problems.append(f"ingestion invariants could not be computed: {e}")
+            invariants = {"error": str(e)}
 
         return {
             "healthy": not problems,
