@@ -1228,78 +1228,114 @@ def merge_duplicate_properties(self, apply: bool = False) -> Dict[str, Any]:
 
 async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
     from collections import defaultdict
-    from sqlalchemy import select
+    from sqlalchemy import select, update
     from app.models.apartment import ApartmentModel
     from app.services.deduplication.deduplicator import source_key
 
+    # Columns only. Selecting whole ApartmentModel entities pulls floor_plans,
+    # available_units, images, amenities and description — JSONB blobs running
+    # to tens of KB each — and 4,312 of them OOM-kills the 512MB worker. That
+    # is the same SIGKILL that took out the old decay task; the fix is the same
+    # one _backfill_floorplans already uses.
+    cols = (
+        ApartmentModel.id,
+        ApartmentModel.source,
+        ApartmentModel.external_id,
+        ApartmentModel.source_url,
+        ApartmentModel.address,
+        ApartmentModel.rent,
+        ApartmentModel.freshness_confidence,
+        ApartmentModel.times_seen,
+        ApartmentModel.first_seen_at,
+    )
+
     groups: Dict[str, List[Any]] = defaultdict(list)
+    scanned = 0
 
     async with get_session_context() as session:
-        rows = (
-            await session.execute(
-                select(ApartmentModel).where(ApartmentModel.is_active == 1)
-            )
-        ).scalars().all()
-
-        for apt in rows:
+        result = await session.stream(
+            select(*cols).where(ApartmentModel.is_active == 1)
+        )
+        async for row in result:
+            scanned += 1
             key = source_key(
                 {
-                    "source": apt.source,
-                    "external_id": apt.external_id,
-                    "source_url": apt.source_url,
+                    "source": row.source,
+                    "external_id": row.external_id,
+                    "source_url": row.source_url,
                 }
             )
             if key:
-                groups[key].append(apt)
+                groups[key].append(row)
 
-        dup_groups = {k: v for k, v in groups.items() if len(v) > 1}
+    dup_groups = {k: v for k, v in groups.items() if len(v) > 1}
 
-        deactivated = 0
-        samples: List[Dict[str, Any]] = []
+    deactivated = 0
+    samples: List[Dict[str, Any]] = []
+    plan: List[Dict[str, Any]] = []
 
-        for key, members in dup_groups.items():
-            members.sort(
-                key=lambda a: (
-                    -(a.freshness_confidence or 0),
-                    -(a.times_seen or 0),
-                    a.first_seen_at or datetime.max,
-                )
+    for key, members in dup_groups.items():
+        members.sort(
+            key=lambda r: (
+                -(r.freshness_confidence or 0),
+                -(r.times_seen or 0),
+                r.first_seen_at or datetime.max,
             )
-            survivor, losers = members[0], members[1:]
+        )
+        survivor, losers = members[0], members[1:]
 
-            seen_dates = [a.first_seen_at for a in members if a.first_seen_at]
-            earliest = min(seen_dates) if seen_dates else survivor.first_seen_at
-            total_seen = sum((a.times_seen or 0) for a in members)
+        seen_dates = [r.first_seen_at for r in members if r.first_seen_at]
+        earliest = min(seen_dates) if seen_dates else survivor.first_seen_at
+        total_seen = sum((r.times_seen or 0) for r in members)
 
-            if len(samples) < 10:
-                samples.append({
-                    "source_key": key,
-                    "address": survivor.address,
-                    "survivor": survivor.id,
-                    "survivor_rent": survivor.rent,
-                    "deactivating": [a.id for a in losers],
-                    "rents": [a.rent for a in members],
-                    "times_seen_total": total_seen,
-                })
+        plan.append({
+            "survivor_id": survivor.id,
+            "loser_ids": [r.id for r in losers],
+            "first_seen_at": earliest,
+            "times_seen": total_seen,
+        })
+        if len(samples) < 10:
+            samples.append({
+                "source_key": key,
+                "address": survivor.address,
+                "survivor": survivor.id,
+                "survivor_rent": survivor.rent,
+                "deactivating": [r.id for r in losers],
+                "rents": [r.rent for r in members],
+                "freshness": [r.freshness_confidence for r in members],
+                "times_seen_total": total_seen,
+            })
+        deactivated += len(losers)
 
-            if apply:
-                survivor.first_seen_at = earliest
-                survivor.times_seen = total_seen
-                for a in losers:
-                    a.is_active = 0
-            deactivated += len(losers)
-
-        if apply:
+    if apply:
+        # Targeted UPDATEs in batches, so nothing is held in memory and a
+        # failure part-way leaves a consistent subset rather than a half-merged
+        # group.
+        async with get_session_context() as session:
+            for entry in plan:
+                await session.execute(
+                    update(ApartmentModel)
+                    .where(ApartmentModel.id == entry["survivor_id"])
+                    .values(
+                        first_seen_at=entry["first_seen_at"],
+                        times_seen=entry["times_seen"],
+                    )
+                )
+                await session.execute(
+                    update(ApartmentModel)
+                    .where(ApartmentModel.id.in_(entry["loser_ids"]))
+                    .values(is_active=0)
+                )
             await session.commit()
 
     logger.info(
-        f"merge_duplicate_properties: groups={len(dup_groups)} "
+        f"merge_duplicate_properties: scanned={scanned} groups={len(dup_groups)} "
         f"deactivated={deactivated} apply={apply}"
     )
     return {
         "status": "completed",
         "apply": apply,
-        "active_rows_scanned": len(rows),
+        "active_rows_scanned": scanned,
         "duplicate_groups": len(dup_groups),
         "rows_deactivated": deactivated,
         "samples": samples,
