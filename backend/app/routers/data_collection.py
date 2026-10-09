@@ -665,8 +665,13 @@ async def corpus_audit_endpoint(
     disagrees on nearly *every* listing; a market where prices genuinely moved
     disagrees on a few, in both directions.
 
-    ~$0.0005 per listing — 40 listings is about two cents. Costs real money
-    and takes 10-20s per listing, so it is a deliberate action, not a cron.
+    ~$0.0005 per listing — 40 listings is about two cents. Budget ~30s per
+    listing: 40 is roughly 20 minutes, 300 is two and a half hours. Costs real
+    money and real time, so it is a deliberate action, not a cron.
+
+    Each disagreement is logged as its own line ("corpus_audit diff | field |
+    from -> to | city | address"), because Celery truncates a long result
+    repr and the direction and magnitude are the whole signal.
     """
     if not is_database_enabled():
         raise HTTPException(status_code=503, detail="Database not enabled")

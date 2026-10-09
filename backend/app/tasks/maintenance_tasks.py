@@ -1543,12 +1543,24 @@ async def _corpus_audit(sample_size: int, city: Optional[str]) -> Dict[str, Any]
             if field in changes:
                 field_disagreements[field] += 1
 
-        if changes and len(examples) < 10:
-            examples.append({
-                "address": row.address,
-                "city": row.city,
-                "changes": changes,
-            })
+        if changes:
+            # Logged one disagreement per line, on purpose. Celery truncates a
+            # long result repr to "{...}", so the examples carried in the
+            # return value were unreadable in CloudWatch — which left the
+            # first audit able to report that rent agreed only 70% of the time
+            # and unable to say whether prices had moved or a field was being
+            # misread. The direction and magnitude are the whole signal.
+            for field, c in changes.items():
+                logger.info(
+                    f"corpus_audit diff | {field} | {c.get('from')} -> {c.get('to')} "
+                    f"| {row.city} | {row.address}"
+                )
+            if len(examples) < 10:
+                examples.append({
+                    "address": row.address,
+                    "city": row.city,
+                    "changes": changes,
+                })
 
     agreement = {}
     for field, checked in field_checked.items():
