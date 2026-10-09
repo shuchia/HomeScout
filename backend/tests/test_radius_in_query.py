@@ -94,3 +94,34 @@ class TestCacheKeySeparatesRadius:
         await svc.get_apartments_paginated(**common, near=(*FENWAY, 5))
 
         assert seen == [None, (*FENWAY, 5)]
+
+
+class TestCoordinatelessRowsUnderARadius:
+    """A listing with no coordinates cannot satisfy "within N miles".
+
+    add_distances appended these *after* the distance check, so they survived
+    a radius filter untouched. The SQL already excludes them in DB mode, but
+    the function has to be correct on its own: JSON mode has no query behind
+    it, and a helper that quietly defeats its own filter is a trap.
+    """
+
+    def _rows(self):
+        return [
+            {"id": "near", "latitude": 42.3467, "longitude": -71.0972},
+            {"id": "far", "latitude": 42.9, "longitude": -71.9},
+            {"id": "nocoords", "latitude": None, "longitude": None},
+        ]
+
+    def test_dropped_when_a_radius_is_set(self):
+        from app.services.distance import add_distances
+
+        out = add_distances(self._rows(), *FENWAY, 5)
+        assert [a["id"] for a in out] == ["near"]
+
+    def test_kept_when_no_radius_is_set(self):
+        """Without a radius this is pure annotation — nothing should vanish."""
+        from app.services.distance import add_distances
+
+        out = add_distances(self._rows(), *FENWAY, None)
+        assert {a["id"] for a in out} == {"near", "far", "nocoords"}
+        assert next(a for a in out if a["id"] == "nocoords")["distance_miles"] is None

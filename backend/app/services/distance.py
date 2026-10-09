@@ -67,8 +67,15 @@ def add_distances(
             if max_distance_miles is not None and dist > max_distance_miles:
                 continue
             with_dist.append({**apt, "distance_miles": dist})
-        else:
+        elif max_distance_miles is None:
             without_coords.append({**apt, "distance_miles": None})
+        # When a radius is set, a listing with no coordinates is dropped. It
+        # cannot be shown as satisfying "within N miles of here" — and leaving
+        # it in was a quiet way to defeat the filter entirely, since these were
+        # appended after the distance check rather than going through it.
+        # The DB query already excludes them; this keeps the function honest
+        # on its own, which matters for JSON mode and for any caller that
+        # filters without a query behind it.
 
     with_dist.sort(key=lambda x: x["distance_miles"])
     return with_dist + without_coords
