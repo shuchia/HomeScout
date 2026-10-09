@@ -397,12 +397,17 @@ class ApartmentService:
 
         if cached:
             all_scored = json.loads(cached)
-            # Reset TTL on access (keep alive while user is browsing)
-            if self._redis:
-                try:
-                    await self._redis.expire(cache_key, 600)
-                except Exception:
-                    pass
+            # The TTL is deliberately NOT reset here. It used to be, to "keep
+            # the cache alive while the user is browsing" — but that makes the
+            # window *sliding*, so any query hit more than once per 10 minutes
+            # never expires and serves indefinitely stale results. A popular
+            # market is exactly the one that would never refresh.
+            #
+            # Caught 2026-10-08: after a merge deactivated 487 duplicate rows,
+            # search kept returning the deactivated row, and a before/after
+            # comparison measured the cache against itself and reported "no
+            # change". 600s absolute is already far longer than it takes to
+            # page through a result set, which is all this cache is for.
         else:
             # Filter and score
             filtered = await self.search_apartments(
@@ -420,7 +425,7 @@ class ApartmentService:
                 other_preferences=other_preferences,
             )
 
-            # Cache the full list (10 min TTL)
+            # Cache the full list (10 min, absolute from write — see above)
             if self._redis:
                 try:
                     await self._redis.setex(cache_key, 600, json.dumps(all_scored))

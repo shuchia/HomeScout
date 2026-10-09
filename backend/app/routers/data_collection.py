@@ -2,10 +2,11 @@
 Admin API endpoints for data collection management.
 """
 import os
+import json
 import uuid
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Body, Header
 from pydantic import BaseModel, Field
@@ -105,6 +106,7 @@ class MetricsResponse(BaseModel):
     successful_jobs_last_24h: int
     timestamp: str
     floorplans: dict = Field(default_factory=dict)
+    invariants: dict = Field(default_factory=dict)
 
 
 class HealthCheckResponse(BaseModel):
@@ -539,6 +541,68 @@ async def check_service_health():
     return HealthCheckResponse(**health)
 
 
+# A pct_ invariant moving this many points from the blessed baseline is
+# reported. Chosen so the faults actually seen would have tripped it — the
+# availability gap was ~56 points of the corpus and the rentLabel change took
+# price-on-request buckets to 18% — while ordinary week-to-week market
+# movement (a point or two) does not.
+INVARIANT_STEP_PCT = 5.0
+
+_INVARIANT_BASELINE_KEY = "invariants:baseline"
+
+
+async def _invariant_redis():
+    """Redis handle, or None. Never raises: a missing baseline must degrade to
+    'no drift reported', never to a failed health check."""
+    try:
+        from app.services.apartment_service import apartment_service
+
+        return apartment_service._redis
+    except Exception:
+        return None
+
+
+async def _get_invariant_baseline() -> Optional[Dict[str, Any]]:
+    r = await _invariant_redis()
+    if not r:
+        return None
+    try:
+        raw = await r.get(_INVARIANT_BASELINE_KEY)
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+
+@router.post("/invariants/baseline")
+async def set_invariant_baseline():
+    """Bless the current ingestion ratios as the reference point.
+
+    Drift is measured against a baseline a human set, not against the previous
+    run. A self-updating baseline tracks whatever the pipeline is doing,
+    including the thing that has quietly broken — which is exactly how the
+    availability gap and the rentLabel change went unnoticed for weeks.
+
+    Call this when the corpus has been checked and looks right. Until it is
+    called, pipeline-health reports the ratios but no drift.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from datetime import datetime, timezone
+    from app.tasks.maintenance_tasks import compute_metrics_snapshot
+
+    snap = await compute_metrics_snapshot()
+    inv = dict(snap.get("invariants", {}) or {})
+    inv["_set_at"] = datetime.now(timezone.utc).isoformat()
+
+    r = await _invariant_redis()
+    if not r:
+        raise HTTPException(status_code=503, detail="Redis not available")
+    # No TTL: a baseline that silently expires takes the alerting with it.
+    await r.set(_INVARIANT_BASELINE_KEY, json.dumps(inv))
+    return {"status": "baseline set", "baseline": inv}
+
+
 @router.get("/pipeline-health")
 async def check_pipeline_health():
     """
@@ -734,9 +798,55 @@ async def check_pipeline_health():
         except Exception as e:
             logger.warning(f"Could not measure floorplan coverage: {e}")
 
+        # --- Ingestion invariants -----------------------------------------
+        #
+        # Does the data still look like data? Every fault found in 2026 was a
+        # parser or config problem that produced plausible output rather than
+        # an error, so none of the signals above would have moved. These
+        # ratios would have: a field the normalizer stops reading moves one of
+        # them hard and immediately.
+        #
+        # Compared against a baseline a human blessed, not against the last
+        # run — a baseline that updates itself drifts along with the fault it
+        # is supposed to catch.
+        invariants: Dict[str, Any] = {}
+        try:
+            from app.tasks.maintenance_tasks import compute_metrics_snapshot
+
+            snap = await compute_metrics_snapshot()
+            invariants = snap.get("invariants", {}) or {}
+            baseline = await _get_invariant_baseline()
+
+            if baseline:
+                drift = {}
+                for field, now_val in invariants.items():
+                    if not field.startswith("pct_"):
+                        continue
+                    was = baseline.get(field)
+                    if was is None:
+                        continue
+                    delta = round(now_val - was, 2)
+                    drift[field] = {"baseline": was, "now": now_val, "delta": delta}
+                    if abs(delta) >= INVARIANT_STEP_PCT:
+                        problems.append(
+                            f"{field} moved {delta:+.1f} points "
+                            f"({was}% → {now_val}%) — check the parser before the data"
+                        )
+                invariants["drift"] = drift
+                invariants["baseline_set_at"] = baseline.get("_set_at")
+            else:
+                invariants["drift"] = None
+                invariants["note"] = (
+                    "no baseline set — POST /invariants/baseline once the corpus "
+                    "looks right, then drift is reported against it"
+                )
+        except Exception as e:
+            logger.warning(f"Could not evaluate ingestion invariants: {e}")
+
         return {
             "healthy": not problems,
             "problems": problems,
+            "invariants": invariants,
             "floorplans": floorplans,
             "listing_checks": checks,
             "checked_at": now.isoformat(),

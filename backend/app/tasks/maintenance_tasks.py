@@ -226,7 +226,8 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
     loop, and the endpoint's bare `except` swallowed the resulting
     RuntimeError and returned zeros.
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import select, func, or_
+    from sqlalchemy.dialects.postgresql import JSONB
     from app.models.apartment import ApartmentModel
     from app.models.scrape_job import ScrapeJobModel
 
@@ -308,6 +309,74 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
                 0, (metrics.get("active_listings") or 0) - buildings_with_buckets
             ),
             "buckets_price_on_request": unpriced,
+        }
+
+        # --- Ingestion invariants -------------------------------------------
+        #
+        # Every pipeline fault found in 2026 produced output that *looked like
+        # data*: an Akamai 403 read as "verified", a payload field that moved
+        # read as "price on request", availability gated on a key that single
+        # unit listings never carry read as "date unknown", a 100-row config
+        # cap read as "this market only has 100 listings". None raised an
+        # error, and /health stayed green through all of them.
+        #
+        # These ratios are the cheapest thing that would have caught four of
+        # the nine. They are not thresholds — the absolute values are
+        # legitimately different per market and per week. What matters is a
+        # *step change* against the previous snapshot, which pipeline-health
+        # compares. A parser that stops reading a field moves one of these
+        # ratios hard and immediately.
+        active = metrics.get("active_listings") or 0
+
+        no_date = (
+            await session.execute(
+                select(func.count(ApartmentModel.id)).where(
+                    ApartmentModel.is_active == 1,
+                    or_(
+                        ApartmentModel.available_date.is_(None),
+                        ApartmentModel.available_date == "",
+                    ),
+                )
+            )
+        ).scalar() or 0
+
+        # A listing with no floorplans is normal (single-unit and by-the-room
+        # listings carry none); a *change* in how many is not.
+        no_models = (
+            await session.execute(
+                select(func.count(ApartmentModel.id)).where(
+                    ApartmentModel.is_active == 1,
+                    or_(
+                        ApartmentModel.floor_plans.is_(None),
+                        func.jsonb_array_length(
+                            func.cast(ApartmentModel.floor_plans, JSONB)
+                        ) == 0,
+                    ),
+                )
+            )
+        ).scalar() or 0
+
+        no_rent = (
+            await session.execute(
+                select(func.count(ApartmentModel.id)).where(
+                    ApartmentModel.is_active == 1,
+                    or_(ApartmentModel.rent.is_(None), ApartmentModel.rent <= 1),
+                )
+            )
+        ).scalar() or 0
+
+        def _pct(n: int, d: int) -> float:
+            return round(100.0 * n / d, 2) if d else 0.0
+
+        metrics["invariants"] = {
+            "active_listings": active,
+            "pct_buckets_price_on_request": _pct(unpriced, buckets_total),
+            "pct_listings_without_available_date": _pct(no_date, active),
+            "pct_listings_without_floorplans": _pct(no_models, active),
+            "pct_listings_without_rent": _pct(no_rent, active),
+            "buildings_without_buckets": metrics["floorplans"][
+                "active_buildings_without_buckets"
+            ],
         }
 
         stmt = select(func.count(ScrapeJobModel.id)).where(
