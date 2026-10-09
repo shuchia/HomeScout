@@ -671,6 +671,15 @@ class ApifyService(BaseScraper):
         zip_code = location.get("postalCode", "") or raw.get("zipCode", "")
         neighborhood = location.get("neighborhood", "") or raw.get("neighborhood", "")
 
+        # Canonical spelling first, so the metro folds below match reliably and
+        # nothing lands under a variant spelling. apartments.com returns
+        # "SAN FRANCISCO", "Mc Kees Rocks", "Mt Lebanon" and "The Bronx"
+        # alongside their normal forms; every per-market metric, comp and
+        # median is keyed on this string.
+        from app.services.normalization.city_names import canonicalize_city
+
+        city = canonicalize_city(city) or ""
+
         # Normalize NYC borough / neighborhood city values to "New York" so
         # users searching "New York, NY" find all 5 boroughs. apartments.com
         # surfaces 14+ distinct city values for what's all NYC (Brooklyn,

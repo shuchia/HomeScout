@@ -1756,3 +1756,84 @@ async def _backfill_pricing_model(apply: bool, batch_size: int) -> Dict[str, Any
         "still_uncertain": now_uncertain,
         "examples": flips,
     }
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def normalize_city_names(self, apply: bool = False, batch_size: int = 500) -> Dict[str, Any]:
+    """Bring stored city names to their canonical spelling.
+
+    Separate from the NYC and Boston metro folds, which answer "which market
+    is this in". This answers "is this the same string we already use" — a
+    listing can be in the right market and still be filed under a spelling
+    nothing else matches.
+
+    Measured 2026-10-09: 95 distinct city strings across the corpus collapsing
+    to 91, with SAN FRANCISCO/San Francisco, Mc Kees Rocks/McKees Rocks,
+    Mt Lebanon/Mount Lebanon and The Bronx/Bronx each split in two. Six rows,
+    but every per-market metric, comp and median keys on this string, and the
+    scraper reproduced the variants on every sweep until canonicalization moved
+    into ingestion.
+
+    Reads and writes Postgres only — no Apify cost. Dry run by default.
+    """
+    from app.tasks._async_runner import run_async
+
+    return run_async(_normalize_city_names(apply=apply, batch_size=batch_size))
+
+
+async def _normalize_city_names(apply: bool, batch_size: int) -> Dict[str, Any]:
+    from collections import Counter
+    from sqlalchemy import select, update
+    from app.models.apartment import ApartmentModel
+    from app.services.normalization.city_names import canonicalize_city
+
+    scanned = 0
+    changed = 0
+    moves: Counter = Counter()
+    pending: List[Dict[str, Any]] = []
+    last_id = ""
+
+    while True:
+        async with get_session_context() as session:
+            stmt = (
+                select(ApartmentModel.id, ApartmentModel.city)
+                .where(ApartmentModel.city.isnot(None))
+                .order_by(ApartmentModel.id)
+                .limit(batch_size)
+            )
+            if last_id:
+                stmt = stmt.where(ApartmentModel.id > last_id)
+            rows = (await session.execute(stmt)).all()
+            if not rows:
+                break
+
+            for row in rows:
+                scanned += 1
+                last_id = row.id
+                canon = canonicalize_city(row.city)
+                if not canon or canon == row.city:
+                    continue
+                changed += 1
+                moves[f"{row.city} -> {canon}"] += 1
+                pending.append({"id": row.id, "city": canon})
+
+            if apply and pending:
+                for entry in pending:
+                    await session.execute(
+                        update(ApartmentModel)
+                        .where(ApartmentModel.id == entry["id"])
+                        .values(city=entry["city"])
+                    )
+                await session.commit()
+            pending = []
+
+    logger.info(
+        f"normalize_city_names: scanned={scanned} changed={changed} apply={apply}"
+    )
+    return {
+        "status": "completed",
+        "apply": apply,
+        "scanned": scanned,
+        "changed": changed,
+        "moves": dict(moves.most_common(25)),
+    }

@@ -1340,6 +1340,31 @@ async def merge_duplicate_properties_endpoint(apply: bool = Query(False)):
     return {"status": "dispatched", "task_id": task.id, "apply": apply}
 
 
+@router.post("/normalize-city-names")
+async def normalize_city_names_endpoint(
+    apply: bool = Query(False),
+    batch_size: int = Query(500, ge=1, le=1000),
+):
+    """Bring stored city names to their canonical spelling.
+
+    Distinct from the NYC and Boston folds, which decide *which market* a
+    listing belongs to. This decides whether two rows are using the same
+    string for the same place: SAN FRANCISCO/San Francisco,
+    Mc Kees Rocks/McKees Rocks, Mt Lebanon/Mount Lebanon, The Bronx/Bronx.
+
+    Ingestion canonicalizes from now on; this clears what is already stored.
+    Dry run by default, and the response lists every rename it would make.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import normalize_city_names
+    task = normalize_city_names.apply_async(
+        kwargs={"apply": apply, "batch_size": batch_size}, queue="maintenance"
+    )
+    return {"status": "dispatched", "task_id": task.id, "apply": apply}
+
+
 @router.post("/normalize-boston-cities")
 async def normalize_boston_cities():
     """One-shot fix for Boston listings tagged with a neighbourhood name.
