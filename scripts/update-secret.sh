@@ -17,20 +17,52 @@
 
 set -euo pipefail
 
-ENV="${1:-}"
-KEY="${2:-}"
+# Parsed in one pass so options and positionals can appear in any order, and
+# so a missing positional is reported as such. The previous version did a
+# blind `shift 2`, which silently promoted "--restart" to the key name when
+# the key was omitted and then complained about the orphaned value:
+#   $ update-secret.sh qa --restart worker
+#   Unknown option: worker
+# which points at the wrong argument entirely.
+ENV=""
+KEY=""
 RESTART=""
+POSITIONAL=()
 
-shift 2 2>/dev/null || true
 while [ $# -gt 0 ]; do
   case "$1" in
-    --restart) RESTART="${2:-}"; shift 2 ;;
-    --restart=*) RESTART="${1#*=}"; shift ;;
-    *) echo "Unknown option: $1" >&2; exit 2 ;;
+    --restart)
+      [ $# -ge 2 ] || { echo "ERROR: --restart needs a value, e.g. --restart worker" >&2; exit 2; }
+      RESTART="$2"; shift 2 ;;
+    --restart=*)
+      RESTART="${1#*=}"; shift ;;
+    -h|--help)
+      SHOW_USAGE=1; shift ;;
+    --*)
+      echo "ERROR: unknown option '$1'" >&2; exit 2 ;;
+    *)
+      POSITIONAL+=("$1"); shift ;;
   esac
 done
 
+if [ "${SHOW_USAGE:-0}" = "1" ]; then
+  set --
+else
+  set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
+  ENV="${1:-}"
+  KEY="${2:-}"
+  if [ $# -gt 2 ]; then
+    echo "ERROR: too many arguments: ${*:3}" >&2
+    echo "       expected: <env> <KEY_NAME> [--restart svc1,svc2]" >&2
+    exit 2
+  fi
+fi
+
 if [ -z "$ENV" ] || [ -z "$KEY" ]; then
+  if [ -n "$ENV" ] && [ -z "$KEY" ]; then
+    echo "ERROR: missing KEY_NAME (the field to update inside the secret)." >&2
+    echo >&2
+  fi
   cat >&2 <<USAGE
 Usage: $0 <env> <KEY_NAME> [--restart svc1,svc2]
 
