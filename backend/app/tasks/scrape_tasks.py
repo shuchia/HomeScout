@@ -257,6 +257,14 @@ async def _get_existing_data(city: str):
                 ApartmentModel.source,
                 ApartmentModel.external_id,
                 ApartmentModel.source_url,
+            ).order_by(
+                # Active first, then freshest. A re-see must land on the row
+                # search actually shows. Without this ordering the map picked
+                # an arbitrary row, and after a duplicate merge that was often
+                # a deactivated one — whose content_hash update then collided
+                # with the survivor's and failed the whole market's scrape.
+                ApartmentModel.is_active.desc(),
+                ApartmentModel.freshness_confidence.desc().nullslast(),
             )
             result = await session.execute(stmt)
             for row in result:
@@ -265,8 +273,8 @@ async def _get_existing_data(city: str):
                     "external_id": row.external_id,
                     "source_url": row.source_url,
                 })
-                # First writer wins: the oldest row keeps the identity, so a
-                # re-see updates it rather than hopping between duplicates.
+                # First writer wins, and the ordering above decides who that
+                # is: the active, freshest row keeps the identity.
                 if key and key not in existing_source_keys:
                     existing_source_keys[key] = row.id
 

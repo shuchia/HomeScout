@@ -334,6 +334,8 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
         def _pct(n: int, d: int) -> float:
             return round(100.0 * n / d, 2) if d else 0.0
 
+        active = metrics.get("active_listings") or 0
+
         no_date_cond = or_(
             ApartmentModel.available_date.is_(None),
             ApartmentModel.available_date == "",
@@ -1362,15 +1364,18 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
         ApartmentModel.freshness_confidence,
         ApartmentModel.times_seen,
         ApartmentModel.first_seen_at,
+        ApartmentModel.is_active,
+        ApartmentModel.content_hash,
     )
 
     groups: Dict[str, List[Any]] = defaultdict(list)
     scanned = 0
 
     async with get_session_context() as session:
-        result = await session.stream(
-            select(*cols).where(ApartmentModel.is_active == 1)
-        )
+        # Every row, not just active ones. A loser deactivated by an earlier
+        # run still holds its content_hash, and that is what has to be cleared
+        # — see the commit below.
+        result = await session.stream(select(*cols))
         async for row in result:
             scanned += 1
             key = source_key(
@@ -1389,15 +1394,22 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
     samples: List[Dict[str, Any]] = []
     plan: List[Dict[str, Any]] = []
 
+    hashes_to_clear: List[str] = []
+
     for key, members in dup_groups.items():
         members.sort(
             key=lambda r: (
+                0 if r.is_active else 1,          # an active row always wins
                 -(r.freshness_confidence or 0),
                 -(r.times_seen or 0),
                 r.first_seen_at or datetime.max,
             )
         )
         survivor, losers = members[0], members[1:]
+        if not survivor.is_active:
+            # Nothing active in this group; leave it alone rather than
+            # resurrecting a dead property.
+            continue
 
         seen_dates = [r.first_seen_at for r in members if r.first_seen_at]
         earliest = min(seen_dates) if seen_dates else survivor.first_seen_at
@@ -1409,6 +1421,14 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
             "first_seen_at": earliest,
             "times_seen": total_seen,
         })
+        # A loser keeps its row (so saved_listings ids still resolve) but must
+        # give up its content_hash. The hash carries a UNIQUE constraint across
+        # every row, active or not, so a deactivated duplicate still occupying
+        # one is what made the next scrape of that property fail: the re-seen
+        # update rewrote the loser's hash to a value the survivor already held,
+        # and the UniqueViolationError failed the whole market. All 8 markets
+        # broke this way the morning after the first merge.
+        hashes_to_clear.extend(r.id for r in losers if r.content_hash)
         if len(samples) < 10:
             samples.append({
                 "source_key": key,
@@ -1441,6 +1461,12 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
                     .where(ApartmentModel.id.in_(entry["loser_ids"]))
                     .values(is_active=0)
                 )
+            for i in range(0, len(hashes_to_clear), 200):
+                await session.execute(
+                    update(ApartmentModel)
+                    .where(ApartmentModel.id.in_(hashes_to_clear[i:i + 200]))
+                    .values(content_hash=None)
+                )
             await session.commit()
 
     logger.info(
@@ -1453,6 +1479,7 @@ async def _merge_duplicate_properties(apply: bool) -> Dict[str, Any]:
         "active_rows_scanned": scanned,
         "duplicate_groups": len(dup_groups),
         "rows_deactivated": deactivated,
+        "hashes_cleared": len(hashes_to_clear),
         "samples": samples,
     }
 
