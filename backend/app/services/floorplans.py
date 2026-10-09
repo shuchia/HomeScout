@@ -243,6 +243,7 @@ def _buckets_ignoring_availability(
     fallback_available_date: Optional[str],
     description: Optional[str],
     city: Optional[str],
+    source_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Group a fully-leased building's floorplans, with ``available_units = 0``.
 
@@ -296,8 +297,8 @@ def _buckets_ignoring_availability(
             "earliest_available_date": _earliest_upcoming(g["dates"], today) or fallback_available_date,
             "model_ids": g["model_ids"],
             "pricing_model": _detect_bucket_pricing(
-                description, city, g["bedrooms"], g["bathrooms"], min_rent
-            ),
+                description, city, g["bedrooms"], g["bathrooms"], min_rent, source_url
+),
         })
     return out
 
@@ -314,6 +315,7 @@ def build_floorplan_buckets(
     description: Optional[str] = None,
     city: Optional[str] = None,
     today: Optional[str] = None,
+    source_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Collapse a building's floorplans into ``(bedrooms, bathrooms)`` buckets.
 
@@ -414,7 +416,7 @@ def build_floorplan_buckets(
         # These are genuinely full today.
         unavailable = _buckets_ignoring_availability(
             floor_plans, dates_by_model, today, fallback_bathrooms,
-            fallback_available_date, description, city,
+            fallback_available_date, description, city, source_url,
         )
         if unavailable:
             return unavailable
@@ -440,8 +442,8 @@ def build_floorplan_buckets(
                     ),
                     "model_ids": [],
                     "pricing_model": _detect_bucket_pricing(
-                        description, city, beds, baths, fallback_rent
-                    ),
+                        description, city, beds, baths, fallback_rent, source_url
+),
                 }
             ]
         return []
@@ -468,8 +470,8 @@ def build_floorplan_buckets(
                 # detected on the bucket's real beds/baths — not the building's
                 # collapsed pricing_model (which is computed on bedrooms=0).
                 "pricing_model": _detect_bucket_pricing(
-                    description, city, g["bedrooms"], g["bathrooms"], min_rent
-                ),
+                    description, city, g["bedrooms"], g["bathrooms"], min_rent, source_url
+),
             }
         )
 
@@ -484,6 +486,7 @@ def _detect_bucket_pricing(
     bedrooms: int,
     bathrooms: float,
     rent: Optional[int],
+    source_url: Optional[str] = None,
 ) -> Optional[str]:
     """Detect per_unit vs per_person for one bucket. Returns None when there's no
     signal to run on (no description and studio), leaving it unlabeled."""
@@ -500,6 +503,7 @@ def _detect_bucket_pricing(
             bathrooms=float(bathrooms),
             rent=int(rent) if rent else 0,
             city=city or "",
+            source_url=source_url or "",
         )["pricing_model"]
     except Exception:
         return None

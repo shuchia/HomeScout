@@ -194,6 +194,7 @@ def _reproject_floorplan(
             fallback_available_date=fallback_date,
             description=getattr(scraped, "description", None),
             city=getattr(scraped, "city", None),
+            source_url=getattr(scraped, "source_url", None),
         )
     except Exception as e:
         logger.warning(f"Could not rebuild floorplan buckets during check: {e}")

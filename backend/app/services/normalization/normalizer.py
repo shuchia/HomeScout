@@ -194,6 +194,9 @@ class NormalizationService:
             bathrooms=data["bathrooms"],
             rent=data["rent"],
             city=data.get("city") or "",
+            # The slug is built from the listing title and is often the most
+            # explicit signal available — "room-in-shared-4-bed-1-bath-home".
+            source_url=data.get("source_url") or "",
         )
         data["pricing_model"] = detection["pricing_model"]
         data["pricing_model_confidence"] = detection["confidence"]

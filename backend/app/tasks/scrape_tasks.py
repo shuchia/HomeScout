@@ -688,6 +688,7 @@ async def _rebuild_floorplan_buckets(apartment_ids: List[str]) -> int:
                 fallback_available_date=fallback_date,
                 description=apt.description,
                 city=apt.city,
+                source_url=apt.source_url,
             )
 
             await session.execute(

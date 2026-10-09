@@ -624,6 +624,32 @@ def _compare_invariants(
     return drift, unblessed
 
 
+@router.post("/backfill-pricing-model")
+async def backfill_pricing_model_endpoint(
+    apply: bool = Query(False),
+    batch_size: int = Query(500, ge=1, le=1000),
+):
+    """Re-run pricing-model detection over the stored corpus.
+
+    The detector had no vocabulary for renting one room in a shared house and
+    never read the listing URL, whose slug is often the most explicit signal
+    there is. 5 Linden St, Boston was published as a whole 4-bed house for
+    $1,130; 90 listings across five markets were wrong the same way, every one
+    of them in the too-good-to-be-true direction.
+
+    Reads from Postgres — no Apify cost. Dry run by default. Follow with
+    backfill-floorplans so per-bucket pricing_model picks it up.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.maintenance_tasks import backfill_pricing_model
+    task = backfill_pricing_model.apply_async(
+        kwargs={"apply": apply, "batch_size": batch_size}, queue="maintenance"
+    )
+    return {"status": "dispatched", "task_id": task.id, "apply": apply}
+
+
 @router.post("/corpus-audit")
 async def corpus_audit_endpoint(
     sample_size: int = Query(40, ge=5, le=300),

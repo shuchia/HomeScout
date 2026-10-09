@@ -343,6 +343,12 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
             func.jsonb_array_length(func.cast(ApartmentModel.floor_plans, JSONB)) == 0,
         )
         no_rent_cond = or_(ApartmentModel.rent.is_(None), ApartmentModel.rent <= 1)
+        # Per-person share. Watched because getting this wrong is silent and
+        # always flattering: one room's rent published as a whole unit's, which
+        # the heuristic then ranks to the top. 5 Linden St shipped as a 4-bed
+        # Allston house for $1,130. A detector that loses a signal shows up
+        # here as the share collapsing; one that over-fires shows it spiking.
+        per_person_cond = ApartmentModel.pricing_model == "per_person"
 
         per_city_rows = (
             await session.execute(
@@ -352,6 +358,7 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
                     func.count(func.nullif(no_date_cond, False)),
                     func.count(func.nullif(no_models_cond, False)),
                     func.count(func.nullif(no_rent_cond, False)),
+                    func.count(func.nullif(per_person_cond, False)),
                 )
                 .where(ApartmentModel.is_active == 1, ApartmentModel.city.isnot(None))
                 .group_by(ApartmentModel.city)
@@ -379,11 +386,12 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
         buckets_by_city = {r[0]: (r[1], r[2]) for r in bucket_rows}
 
         by_city: Dict[str, Any] = {}
-        tot_date = tot_models = tot_rent = 0
-        for city, n, nd, nm, nr in per_city_rows:
+        tot_date = tot_models = tot_rent = tot_pp = 0
+        for city, n, nd, nm, nr, npp in per_city_rows:
             tot_date += nd
             tot_models += nm
             tot_rent += nr
+            tot_pp += npp
             b_total, b_unpriced = buckets_by_city.get(city, (0, 0))
             by_city[city] = {
                 "active_listings": n,
@@ -391,6 +399,7 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
                 "pct_listings_without_available_date": _pct(nd, n),
                 "pct_listings_without_floorplans": _pct(nm, n),
                 "pct_listings_without_rent": _pct(nr, n),
+                "pct_listings_per_person": _pct(npp, n),
             }
 
         metrics["invariants"] = {
@@ -400,6 +409,7 @@ async def compute_metrics_snapshot() -> Dict[str, Any]:
                 "pct_listings_without_available_date": _pct(tot_date, active),
                 "pct_listings_without_floorplans": _pct(tot_models, active),
                 "pct_listings_without_rent": _pct(tot_rent, active),
+                "pct_listings_per_person": _pct(tot_pp, active),
                 "buildings_without_buckets": metrics["floorplans"][
                     "active_buildings_without_buckets"
                 ],
@@ -1158,6 +1168,7 @@ async def _backfill_floorplans(batch_size: int, only_missing: bool) -> Dict[str,
                     fallback_available_date=fallback_date,
                     description=apt.description,
                     city=apt.city,
+                    source_url=apt.source_url,
                 )
 
                 # Idempotent rebuild: clear this building's existing buckets first.
@@ -1564,3 +1575,123 @@ async def _corpus_audit(sample_size: int, city: Optional[str]) -> Dict[str, Any]
         f"agreement={ {k: v['agreement_pct'] for k, v in agreement.items()} }"
     )
     return result
+
+
+@celery_app.task(bind=True, max_retries=2, soft_time_limit=1800)
+def backfill_pricing_model(self, apply: bool = False, batch_size: int = 500) -> Dict[str, Any]:
+    """Re-run pricing-model detection over the stored corpus.
+
+    The detector had no vocabulary for the commonest by-the-room case —
+    renting one room in a shared house — and never read the listing URL,
+    whose slug is often the most explicit signal available. 5 Linden St,
+    Boston ("Room for rent: ... a private room in a shared apartment ... Full
+    bedroom in a 4 bedroom / 1 bathroom apartment", slug
+    "room-in-shared-4-bed-1-bath-home-in-allston") scored 0.4 against a 0.6
+    threshold and was published as a whole 4-bed house for $1,130.
+
+    90 listings across five markets were mislabelled the same way. Every such
+    error runs in the too-good-to-be-true direction: one room's rent shown as
+    a whole unit's, which the heuristic then ranks straight to the top.
+
+    Reads description and source_url from Postgres — no Apify cost. Dry run by
+    default. Run backfill-floorplans afterwards so per-bucket pricing_model
+    picks the change up too.
+    """
+    from app.tasks._async_runner import run_async
+
+    return run_async(_backfill_pricing_model(apply=apply, batch_size=batch_size))
+
+
+async def _backfill_pricing_model(apply: bool, batch_size: int) -> Dict[str, Any]:
+    from sqlalchemy import select, update
+    from app.models.apartment import ApartmentModel
+    from app.services.pricing_model_detector import detect_pricing_model
+
+    scanned = 0
+    changed = 0
+    now_uncertain = 0
+    flips: List[Dict[str, Any]] = []
+    pending: List[Dict[str, Any]] = []
+    last_id = ""
+
+    while True:
+        async with get_session_context() as session:
+            stmt = (
+                select(
+                    ApartmentModel.id,
+                    ApartmentModel.address,
+                    ApartmentModel.city,
+                    ApartmentModel.description,
+                    ApartmentModel.source_url,
+                    ApartmentModel.bedrooms,
+                    ApartmentModel.bathrooms,
+                    ApartmentModel.rent,
+                    ApartmentModel.pricing_model,
+                )
+                .where(ApartmentModel.is_active == 1)
+                .order_by(ApartmentModel.id)
+                .limit(batch_size)
+            )
+            if last_id:
+                stmt = stmt.where(ApartmentModel.id > last_id)
+            rows = (await session.execute(stmt)).all()
+            if not rows:
+                break
+
+            for r in rows:
+                scanned += 1
+                last_id = r.id
+                det = detect_pricing_model(
+                    description=r.description or "",
+                    bedrooms=r.bedrooms or 0,
+                    bathrooms=r.bathrooms or 0,
+                    rent=r.rent or 0,
+                    city=r.city or "",
+                    source_url=r.source_url or "",
+                )
+                if det.get("uncertain"):
+                    now_uncertain += 1
+                was = r.pricing_model or "per_unit"
+                if det["pricing_model"] == was:
+                    continue
+                changed += 1
+                pending.append({
+                    "id": r.id,
+                    "pricing_model": det["pricing_model"],
+                    "pricing_model_confidence": det["confidence"],
+                })
+                if len(flips) < 15:
+                    flips.append({
+                        "address": r.address,
+                        "city": r.city,
+                        "beds_baths": f"{r.bedrooms}bd/{r.bathrooms}ba",
+                        "rent": r.rent,
+                        "from": was,
+                        "to": det["pricing_model"],
+                    })
+
+            if apply and pending:
+                for entry in pending:
+                    await session.execute(
+                        update(ApartmentModel)
+                        .where(ApartmentModel.id == entry["id"])
+                        .values(
+                            pricing_model=entry["pricing_model"],
+                            pricing_model_confidence=entry["pricing_model_confidence"],
+                        )
+                    )
+                await session.commit()
+            pending = []
+
+    logger.info(
+        f"backfill_pricing_model: scanned={scanned} changed={changed} "
+        f"uncertain={now_uncertain} apply={apply}"
+    )
+    return {
+        "status": "completed",
+        "apply": apply,
+        "scanned": scanned,
+        "changed": changed,
+        "still_uncertain": now_uncertain,
+        "examples": flips,
+    }

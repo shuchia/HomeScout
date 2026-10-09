@@ -147,3 +147,81 @@ def test_luxury_conventional_stays_per_unit():
         bedrooms=3, bathrooms=3, rent=7000, city="Boston",
     )
     assert r["pricing_model"] == "per_unit"
+
+
+# --- Room in a shared house -------------------------------------------------
+#
+# The detector's vocabulary was built for purpose-built student co-living and
+# had no word for the commoner case: renting one room in a share. 5 Linden St,
+# Boston scored 0.4 against a 0.6 threshold and was published as a whole 4-bed
+# Allston house for $1,130. 90 listings across five markets were wrong the
+# same way — and every such error runs in the too-good-to-be-true direction,
+# so the heuristic ranks it straight to the top.
+
+_LINDEN_DESC = (
+    "Room for rent: PLEASE NOTE: This is a private room in a shared apartment. "
+    "You will have your own bedroom and shared common areas (kitchen, bathroom, "
+    "etc.) with other residents. Full bedroom in a 4 bedroom / 1 bathroom "
+    "apartment! This Full room in Allston offers flexible lease lengths. "
+    "Speak to a June representative for recommendations."
+)
+_LINDEN_URL = (
+    "https://www.apartments.com/"
+    "room-in-shared-4-bed-1-bath-home-in-allston-boston-ma/0yt4pd0/"
+)
+
+
+def test_linden_street_description_is_per_person():
+    r = detect_pricing_model(
+        description=_LINDEN_DESC, bedrooms=4, bathrooms=1, rent=1130, city="Boston"
+    )
+    assert r["pricing_model"] == "per_person"
+
+
+def test_url_slug_alone_is_enough():
+    """The slug is built from the listing title and is often more explicit than
+    the prose. It costs nothing to read and was being ignored."""
+    r = detect_pricing_model(
+        description="", bedrooms=7, bathrooms=2.5, rent=1610, city="Cambridge",
+        source_url="https://www.apartments.com/room-in-shared-7-bed-2-5-bath-home-in-harvard-square-cambridge-ma/x/",
+    )
+    assert r["pricing_model"] == "per_person"
+
+
+def test_source_url_is_optional():
+    """Three call sites exist; the parameter must stay backward compatible."""
+    r = detect_pricing_model(
+        description=_LINDEN_DESC, bedrooms=4, bathrooms=1, rent=1130, city="Boston"
+    )
+    assert "pricing_model" in r
+
+
+def test_beds_far_exceeding_baths_does_not_flip_alone():
+    """Geometry is a safety net, not a signal. An ordinary family home with
+    more beds than baths and no by-the-room language stays per_unit."""
+    r = detect_pricing_model(
+        description="Lovely family home with a large yard and finished basement.",
+        bedrooms=4, bathrooms=2, rent=3800, city="Boston",
+    )
+    assert r["pricing_model"] == "per_unit"
+    assert r["uncertain"] is False
+
+
+def test_uncertain_marks_evidence_that_fell_short():
+    """Real evidence below the threshold must not read as a confident
+    per_unit. Reporting 'confidence 0.6' in the wrong answer is how 5 Linden
+    shipped."""
+    r = detect_pricing_model(
+        description="Each residence features a private bedroom with ensuite bath.",
+        bedrooms=3, bathrooms=1, rent=4500, city="Boston",
+    )
+    assert r["pricing_model"] == "per_unit"
+    assert r["uncertain"] is True
+
+
+def test_clear_per_unit_is_not_marked_uncertain():
+    r = detect_pricing_model(
+        description="Modern finishes throughout, in-unit laundry.",
+        bedrooms=2, bathrooms=2, rent=3200, city="Boston",
+    )
+    assert r["uncertain"] is False
