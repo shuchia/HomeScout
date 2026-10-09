@@ -276,19 +276,34 @@ class NormalizationService:
                 return 1.0
         return 1.0
 
+    # No residential rental is this large. A corpus audit on 2026-10-09 found
+    # a Brooklyn listing re-parsing to 633,733 sq ft — comma stripping turns a
+    # "633,733" style value into one number, and with only a `> 0` check it
+    # sailed through into the corpus, where it would distort any per-sqft
+    # comparison and read as a palace on the card.
+    MAX_PLAUSIBLE_SQFT = 25_000
+
+    def _sane_sqft(self, value: int, warnings: List[str]) -> Optional[int]:
+        if value <= 0:
+            return None
+        if value > self.MAX_PLAUSIBLE_SQFT:
+            warnings.append(f"implausible sqft discarded: {value}")
+            return None
+        return value
+
     def _validate_sqft(self, sqft: Any, warnings: List[str]) -> Optional[int]:
         """Validate and normalize square footage."""
         if sqft is None:
             return None
         if isinstance(sqft, int):
-            return sqft if sqft > 0 else None
+            return self._sane_sqft(sqft, warnings)
         if isinstance(sqft, float):
-            return int(sqft) if sqft > 0 else None
+            return self._sane_sqft(int(sqft), warnings)
         if isinstance(sqft, str):
             try:
                 cleaned = sqft.replace(",", "").replace("sq ft", "").replace("sqft", "").strip()
                 value = int(float(cleaned))
-                return value if value > 0 else None
+                return self._sane_sqft(value, warnings)
             except ValueError:
                 return None
         return None

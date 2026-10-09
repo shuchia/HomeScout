@@ -1538,6 +1538,8 @@ async def _corpus_audit(sample_size: int, city: Optional[str]) -> Dict[str, Any]
                 ApartmentModel.bathrooms,
                 ApartmentModel.sqft,
                 ApartmentModel.available_date,
+                ApartmentModel.true_cost_monthly,
+                ApartmentModel.true_cost_move_in,
             )
             .where(
                 ApartmentModel.is_active == 1,
@@ -1556,12 +1558,18 @@ async def _corpus_audit(sample_size: int, city: Optional[str]) -> Dict[str, Any]
     examples: List[Dict[str, Any]] = []
 
     for row in rows:
+        # Must carry every field diff_listing compares, not just the audited
+        # ones. Omitting the true_cost pair made them read as None -> value on
+        # literally every listing, so the diff log came back ~80% noise and
+        # buried the handful of real movements it exists to show.
         current = {
             "rent": row.rent,
             "bedrooms": row.bedrooms,
             "bathrooms": row.bathrooms,
             "sqft": row.sqft,
             "available_date": row.available_date,
+            "true_cost_monthly": row.true_cost_monthly,
+            "true_cost_move_in": row.true_cost_move_in,
         }
         try:
             status, updated, changes = await check_listing(row.source_url, current)

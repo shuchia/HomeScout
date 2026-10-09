@@ -399,3 +399,36 @@ def test_valet_trash_captured(scraper):
     result = scraper._normalize_apartments_com_listing(raw)
     assert result is not None
     assert result.amenity_fee == 20
+
+
+class TestSqftSanityBound:
+    """A corpus audit on 2026-10-09 found a Brooklyn listing re-parsing to
+    633,733 sq ft. Comma stripping collapses a "633,733" style value into one
+    number and the only check was `> 0`, so it would have been written to the
+    corpus — distorting any per-sqft comparison and reading as a palace on the
+    card."""
+
+    def _norm(self):
+        from app.services.normalization.normalizer import NormalizationService
+        return NormalizationService()
+
+    def test_implausible_sqft_is_discarded(self):
+        w = []
+        assert self._norm()._validate_sqft(633733, w) is None
+        assert w and "implausible" in w[0]
+
+    def test_implausible_string_sqft_is_discarded(self):
+        w = []
+        assert self._norm()._validate_sqft("633,733", w) is None
+
+    def test_large_but_plausible_sqft_survives(self):
+        """A genuinely big unit must not be thrown away."""
+        w = []
+        assert self._norm()._validate_sqft(4200, w) == 4200
+        assert w == []
+
+    def test_normal_sqft_unchanged(self):
+        w = []
+        assert self._norm()._validate_sqft("1,128", w) == 1128
+        assert self._norm()._validate_sqft(0, w) is None
+        assert self._norm()._validate_sqft(None, w) is None
