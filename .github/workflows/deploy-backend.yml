@@ -191,8 +191,60 @@ jobs:
               --no-cli-pager
           done
 
-      - name: Wait for API service stability
-        run: aws ecs wait services-stable --cluster snugd-${ENV} --services api
+      - name: Wait for service stability (api, worker, beat)
+        run: aws ecs wait services-stable --cluster snugd-${ENV} --services api worker beat
+
+      - name: Verify worker is healthy
+        run: |
+          # services-stable alone is not enough. A worker that OOMs keeps its
+          # container up while the forked children die, so ECS reports the
+          # service steady while every task fails. That is exactly what
+          # happened on 2026-10-08: 81 SIGKILLs in five minutes, deploy green,
+          # nothing alerted. Almost everything that matters runs here —
+          # scrapes, decay, listing checks, transcription — and until now the
+          # pipeline verified `api` only.
+          set -e
+          echo "Checking the running worker task is on the image we just built..."
+          TASK=$(aws ecs list-tasks --cluster snugd-${ENV} --service-name worker \
+            --query 'taskArns[0]' --output text)
+          if [ "$TASK" = "None" ] || [ -z "$TASK" ]; then
+            echo "::error::No running worker task"; exit 1
+          fi
+          IMAGE=$(aws ecs describe-tasks --cluster snugd-${ENV} --tasks "$TASK" \
+            --query 'tasks[0].containers[0].image' --output text)
+          echo "worker image: $IMAGE"
+          case "$IMAGE" in
+            *:${IMAGE_TAG}) echo "image matches ${IMAGE_TAG}" ;;
+            *) echo "::error::Worker is on $IMAGE, expected tag ${IMAGE_TAG}"; exit 1 ;;
+          esac
+
+          echo "Waiting for the worker to report ready..."
+          READY=0
+          for _ in $(seq 1 20); do
+            if aws logs filter-log-events \
+                 --log-group-name /ecs/snugd-${ENV}/worker \
+                 --start-time $(( ($(date +%s) - 600) * 1000 )) \
+                 --filter-pattern '"ready."' \
+                 --query 'events[0].message' --output text 2>/dev/null | grep -q "ready"; then
+              READY=1; break
+            fi
+            sleep 15
+          done
+          [ "$READY" = "1" ] || { echo "::error::Worker never logged ready"; exit 1; }
+
+          echo "Checking for crash loops..."
+          KILLS=$(aws logs filter-log-events \
+            --log-group-name /ecs/snugd-${ENV}/worker \
+            --start-time $(( ($(date +%s) - 300) * 1000 )) \
+            --filter-pattern '?SIGKILL ?WorkerLostError' \
+            --query 'length(events)' --output text 2>/dev/null || echo 0)
+          echo "SIGKILL/WorkerLost events in the last 5 min: $KILLS"
+          # A couple can be collateral from the rolling restart; a loop is not.
+          if [ "${KILLS:-0}" -gt 5 ]; then
+            echo "::error::Worker is crash-looping ($KILLS events) — likely OOM under task_acks_late"
+            exit 1
+          fi
+          echo "Worker healthy."
 
       - name: Smoke tests
         run: |
