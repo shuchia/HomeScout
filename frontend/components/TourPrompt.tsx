@@ -14,8 +14,18 @@ interface TourPromptProps {
 export function TourPrompt({ apartmentId, alreadyInTours = false, onStarted }: TourPromptProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [inTours, setInTours] = useState(alreadyInTours)
   const [error, setError] = useState<string | null>(null)
+
+  // Local state covers only "I just started a tour in this session"; whether
+  // the listing was *already* in the pipeline is the parent's to know.
+  //
+  // This used to be `useState(alreadyInTours)`, which reads the prop on the
+  // first render and never again. The favourites page loads tours in an
+  // effect after mount, so every prompt mounted with alreadyInTours={false},
+  // froze that, and kept offering "Start Touring" for listings already in
+  // the pipeline however many times the parent re-rendered.
+  const [justStarted, setJustStarted] = useState(false)
+  const inTours = alreadyInTours || justStarted
 
   if (inTours) {
     return (
@@ -36,7 +46,7 @@ export function TourPrompt({ apartmentId, alreadyInTours = false, onStarted }: T
     setError(null)
     try {
       await createTour(apartmentId)
-      setInTours(true)
+      setJustStarted(true)
       if (onStarted) {
         onStarted()
       } else {
@@ -44,7 +54,8 @@ export function TourPrompt({ apartmentId, alreadyInTours = false, onStarted }: T
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setInTours(true)
+        // Already in the pipeline — the server is the authority, so reflect it.
+        setJustStarted(true)
       } else {
         setError('Could not start tour. Try again.')
       }
