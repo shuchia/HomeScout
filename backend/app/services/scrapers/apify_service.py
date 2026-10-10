@@ -146,9 +146,32 @@ class ApifyService(BaseScraper):
             An empty result means the actor found nothing at that URL, which
             for a well-formed URL is good evidence the listing is gone.
         """
-        return await self._execute(lambda: self._build_url_input(url, **kwargs), 1)
+        # A single listing is not a bulk sweep and must not inherit its
+        # patience. _wait_for_run defaults to a 90-minute budget polled every
+        # 30s, tuned for a market scrape that genuinely takes 20-60 minutes.
+        # Applied to one URL that usually finishes in 20-40s, that means the
+        # result is noticed up to 30s late, and a slow Apify run pins a prefork
+        # slot for as long as it likes — one took 661s on 2026-10-09 and a
+        # voice note queued behind it spun for three minutes.
+        #
+        # check_listing already treats "could not answer" as UNKNOWN rather
+        # than guessing, so giving up early is a supported outcome, not a
+        # failure. Better to record unknown in 3 minutes than to hold the
+        # worker for 90.
+        return await self._execute(
+            lambda: self._build_url_input(url, **kwargs),
+            1,
+            max_wait_seconds=180,
+            poll_interval=3,
+        )
 
-    async def _execute(self, build_input, max_listings: int) -> ScrapeResult:
+    async def _execute(
+        self,
+        build_input,
+        max_listings: int,
+        max_wait_seconds: Optional[int] = None,
+        poll_interval: Optional[int] = None,
+    ) -> ScrapeResult:
         """Run an actor with the given input and normalize its dataset.
 
         Shared by search-mode (`scrape`) and URL-mode (`scrape_url`); the only
@@ -407,13 +430,24 @@ class ApifyService(BaseScraper):
                 return None
 
             # Wait for the run to complete
-            return await self._wait_for_run(run_id)
+            return await self._wait_for_run(
+                run_id,
+                **{k: v for k, v in (
+                    ("max_wait_seconds", max_wait_seconds),
+                    ("poll_interval", poll_interval),
+                ) if v is not None},
+            )
 
         except Exception as e:
             logger.exception(f"Error running Apify actor: {e}")
             return None
 
-    async def _wait_for_run(self, run_id: str, max_wait_seconds: int = 5400) -> Optional[Dict[str, Any]]:
+    async def _wait_for_run(
+        self,
+        run_id: str,
+        max_wait_seconds: int = 5400,
+        poll_interval: int = 30,
+    ) -> Optional[Dict[str, Any]]:
         """
         Wait for an actor run to complete.
 
@@ -429,7 +463,8 @@ class ApifyService(BaseScraper):
 
         url = f"{self.API_BASE_URL}/actor-runs/{run_id}"
         start_time = datetime.utcnow()
-        poll_interval = 30  # 30s between polls — runs take 20-60 min
+        # 30s suits a bulk market scrape (20-60 min). A single-listing check
+        # passes a much tighter interval — see scrape_url.
 
         while True:
             elapsed = (datetime.utcnow() - start_time).total_seconds()
