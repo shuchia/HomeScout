@@ -6,12 +6,20 @@ from app.tasks._async_runner import run_async
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(name="recompute_true_costs", bind=True)
-def recompute_true_costs(self):
-    """Recompute true cost estimates for all active listings.
+@celery_app.task(name="recompute_true_costs", bind=True, soft_time_limit=1800)
+def recompute_true_costs(self, apply: bool = False, batch_size: int = 300):
+    """Recompute true cost estimates for active listings.
 
-    Run this after updating cost_estimates.json or changing the
-    estimation logic. Processes all active listings.
+    Run after changing cost_estimates.json or the estimation logic, and to
+    repair rows whose stored figure predates a fee that was scraped later:
+    true_cost_* is computed at ingestion and stored, while cost_breakdown is
+    assembled at read time from the row's own columns, so the two drift apart.
+    Measured 2026-10-12: 15 active listings carried a security deposit,
+    application fee or admin fee that was absent from true_cost_move_in —
+    62 Boylston St showed a $2,350 deposit in its breakdown and a move-in cost
+    identical to its monthly.
+
+    Dry run by default; `apply=True` writes.
     """
     from app.database import get_session_context
     from app.models.apartment import ApartmentModel
@@ -19,56 +27,96 @@ def recompute_true_costs(self):
     from sqlalchemy import select
 
     estimator = CostEstimator()
-    updated = 0
+    scanned = 0
+    changed = 0
+    samples = []
 
     async def _recompute():
-        nonlocal updated
-        async with get_session_context() as session:
-            stmt = (
-                select(ApartmentModel)
-                .where(ApartmentModel.is_active == 1)
-                .order_by(ApartmentModel.id)
-            )
-            result = await session.execute(stmt)
-            apartments = result.scalars().all()
-
-            for apt in apartments:
-                scraped_fees = {
-                    "pet_rent": apt.pet_rent,
-                    "parking_fee": apt.parking_fee,
-                    "amenity_fee": apt.amenity_fee,
-                    "application_fee": apt.application_fee,
-                    "security_deposit": apt.security_deposit,
-                    "other_monthly_fees": apt.other_monthly_fees,
-                }
-                breakdown = estimator.compute_true_cost(
-                    rent=apt.rent,
-                    zip_code=apt.zip_code,
-                    bedrooms=apt.bedrooms,
-                    amenities=apt.amenities or [],
-                    scraped_fees=scraped_fees,
+        nonlocal scanned, changed
+        last_id = ""
+        while True:
+            async with get_session_context() as session:
+                # Batched with a keyset cursor. Loading every active entity at
+                # once pulls floor_plans, available_units, images and
+                # description along with it and SIGKILLs the 512MB worker —
+                # the same failure that took out decay and the duplicate merge.
+                stmt = (
+                    select(ApartmentModel)
+                    .where(ApartmentModel.is_active == 1)
+                    .order_by(ApartmentModel.id)
+                    .limit(batch_size)
                 )
-                apt.true_cost_monthly = breakdown["true_cost_monthly"]
-                apt.true_cost_move_in = breakdown["true_cost_move_in"]
-                apt.est_electric = breakdown["est_electric"]
-                apt.est_gas = breakdown["est_gas"]
-                apt.est_water = breakdown["est_water"]
-                apt.est_internet = breakdown["est_internet"]
-                apt.est_renters_insurance = breakdown["est_renters_insurance"]
-                apt.est_laundry = breakdown["est_laundry"]
-                apt.utilities_included = {
-                    "heat": breakdown["est_gas"] == 0,
-                    "water": breakdown["est_water"] == 0,
-                    "electric": breakdown["est_electric"] == 0,
-                }
-                updated += 1
+                if last_id:
+                    stmt = stmt.where(ApartmentModel.id > last_id)
 
-            await session.commit()
+                apartments = (await session.execute(stmt)).scalars().all()
+                if not apartments:
+                    break
+
+                for apt in apartments:
+                    scanned += 1
+                    last_id = apt.id
+                    scraped_fees = {
+                        "pet_rent": apt.pet_rent,
+                        "parking_fee": apt.parking_fee,
+                        "amenity_fee": apt.amenity_fee,
+                        "application_fee": apt.application_fee,
+                        # admin_fee was missing here. It is a one-off move-in
+                        # cost, so omitting it did not just skip an update — a
+                        # recompute actively erased it from true_cost_move_in
+                        # for the 253 listings that carry one.
+                        "admin_fee": apt.admin_fee,
+                        "security_deposit": apt.security_deposit,
+                        "other_monthly_fees": apt.other_monthly_fees,
+                    }
+                    breakdown = estimator.compute_true_cost(
+                        rent=apt.rent,
+                        zip_code=apt.zip_code,
+                        bedrooms=apt.bedrooms,
+                        amenities=apt.amenities or [],
+                        scraped_fees=scraped_fees,
+                    )
+
+                    moved = (
+                        apt.true_cost_monthly != breakdown["true_cost_monthly"]
+                        or apt.true_cost_move_in != breakdown["true_cost_move_in"]
+                    )
+                    if moved:
+                        changed += 1
+                        if len(samples) < 10:
+                            samples.append({
+                                "address": apt.address,
+                                "monthly": [apt.true_cost_monthly, breakdown["true_cost_monthly"]],
+                                "move_in": [apt.true_cost_move_in, breakdown["true_cost_move_in"]],
+                            })
+
+                    if not apply:
+                        continue
+
+                    apt.true_cost_monthly = breakdown["true_cost_monthly"]
+                    apt.true_cost_move_in = breakdown["true_cost_move_in"]
+                    apt.est_electric = breakdown["est_electric"]
+                    apt.est_gas = breakdown["est_gas"]
+                    apt.est_water = breakdown["est_water"]
+                    apt.est_internet = breakdown["est_internet"]
+                    apt.est_renters_insurance = breakdown["est_renters_insurance"]
+                    apt.est_laundry = breakdown["est_laundry"]
+                    apt.utilities_included = {
+                        "heat": breakdown["est_gas"] == 0,
+                        "water": breakdown["est_water"] == 0,
+                        "electric": breakdown["est_electric"] == 0,
+                    }
+
+                if apply:
+                    await session.commit()
 
     run_async(_recompute())
 
-    logger.info(f"Recomputed true costs for {updated} listings")
-    return {"updated": updated}
+    logger.info(
+        f"recompute_true_costs: scanned={scanned} changed={changed} apply={apply}"
+    )
+    return {"status": "completed", "apply": apply, "scanned": scanned,
+            "changed": changed, "samples": samples}
 
 
 @celery_app.task(name="backfill_fees", bind=True, soft_time_limit=600, time_limit=900)

@@ -1178,6 +1178,32 @@ async def trigger_market_scrape(market_id: str):
     return {"status": "dispatched", "market_id": market_id, "task_id": task.id}
 
 
+@router.post("/recompute-true-costs")
+async def recompute_true_costs_endpoint(
+    apply: bool = Query(False),
+    batch_size: int = Query(300, ge=1, le=1000),
+):
+    """Recompute true cost from each listing's own fee columns.
+
+    true_cost_* is computed at ingestion and stored, while cost_breakdown is
+    assembled at read time from the row. A fee scraped after the figure was
+    first computed leaves the two disagreeing — 15 active listings on
+    2026-10-12 showed a deposit in the breakdown and a move-in cost identical
+    to their monthly.
+
+    Reads and writes Postgres only; no Apify cost. Dry run by default, and the
+    response lists what would change.
+    """
+    if not is_database_enabled():
+        raise HTTPException(status_code=503, detail="Database not enabled")
+
+    from app.tasks.true_cost_tasks import recompute_true_costs
+    task = recompute_true_costs.apply_async(
+        kwargs={"apply": apply, "batch_size": batch_size}, queue="maintenance"
+    )
+    return {"status": "dispatched", "task_id": task.id, "apply": apply}
+
+
 @router.post("/backfill-fees")
 async def backfill_fees():
     """Dispatch a Celery task to recompute fees from raw_data for all active listings."""

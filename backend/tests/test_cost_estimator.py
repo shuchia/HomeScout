@@ -202,3 +202,45 @@ class TestCostEstimator:
             scraped_fees={},
         )
         assert breakdown["est_internet"] == 0
+
+
+class TestAdminFeeInMoveIn:
+    """admin_fee is a one-off move-in cost and must survive a recompute.
+
+    It was missing from the scraped_fees dict recompute_true_costs builds, so
+    running the recompute did not merely skip it — it actively erased admin_fee
+    from true_cost_move_in for the 253 listings that carry one.
+    """
+
+    def _estimator(self):
+        from app.services.cost_estimator import CostEstimator
+        return CostEstimator()
+
+    def test_admin_fee_lands_in_move_in(self):
+        out = self._estimator().compute_true_cost(
+            rent=1660, zip_code="15201", bedrooms=1, amenities=[],
+            scraped_fees={"application_fee": 50, "admin_fee": 300},
+        )
+        assert out["true_cost_move_in"] == out["true_cost_monthly"] + 350
+
+    def test_deposit_and_fees_are_additive(self):
+        out = self._estimator().compute_true_cost(
+            rent=2150, zip_code="02116", bedrooms=1, amenities=[],
+            scraped_fees={"security_deposit": 2350, "application_fee": 50, "admin_fee": 100},
+        )
+        assert out["true_cost_move_in"] == out["true_cost_monthly"] + 2500
+
+    def test_no_one_off_fees_means_move_in_equals_monthly(self):
+        """The common case — half the corpus genuinely has no move-in costs,
+        and that must stay distinguishable from losing them."""
+        out = self._estimator().compute_true_cost(
+            rent=2000, zip_code="02116", bedrooms=1, amenities=[], scraped_fees={},
+        )
+        assert out["true_cost_move_in"] == out["true_cost_monthly"]
+
+    def test_move_in_is_never_below_monthly(self):
+        out = self._estimator().compute_true_cost(
+            rent=2000, zip_code="02116", bedrooms=1, amenities=[],
+            scraped_fees={"security_deposit": 0, "admin_fee": 0},
+        )
+        assert out["true_cost_move_in"] >= out["true_cost_monthly"]
