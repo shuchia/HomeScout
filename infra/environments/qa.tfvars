@@ -2,6 +2,7 @@ environment          = "qa"
 vpc_cidr             = "10.1.0.0/16"
 enable_redundant_nat = false
 frontend_url         = "https://qa.snugd.ai"
+alert_from_email     = "alerts@snugd.ai"
 log_level            = "INFO"
 use_floorplan_search = "true"
 
@@ -9,7 +10,7 @@ use_floorplan_search = "true"
 # stays pullable. Subsequent revisions belong to CI — the ECS module
 # uses lifecycle.ignore_changes on container_definitions + the service's
 # task_definition pointer so terraform doesn't fight the deploy pipeline.
-image_tag            = "qa-latest"
+image_tag = "qa-latest"
 
 # RDS
 rds_instance_class      = "db.t4g.micro"

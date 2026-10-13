@@ -302,3 +302,60 @@ class TestExemptPaths:
         from app.middleware.rate_limit import EXEMPT_PATHS
         assert "/health" in EXEMPT_PATHS
         assert "/metrics" in EXEMPT_PATHS
+
+
+class TestExpensivePathMatching:
+    """Parameterised routes could never be rate-limited as expensive.
+
+    EXPENSIVE_PATHS is an exact-match set, so `/api/tours/{id}/inquiry-email`
+    and friends sat on the 120/min bucket rather than 20/min from the day they
+    were written. Each costs an Anthropic call, so the limit is about spend as
+    much as load.
+
+    Matched by pattern rather than from the resolved route because
+    BaseHTTPMiddleware.dispatch runs before the router matches, so
+    request.scope["route"] is not populated yet.
+    """
+
+    def test_literal_expensive_paths_still_match(self):
+        from app.middleware.rate_limit import _is_expensive
+
+        for p in ("/api/search", "/api/apartments/compare", "/api/apartments/commute"):
+            assert _is_expensive(p), p
+
+    def test_per_tour_claude_endpoints_are_expensive(self):
+        from app.middleware.rate_limit import _is_expensive
+
+        for suffix in ("inquiry-email", "viewing-request", "parse-reply", "enhance-note"):
+            assert _is_expensive(f"/api/tours/abc-123/{suffix}"), suffix
+
+    def test_collection_level_claude_endpoints_are_expensive(self):
+        from app.middleware.rate_limit import _is_expensive
+
+        assert _is_expensive("/api/tours/day-plan")
+        assert _is_expensive("/api/tours/decision-brief")
+        assert _is_expensive("/api/search/score-batch")
+
+    def test_ordinary_tour_routes_are_not_expensive(self):
+        """The cap exists for Claude calls. Throttling note and photo writes to
+        20/min would break capture during a tour, which is the opposite of what
+        this is for."""
+        from app.middleware.rate_limit import _is_expensive
+
+        for p in (
+            "/api/tours",
+            "/api/tours/abc-123",
+            "/api/tours/abc-123/notes",
+            "/api/tours/abc-123/photos",
+            "/api/saved-listings",
+            "/health",
+        ):
+            assert not _is_expensive(p), p
+
+    def test_pattern_is_anchored(self):
+        """A suffix match must not leak onto longer or prefixed paths."""
+        from app.middleware.rate_limit import _is_expensive
+
+        assert not _is_expensive("/api/tours/abc/inquiry-email/extra")
+        assert not _is_expensive("/evil/api/tours/abc/parse-reply")
+        assert not _is_expensive("/api/tours/a/b/parse-reply")

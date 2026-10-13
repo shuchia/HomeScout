@@ -83,6 +83,15 @@ variable "frontend_url" {
   type = string
 }
 
+# Deliberately a plain environment variable, not a Secrets Manager key. An
+# address is not a secret, and the GOOGLE_MAPS_API_KEY note in main.tf records
+# that ECS refuses to start a task referencing a secret key that does not exist
+# yet — so routing this through secrets would couple a copy change to a manual
+# Secrets Manager edit, with a failed deploy if they get out of order.
+variable "alert_from_email" {
+  type = string
+}
+
 variable "log_level" {
   type    = string
   default = "INFO"

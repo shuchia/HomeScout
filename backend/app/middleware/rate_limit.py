@@ -1,5 +1,6 @@
 """Redis-based rate limiting middleware using async Redis."""
 import os
+import re
 import time
 import logging
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -15,6 +16,32 @@ EXPENSIVE_LIMIT = 20    # requests per minute for search/compare
 ANON_LIMIT = 30         # requests per minute for anonymous
 
 EXPENSIVE_PATHS = {"/api/search", "/api/apartments/compare", "/api/apartments/commute"}
+
+# Expensive endpoints whose path contains a parameter, matched by pattern.
+#
+# EXPENSIVE_PATHS above is an exact-match set, so no parameterised route could
+# ever be in it — every per-tour Claude endpoint has been sitting on the
+# 120/min bucket rather than 20/min since it was written. Each of these costs
+# an Anthropic call, so the limit is about spend as much as load.
+#
+# Matched here rather than from the resolved route: BaseHTTPMiddleware.dispatch
+# runs before the router matches, so request.scope["route"] is not yet set.
+# Explicit patterns also keep the list readable and testable without standing
+# up the app.
+EXPENSIVE_PATH_PATTERNS = (
+    re.compile(r"^/api/search/score-batch$"),
+    re.compile(r"^/api/tours/(day-plan|decision-brief)$"),
+    re.compile(
+        r"^/api/tours/[^/]+/"
+        r"(inquiry-email|viewing-request|parse-reply|enhance-note)$"
+    ),
+)
+
+
+def _is_expensive(path: str) -> bool:
+    if path in EXPENSIVE_PATHS:
+        return True
+    return any(p.match(path) for p in EXPENSIVE_PATH_PATTERNS)
 
 # Infrastructure endpoints are never rate limited. Throttling a health check
 # turns load into an outage: the ALB polls /health every 30s, and once the
@@ -79,8 +106,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             limit = ANON_LIMIT
 
         # Stricter limit for expensive endpoints
-        path = request.url.path
-        if path in EXPENSIVE_PATHS:
+        if _is_expensive(request.url.path):
             limit = min(limit, EXPENSIVE_LIMIT)
             identity += ":expensive"
 

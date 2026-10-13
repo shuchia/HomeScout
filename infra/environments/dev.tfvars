@@ -2,6 +2,7 @@ environment          = "dev"
 vpc_cidr             = "10.0.0.0/16"
 enable_redundant_nat = false
 frontend_url         = "https://dev.snugd.ai"
+alert_from_email     = "alerts@snugd.ai"
 log_level            = "DEBUG"
 
 # RDS

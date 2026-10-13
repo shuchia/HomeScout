@@ -2,10 +2,11 @@ environment          = "prod"
 vpc_cidr             = "10.2.0.0/16"
 enable_redundant_nat = false # Single NAT for now (cost saving)
 frontend_url         = "https://snugd.ai"
+alert_from_email     = "alerts@snugd.ai"
 log_level            = "INFO"
 
 # Initial image (see qa.tfvars for the same lifecycle-ignore rationale).
-image_tag            = "prod-latest"
+image_tag = "prod-latest"
 
 # RDS — same as QA for now, scale up when ready for real launch
 rds_instance_class      = "db.t4g.micro"

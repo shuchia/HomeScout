@@ -151,6 +151,7 @@ module "ecs" {
   worker_desired_count  = var.worker_desired_count
   beat_desired_count    = var.beat_desired_count
   frontend_url          = var.frontend_url
+  alert_from_email      = var.alert_from_email
   log_level             = var.log_level
   use_floorplan_search  = var.use_floorplan_search
 }

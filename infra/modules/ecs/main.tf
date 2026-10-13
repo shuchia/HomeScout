@@ -66,6 +66,7 @@ locals {
     { name = "LOG_LEVEL", value = var.log_level },
     { name = "PYTHONUNBUFFERED", value = "1" },
     { name = "S3_BUCKET_NAME", value = var.tours_bucket_name },
+    { name = "ALERT_FROM_EMAIL", value = var.alert_from_email },
   ]
 }
 

@@ -58,9 +58,19 @@ export interface SavedSearch {
 export interface Notification {
   id: string
   user_id: string
-  type: 'listing_unavailable' | 'new_match'
+  // Mirrors the notifications_type_check constraint added in migration 014.
+  // Hand-synced — there is no codegen.
+  type:
+    | 'listing_unavailable'
+    | 'new_match'
+    | 'tour_reminder_pre'
+    | 'tour_reminder_post'
+    | 'inbox_reply'
   title: string
   message: string | null
+  // Deep-link target. apartment_id is legacy and NULL for URL-added listings,
+  // which is why reminders could not link anywhere.
+  saved_listing_id: string | null
   apartment_id: string | null
   saved_search_id: string | null
   read: boolean

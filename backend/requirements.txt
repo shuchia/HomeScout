@@ -59,6 +59,15 @@ stripe==11.4.1
 # Email
 resend==2.5.1
 
+# Timezones
+# zoneinfo is stdlib on 3.11, but it reads the system IANA database and the
+# runtime image (python:3.11-slim) installs only libpq5 and curl — no tzdata.
+# Without this, ZoneInfo("America/New_York") raises ZoneInfoNotFoundError in
+# the container while working fine on macOS, which is the worst possible
+# failure shape: every timezone test passes locally and tour reminders fire
+# at the wrong hour in QA. This package ships the database as a fallback.
+tzdata==2026.1
+
 # Development
 # pytest 8.2+ required by pytest-asyncio 0.24.0 (which pins pytest<9,>=8.2).
 pytest==8.3.4

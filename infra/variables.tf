@@ -114,6 +114,16 @@ variable "frontend_url" {
   type = string
 }
 
+# The From address on product email (daily alerts, tour reminders).
+# alert_tasks.py falls back to a hardcoded "alerts@snugd.app" when this is
+# unset, which is what every deployed environment has been sending as — note
+# the domain differs from the product's. The chosen domain must be verified in
+# Resend (SPF + DKIM) or sends are rejected provider-side, silently.
+variable "alert_from_email" {
+  type    = string
+  default = "alerts@snugd.ai"
+}
+
 variable "log_level" {
   type    = string
   default = "INFO"
