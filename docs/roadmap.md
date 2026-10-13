@@ -1,8 +1,18 @@
 # Roadmap
 
-> Last updated: 2026-05-04 | Living document — keep it lean
+> Last updated: 2026-10-12 | Living document — keep it lean
 
 ## Next Up
+
+**Listing scam detection** — see [scam-detection-design.md](scam-detection-design.md).
+
+The acquisition wedge and the moat are the same interaction: a stranger pastes
+a listing URL, gets a trust assessment with no signup, and shares it. The
+checks are not the moat — the confirmed-scam registry is, and it accrues on
+every free submission. Phase 1 (payment language, contact analysis,
+below-market rank, registry schema) works at today's corpus size; Phase 2
+(photo matching) is coverage-bound and sits behind a State College deep sweep.
+All prerequisites cleared as of 2026-10-12.
 
 **Email response tracking and auto-stage-advancement (touring pipeline).**
 
@@ -19,6 +29,10 @@
 - **Weekly + price-drop email digests** — extend the existing daily Pro alert task to add weekly summaries and price-drop notifications on saved searches.
 
 ## Recently Shipped (last 60 days)
+
+- Scraping pipeline repair — asyncpg fork bug (scraping had run ~1 job/day since August), decay dead since June, blocked listings certified alive, a 100-row coverage ceiling misread as "the API has no pagination".
+- Ingestion correctness — `rentLabel` prices and rentals-only availability dates were being discarded (56% of the corpus had no date); deduplication on the source property id (15.6% were repeat captures); canonical city names; room-in-a-shared-house pricing detection.
+- `pipeline-health` ingestion invariants with a human-blessed per-city baseline, plus `corpus-audit`, which checks a sample against source and reports per-field agreement.
 
 - Multi-environment deploy pipeline (dev/qa/prod) with branch-based triggers, smoke tests, and on-demand scraping.
 - True cost calculator with per-region utility/fees estimates and per-listing breakdowns.
