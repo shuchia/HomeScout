@@ -117,15 +117,19 @@ case "$COMMAND" in
     echo "Monitor logs: ./scripts/deploy.sh logs ${ENV}"
     ;;
 
+  # -reconfigure: every env shares one infra/.terraform dir with a different
+  # state key. Without it, init in a dir last used for qa asks whether to
+  # copy the existing state to the new key — answering yes seeds prod's
+  # state with QA's resources.
   tf-plan)
     cd infra
-    terraform init -backend-config="key=infra/${ENV}/terraform.tfstate"
+    terraform init -reconfigure -backend-config="key=infra/${ENV}/terraform.tfstate"
     terraform plan -var-file=environments/${ENV}.tfvars
     ;;
 
   tf-apply)
     cd infra
-    terraform init -backend-config="key=infra/${ENV}/terraform.tfstate"
+    terraform init -reconfigure -backend-config="key=infra/${ENV}/terraform.tfstate"
     terraform apply -var-file=environments/${ENV}.tfvars
     ;;
 

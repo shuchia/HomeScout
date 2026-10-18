@@ -12,7 +12,7 @@ Claude Code guidance for Snugd infrastructure — Terraform on AWS (us-east-1, a
 | qa | `api-qa.snugd.ai` | **Yes — the only live env** | ECS cluster `snugd-qa` |
 | prod | `api.snugd.ai` | **No** | `prod.tfvars` written but never applied |
 
-Prod has no `snugd/prod/secrets` in Secrets Manager, no ECS cluster, and no DNS record for `api.snugd.ai`. Anything targeting prod (`./scripts/smoke-test.sh prod`, `./scripts/beta-report.sh prod`) fails until it's stood up.
+Prod has no `snugd/prod/secrets` in Secrets Manager, no ECS cluster, and no DNS record for `api.snugd.ai`. Anything targeting prod (`./scripts/smoke-test.sh prod`, `./scripts/beta-report.sh prod`) fails until it's stood up. The ordered stand-up is [docs/prod-standup.md](../docs/prod-standup.md) — note its step 1: a stale DynamoDB digest blocks `terraform init` for the prod key, and `deploy.sh tf-plan`'s bare `init` needs `-reconfigure` when switching envs or it offers to copy QA's state into prod.
 
 ## Layout
 

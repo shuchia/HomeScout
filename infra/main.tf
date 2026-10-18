@@ -67,6 +67,8 @@ module "rds" {
   multi_az                = var.rds_multi_az
   backup_retention_period = var.rds_backup_retention
   deletion_protection     = var.rds_deletion_protection
+  engine_version          = var.rds_engine_version
+  snapshot_identifier     = var.rds_snapshot_identifier
   private_subnet_ids      = module.networking.private_subnet_ids
   security_group_id       = module.networking.rds_security_group_id
 }
