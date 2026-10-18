@@ -214,6 +214,15 @@ class TestProUserSearch:
                     return_value="pro",
                 ),
                 patch(
+                    "app.main.TierService.check_search_limit",
+                    new_callable=AsyncMock,
+                    return_value=(True, 50),
+                ),
+                patch(
+                    "app.main.TierService.increment_search_count",
+                    new_callable=AsyncMock,
+                ),
+                patch(
                     "app.main.apartment_service.get_apartments_paginated",
                     new_callable=AsyncMock,
                     return_value=([SAMPLE_APARTMENT], 1, False, "exact"),
@@ -224,7 +233,7 @@ class TestProUserSearch:
             assert response.status_code == 200
             data = response.json()
             assert data["tier"] == "pro"
-            assert data["searches_remaining"] is None
+            assert data["searches_remaining"] == 49
             assert data["total_results"] == 1
             assert len(data["apartments"]) == 1
 
@@ -236,8 +245,8 @@ class TestProUserSearch:
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
-    def test_pro_user_has_no_search_limit(self):
-        """Pro users should NOT have check_search_limit called."""
+    def test_pro_user_is_metered_like_everyone(self):
+        """No paid tier any more: Pro users get the same abuse-guard limit."""
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         try:
             with (
@@ -249,6 +258,7 @@ class TestProUserSearch:
                 patch(
                     "app.main.TierService.check_search_limit",
                     new_callable=AsyncMock,
+                    return_value=(True, 50),
                 ) as mock_limit,
                 patch(
                     "app.main.TierService.increment_search_count",
@@ -263,8 +273,8 @@ class TestProUserSearch:
                 response = client.post("/api/search", json=SEARCH_BODY)
 
             assert response.status_code == 200
-            mock_limit.assert_not_called()
-            mock_incr.assert_not_called()
+            mock_limit.assert_awaited_once_with("user-pro-456")
+            mock_incr.assert_awaited_once_with("user-pro-456")
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
@@ -332,3 +342,56 @@ class TestSearchResponseShape:
             assert data["page"] == 1
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
+
+
+class TestScoreBatchGating:
+    """AI scoring needs consent and cap headroom, not a Pro tier."""
+
+    SCORE_BODY = {"apartment_ids": ["apt-001"], "search_context": SEARCH_BODY}
+
+    def _post(self):
+        from app.auth import get_current_user
+        app.dependency_overrides[get_current_user] = _mock_free_user
+        try:
+            return client.post("/api/search/score-batch", json=self.SCORE_BODY)
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_without_consent_returns_403(self):
+        with patch(
+            "app.services.tier_service.TierService.has_ai_consent",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            response = self._post()
+        assert response.status_code == 403
+
+    def test_cap_spent_returns_429(self):
+        with patch(
+            "app.services.tier_service.TierService.has_ai_consent",
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            "app.services.tier_service.TierService.consume_ai_call",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            response = self._post()
+        assert response.status_code == 429
+
+    def test_more_than_ten_ids_rejected_before_spending_cap(self):
+        from app.auth import get_current_user
+        app.dependency_overrides[get_current_user] = _mock_free_user
+        try:
+            with patch(
+                "app.services.tier_service.TierService.consume_ai_call",
+                new_callable=AsyncMock,
+            ) as consume:
+                response = client.post(
+                    "/api/search/score-batch",
+                    json={**self.SCORE_BODY, "apartment_ids": [f"a{i}" for i in range(11)]},
+                )
+            assert response.status_code == 422  # schema max_length=10
+            consume.assert_not_awaited()
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)

@@ -51,8 +51,8 @@ function buildSteps(isMobile: boolean): Step[] {
       target: 'body',
       placement: 'center',
       skipBeacon: true,
-      title: 'Unlock Pro Features',
-      content: 'Get AI scoring, smart comparisons, and inquiry emails with a Pro invite code. Enter it on the search page or the Pricing page.',
+      title: 'AI Is Included',
+      content: 'AI match scoring, comparisons, inquiry drafts and tour planning are free. We\'ll ask before turning them on.',
       ...STEP_OPTIONS,
     },
   ]

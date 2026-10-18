@@ -6,8 +6,6 @@ import ImageCarousel from './ImageCarousel';
 import { FavoriteButton } from './FavoriteButton';
 import { CompareButton } from './CompareButton';
 import CostBreakdownPanel from './CostBreakdownPanel';
-import UpgradePrompt from './UpgradePrompt';
-import { useAuth } from '@/contexts/AuthContext';
 
 interface ApartmentCardProps {
   apartment: ApartmentWithScore;
@@ -54,7 +52,6 @@ const getLabelColor = (label: string): string => {
 };
 
 export default function ApartmentCard({ apartment, moveInDate, aiLoading }: ApartmentCardProps) {
-  const { tier, profileLoading } = useAuth();
   const [showBreakdown, setShowBreakdown] = useState(false);
   const {
     id,
@@ -256,10 +253,7 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
               apartment.cost_breakdown ? (
                 <CostBreakdownPanel breakdown={apartment.cost_breakdown} pricingModel={apartment.pricing_model} bedrooms={apartment.bedrooms} />
               ) : (
-                <UpgradePrompt
-                  feature="full cost breakdown"
-                  inline
-                />
+                <p className="text-sm text-gray-500">No cost breakdown for this listing yet.</p>
               )
             )}
           </div>
@@ -441,7 +435,7 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
           </div>
         )}
 
-        {/* AI Reasoning - Pro users see full insights, free users see upsell */}
+        {/* AI Reasoning — present once score-batch returns (AI turned on) */}
         {!aiLoading && match_score != null && reasoning ? (
           <div className="space-y-2">
             <p className="text-sm text-gray-700 italic">&quot;{reasoning}&quot;</p>
@@ -488,13 +482,6 @@ export default function ApartmentCard({ apartment, moveInDate, aiLoading }: Apar
               </ul>
             )}
           </div>
-        ) : tier === 'free' && !profileLoading && apartment.heuristic_score != null ? (
-          <a href="/pricing" className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 hover:bg-amber-100 transition">
-            <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            Upgrade to Pro for AI-powered insights
-          </a>
         ) : null}
 
         {/* Card Actions */}

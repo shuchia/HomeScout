@@ -1,4 +1,4 @@
-"""Daily email alert task for Pro users with saved searches."""
+"""Daily email alert task for users with saved searches."""
 import os
 import logging
 from datetime import datetime, timezone
@@ -14,7 +14,7 @@ FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL", "alerts@snugd.app")
 
 @shared_task(name="app.tasks.alert_tasks.send_daily_alerts")
 def send_daily_alerts():
-    """Find Pro users with active saved searches, check for new listings, send emails."""
+    """Find users with active saved searches, check for new listings, send emails."""
     from app.services.tier_service import supabase_admin
     if not supabase_admin:
         logger.error("Supabase admin client not configured")
@@ -36,35 +36,34 @@ def send_daily_alerts():
         logger.info("No active saved searches to process")
         return {"sent": 0}
 
-    # Batch-fetch profile rows for the saved-search owners, filtered to Pro.
+    # Batch-fetch profile rows for the saved-search owners.
     user_ids = sorted({s["user_id"] for s in result.data if s.get("user_id")})
     if not user_ids:
         return {"sent": 0}
 
     profiles_resp = (
         supabase_admin.table("profiles")
-        .select("id, user_tier, email, name")
+        .select("id, email, name")
         .in_("id", user_ids)
-        .eq("user_tier", "pro")
         .execute()
     )
     profiles_by_id = {p["id"]: p for p in (profiles_resp.data or [])}
 
-    # Keep only searches whose owner is a Pro user with an email.
-    pro_searches = [
+    # Keep only searches whose owner still has a profile.
+    alert_searches = [
         {**s, "_profile": profiles_by_id[s["user_id"]]}
         for s in result.data
         if s.get("user_id") in profiles_by_id
     ]
-    if not pro_searches:
-        logger.info("No Pro users with active saved searches to alert")
+    if not alert_searches:
+        logger.info("No users with active saved searches to alert")
         return {"sent": 0}
 
     from app.services.apartment_service import ApartmentService
     service = ApartmentService()
     sent_count = 0
 
-    for search in pro_searches:
+    for search in alert_searches:
         profile = search.get("_profile", {})
         email = profile.get("email")
         if not email:

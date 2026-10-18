@@ -79,7 +79,7 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=3, minute=0),
     },
 
-    # Daily email alerts for Pro users at 8 AM ET (13:00 UTC)
+    # Daily email alerts for saved searches at 8 AM ET (13:00 UTC)
     "send-daily-alerts": {
         "task": "app.tasks.alert_tasks.send_daily_alerts",
         "schedule": crontab(hour=13, minute=0),

@@ -23,7 +23,7 @@ import {
   ApiError,
 } from '@/lib/api'
 import VoiceCapture from '@/components/VoiceCapture'
-import UpgradePrompt from '@/components/UpgradePrompt'
+import AiConsentPrompt from '@/components/AiConsent'
 import { Tour, TourStage, TourNote } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
 
@@ -73,7 +73,7 @@ export default function TourDetailPage() {
   const router = useRouter()
   const tourId = params.id as string
 
-  const { user, loading: authLoading, signInWithGoogle, isPro, profileLoading } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, aiEnabled, profileLoading } = useAuth()
 
   const [tour, setTour] = useState<Tour | null>(null)
   const [apartment, setApartment] = useState<Apartment | null>(null)
@@ -381,7 +381,7 @@ export default function TourDetailPage() {
             />
           )}
           {activeTab === 'contact' && (
-            <ContactTab tour={tour} apartment={apartment} isPro={isPro} profileLoading={profileLoading} onTourUpdate={setTour} />
+            <ContactTab tour={tour} apartment={apartment} aiEnabled={aiEnabled} profileLoading={profileLoading} onTourUpdate={setTour} />
           )}
         </div>
       </main>
@@ -983,13 +983,13 @@ function normalizePhoneForLink(raw: string | null | undefined): string | null {
 function ContactTab({
   tour,
   apartment,
-  isPro,
+  aiEnabled,
   profileLoading,
   onTourUpdate,
 }: {
   tour: Tour
   apartment: Apartment | null
-  isPro: boolean
+  aiEnabled: boolean
   profileLoading?: boolean
   onTourUpdate: (tour: Tour) => void
 }) {
@@ -1156,10 +1156,10 @@ function ContactTab({
     )
   }
 
-  if (!isPro) {
+  if (!aiEnabled) {
     return (
       <div className="py-8">
-        <UpgradePrompt feature="AI-generated inquiry messages and one-tap contact" />
+        <AiConsentPrompt feature="Drafting inquiry messages" />
       </div>
     )
   }

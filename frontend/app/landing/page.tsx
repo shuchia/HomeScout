@@ -201,7 +201,7 @@ function LandingContent() {
           <div>
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs font-semibold mb-5">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-pulse" />
-              {hasBetaCode ? 'Beta access — free Pro for 90 days' : 'Beta live across 8 cities'}
+              {hasBetaCode ? 'Beta access — every AI feature, free' : 'Beta live across 8 cities'}
             </span>
             <h1 className="text-4xl md:text-5xl font-bold text-[var(--color-text)] leading-tight tracking-tight mb-4">
               Stop apartment hunting{' '}
@@ -215,7 +215,7 @@ function LandingContent() {
                 <button onClick={scrollToBeta} className="px-8 py-3.5 rounded-xl bg-[var(--color-primary)] text-white text-base font-semibold hover:bg-[var(--color-primary-light)] transition">
                   Get Your Beta Code ↓
                 </button>
-                <p className="text-xs text-[var(--color-text-muted)] mt-3">Free Pro access · 90 days · No credit card</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-3">Free · No credit card</p>
               </div>
             ) : (
               <div>
@@ -237,7 +237,7 @@ function LandingContent() {
           <div className="max-w-lg mx-auto px-6 text-center">
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-[var(--color-primary-light)] text-xs font-semibold mb-4">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary-light)] animate-pulse" />
-              Free Pro Access — 90 Days
+              Free Beta Access
             </span>
             <h2 className="text-3xl font-bold text-white mb-2">Try the beta now</h2>
             <p className="text-white/50 mb-6">Copy your invite code, open the app, sign in with Google, paste the code.</p>

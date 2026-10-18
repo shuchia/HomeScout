@@ -72,28 +72,8 @@ class TestCreateSavedSearch:
         response = client.post("/api/saved-searches", json=CREATE_BODY)
         assert response.status_code == 401
 
-    def test_free_tier_returns_403(self):
-        """Free tier user cannot create saved searches."""
-        app.dependency_overrides[get_current_user] = lambda: _mock_user()
-        try:
-            with patch(
-                "app.routers.saved_searches.TierService.get_user_tier",
-                new_callable=AsyncMock,
-                return_value="free",
-            ):
-                response = client.post(
-                    "/api/saved-searches",
-                    json=CREATE_BODY,
-                    headers={"Authorization": "Bearer fake-token"},
-                )
-
-            assert response.status_code == 403
-            assert "Pro" in response.json()["detail"]
-        finally:
-            app.dependency_overrides.pop(get_current_user, None)
-
-    def test_pro_tier_creates_search(self):
-        """Pro tier user can create a saved search."""
+    def test_any_signed_in_user_creates_search(self):
+        """Saved searches are no longer Pro-only."""
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
         try:
             mock_sb = MagicMock()
@@ -101,14 +81,7 @@ class TestCreateSavedSearch:
                 data=[SAMPLE_SAVED_SEARCH]
             )
 
-            with (
-                patch(
-                    "app.routers.saved_searches.TierService.get_user_tier",
-                    new_callable=AsyncMock,
-                    return_value="pro",
-                ),
-                patch("app.routers.saved_searches.supabase_admin", mock_sb),
-            ):
+            with patch("app.routers.saved_searches.supabase_admin", mock_sb):
                 response = client.post(
                     "/api/saved-searches",
                     json=CREATE_BODY,

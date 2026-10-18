@@ -70,17 +70,19 @@ Used by:
 | `get_current_user` | `/api/billing/checkout`, `/api/billing/portal`, `/api/saved-searches`, `/api/tours/*`, `/api/search/score-batch` |
 | `get_optional_user` | `/api/search`, `/api/apartments/compare` |
 
-## Tier System
+## Access Model
 
-| Tier | Auth | Searches/day | AI scoring | Compare AI | Saved searches | Favorites | Tours AI |
-|------|------|--------------|------------|------------|----------------|-----------|----------|
-| anonymous | none | unlimited (no metering) | no | no | n/a | n/a | n/a |
-| free | authed | **20** (`FREE_DAILY_SEARCH_LIMIT` in `tier_service.py`) | no | no | 403 | 5 max | no |
-| pro | authed + paid | unlimited | yes | yes | unlimited | unlimited | yes |
+**No paid tier since 2026-10.** AI and every former Pro feature are free for signed-in users. What gates AI is consent, not tier:
 
-Tier is stored in Supabase `profiles.user_tier`. Defaults to `"free"` if the row is missing or the column is null. `TierService.get_user_tier()` queries Supabase via the service-role client.
+| Who | Searches/day | AI (scoring, compare, tour AI, voice-note enhancement) | Saved searches | Favorites | Radius |
+|-----|--------------|-------------------------------------------------------|----------------|-----------|--------|
+| anonymous | unmetered (rate limiter only) | no | n/a | n/a | yes |
+| signed in | **100** (`DAILY_SEARCH_LIMIT`) | only with `profiles.ai_consent_at` set, up to **100** calls/day (`DAILY_AI_LIMIT`) | unlimited | unlimited | yes |
 
-> Note: the older "3 searches/day" copy in some docs is stale. Code currently allows 20.
+- `ai_consent_at` (migration 015) is written by the client from the consent dialog / Settings toggle. The backend reads it before every Claude call and **fails closed** on lookup errors.
+- The AI cap is a Redis counter `ai_calls:{user_id}:{YYYY-MM-DD}` (TTL 48h) and **fails open**, like the search cap.
+- Migration 015 also stops clients writing `user_tier`: before it, "Users update own profile" let any signed-in user set their own tier with the browser's anon key.
+- `profiles.user_tier` and Stripe are dormant: still written by webhooks and invite redemption, read by the beta report, but nothing gates on them.
 
 ## TierService
 
@@ -88,12 +90,15 @@ Tier is stored in Supabase `profiles.user_tier`. Defaults to `"free"` if the row
 
 | Method | Notes |
 |--------|-------|
-| `get_user_tier(user_id)` | Reads `profiles.user_tier`; defaults to `"free"` |
+| `get_user_tier(user_id)` | Reads `profiles.user_tier`; defaults to `"free"`. Gates nothing now |
+| `has_ai_consent(user_id)` | Reads `profiles.ai_consent_at`; **fails closed** |
+| `consume_ai_call(user_id)` | Redis INCR on `ai_calls:{user_id}:{date}`; False past `DAILY_AI_LIMIT`; fails open |
+| `ai_denial(user_id)` / `require_ai(user_id)` | 403 (no consent) / 429 (cap spent) / None — returned or raised |
 | `check_search_limit(user_id)` | Redis key `search_count:{user_id}:{YYYY-MM-DD}`, TTL 48h. Returns `(allowed, remaining)` |
 | `increment_search_count(user_id)` | Redis INCR on the same key |
 | `update_user_tier(user_id, tier, **kwargs)` | Updates Supabase profile (called from Stripe webhook) |
 
-**Fail-open**: if Redis or Supabase is unreachable, requests are allowed (better to over-serve than to lock everyone out).
+**Fail-open** for the Redis caps: if Redis is unreachable, requests are allowed (better to over-serve than to lock everyone out). Consent is the exception — it fails closed, because "we couldn't check" must not mean "send their data anyway".
 
 ## Stripe Integration
 

@@ -6,7 +6,6 @@ import { searchApartments, ApiError } from '@/lib/api';
 import { useComparison } from '@/hooks/useComparison';
 import NearLocationInput from './NearLocationInput';
 import RadiusSlider from './RadiusSlider';
-import { useAuth } from '@/contexts/AuthContext';
 
 // Available cities — the markets we actively scrape (enabled in
 // market_configs) and that return fresh listings. Keep in sync with the
@@ -90,7 +89,6 @@ const BUDGET_DEFAULT = 2000;
 
 export default function SearchForm({ onResults, onLoading, onError, onSearchMeta, onSearchParams }: SearchFormProps) {
   const { searchContext, setSearchContext } = useComparison();
-  const { isPro } = useAuth();
 
   // Form state — restore from persisted searchContext if available
   const [city, setCity] = useState(searchContext?.city || 'New York, NY');
@@ -143,7 +141,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         near_lat: nearLocation?.lat,
         near_lng: nearLocation?.lng,
         near_label: nearLocation?.label,
-        max_distance_miles: nearLocation && isPro ? maxDistance : undefined,
+        max_distance_miles: nearLocation ? maxDistance : undefined,
       };
 
       const response = await searchApartments(params);
@@ -163,7 +161,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
         near_lat: nearLocation?.lat,
         near_lng: nearLocation?.lng,
         near_label: nearLocation?.label,
-        max_distance_miles: nearLocation && isPro ? maxDistance : undefined,
+        max_distance_miles: nearLocation ? maxDistance : undefined,
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -204,7 +202,7 @@ export default function SearchForm({ onResults, onLoading, onError, onSearchMeta
 
       {/* Radius Slider (shown when location is set) */}
       {nearLocation && (
-        <RadiusSlider value={maxDistance} onChange={setMaxDistance} isPro={isPro} />
+        <RadiusSlider value={maxDistance} onChange={setMaxDistance} />
       )}
 
       {/* Budget Input */}

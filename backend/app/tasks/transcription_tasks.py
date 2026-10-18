@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
 def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id: str):
-    """Transcribe voice note, then auto-enhance for Pro users."""
+    """Transcribe voice note, then auto-enhance for users who consented to AI."""
     from app.services.transcription.whisper_service import WhisperService
     from app.services.tier_service import TierService
 
@@ -26,13 +26,13 @@ def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id
 
         logger.info(f"Transcribed voice note {note_id}: {len(text)} chars")
 
-        # Check tier and chain enhancement for Pro users
+        # Chain AI enhancement when the user consented and has cap left
         try:
-            tier = run_async(TierService.get_user_tier(user_id))
+            denial = run_async(TierService.ai_denial(user_id))
         except Exception:
-            tier = "free"
+            denial = True
 
-        if tier == "pro":
+        if denial is None:
             enhance_voice_note.delay(note_id, text, tour_id)
 
     except Exception as exc:
@@ -45,7 +45,7 @@ def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id
 
 @celery_app.task(max_retries=1, default_retry_delay=10)
 def enhance_voice_note(note_id: str, raw_text: str, tour_id: str):
-    """Auto-enhance a transcribed voice note using Claude (Pro only)."""
+    """Auto-enhance a transcribed voice note using Claude."""
     from app.services.claude_service import ClaudeService
 
     if not supabase_admin:

@@ -1,6 +1,7 @@
 """Tests for compare endpoint tier gating."""
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -142,16 +143,20 @@ class TestAnonymousCompare:
             app.dependency_overrides.pop(get_optional_user, None)
 
 
-class TestFreeUserCompare:
-    """Free users get apartment data for side-by-side but no Claude analysis."""
+class TestNoConsentCompare:
+    """Signed-in users who have not consented to AI get the table, no Claude analysis."""
 
-    def test_free_user_gets_apartments_without_analysis(self):
+    def test_unconsented_user_gets_apartments_without_analysis(self):
         app.dependency_overrides[get_optional_user] = _mock_free_user
         try:
             with patch(
                 "app.routers.apartments.TierService.get_user_tier",
                 new_callable=AsyncMock,
                 return_value="free",
+            ), patch(
+                "app.routers.apartments.TierService.ai_denial",
+                new_callable=AsyncMock,
+                return_value=HTTPException(status_code=403, detail="consent"),
             ), patch(
                 "app.routers.apartments.is_database_enabled",
                 return_value=False,
@@ -171,14 +176,18 @@ class TestFreeUserCompare:
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
-    def test_free_user_does_not_call_claude(self):
-        """Verify Claude analysis is NOT invoked for free users."""
+    def test_unconsented_user_does_not_call_claude(self):
+        """Verify Claude analysis is NOT invoked without consent."""
         app.dependency_overrides[get_optional_user] = _mock_free_user
         try:
             with patch(
                 "app.routers.apartments.TierService.get_user_tier",
                 new_callable=AsyncMock,
                 return_value="free",
+            ), patch(
+                "app.routers.apartments.TierService.ai_denial",
+                new_callable=AsyncMock,
+                return_value=HTTPException(status_code=403, detail="consent"),
             ), patch(
                 "app.routers.apartments.is_database_enabled",
                 return_value=False,
@@ -197,16 +206,20 @@ class TestFreeUserCompare:
             app.dependency_overrides.pop(get_optional_user, None)
 
 
-class TestProUserCompare:
-    """Pro users get full Claude comparison analysis."""
+class TestConsentedCompare:
+    """Any signed-in user who consented gets Claude analysis — no Pro needed."""
 
-    def test_pro_user_gets_full_analysis(self):
+    def test_consented_user_gets_full_analysis(self):
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         try:
             with patch(
                 "app.routers.apartments.TierService.get_user_tier",
                 new_callable=AsyncMock,
-                return_value="pro",
+                return_value="free",
+            ), patch(
+                "app.routers.apartments.TierService.ai_denial",
+                new_callable=AsyncMock,
+                return_value=None,
             ), patch(
                 "app.routers.apartments.is_database_enabled",
                 return_value=False,
@@ -222,7 +235,7 @@ class TestProUserCompare:
 
             assert response.status_code == 200
             data = response.json()
-            assert data["tier"] == "pro"
+            assert data["tier"] == "free"
             assert data["comparison_analysis"] is not None
 
             analysis = data["comparison_analysis"]
@@ -234,14 +247,18 @@ class TestProUserCompare:
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
-    def test_pro_user_calls_claude(self):
+    def test_consented_user_calls_claude(self):
         """Verify Claude analysis IS invoked for pro users with 2+ apartments."""
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         try:
             with patch(
                 "app.routers.apartments.TierService.get_user_tier",
                 new_callable=AsyncMock,
-                return_value="pro",
+                return_value="free",
+            ), patch(
+                "app.routers.apartments.TierService.ai_denial",
+                new_callable=AsyncMock,
+                return_value=None,
             ), patch(
                 "app.routers.apartments.is_database_enabled",
                 return_value=False,
@@ -260,14 +277,18 @@ class TestProUserCompare:
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 
-    def test_pro_user_with_single_apartment_no_analysis(self):
+    def test_consented_user_with_single_apartment_no_analysis(self):
         """Pro user with only 1 apartment should not trigger Claude analysis."""
         app.dependency_overrides[get_optional_user] = _mock_pro_user
         try:
             with patch(
                 "app.routers.apartments.TierService.get_user_tier",
                 new_callable=AsyncMock,
-                return_value="pro",
+                return_value="free",
+            ), patch(
+                "app.routers.apartments.TierService.ai_denial",
+                new_callable=AsyncMock,
+                return_value=None,
             ), patch(
                 "app.routers.apartments.is_database_enabled",
                 return_value=False,
@@ -282,7 +303,7 @@ class TestProUserCompare:
 
             assert response.status_code == 200
             data = response.json()
-            assert data["tier"] == "pro"
+            assert data["tier"] == "free"
             assert data["comparison_analysis"] is None
             assert len(data["apartments"]) == 1
         finally:

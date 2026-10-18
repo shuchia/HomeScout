@@ -1,19 +1,15 @@
 'use client'
-import { Suspense, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { createBillingPortalSession } from '@/lib/api'
 import CommuteAddresses from '@/components/CommuteAddresses'
+import { AiConsentSetting } from '@/components/AiConsent'
 
 function SettingsContent() {
-  const { user, profile, loading, profileLoading, isPro, tier, signOut, refreshProfile } = useAuth()
-  const searchParams = useSearchParams()
-
-  useEffect(() => {
-    if (searchParams.get('upgrade') === 'success') {
-      refreshProfile()
-    }
-  }, [searchParams, refreshProfile])
+  const { user, profile, loading, profileLoading, signOut } = useAuth()
+  // No paid tier any more; billing stays reachable only so anyone still
+  // holding a Stripe subscription can cancel it.
+  const hasSubscription = !!profile?.subscription_status && profile.subscription_status !== 'canceled'
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   if (!user) {
@@ -71,12 +67,6 @@ function SettingsContent() {
     <div className="max-w-2xl mx-auto px-4 py-12">
       <h1 className="text-2xl font-bold mb-8">Settings</h1>
 
-      {searchParams.get('upgrade') === 'success' && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
-          Welcome to Pro! You now have full access to all features.
-        </div>
-      )}
-
       {/* Profile Section */}
       <section className="bg-white rounded-lg border p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">Profile</h2>
@@ -91,38 +81,19 @@ function SettingsContent() {
         </div>
       </section>
 
-      {/* Subscription Section */}
+      {/* AI Section */}
       <section className="bg-white rounded-lg border p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Subscription</h2>
-        <div className="flex items-center justify-between">
-          {profileLoading ? (
-            <>
-              <div>
-                <div className="h-5 w-24 bg-gray-200 rounded animate-pulse mb-1" />
-                <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
-              </div>
-              <div className="h-9 w-28 bg-gray-100 rounded-lg animate-pulse" />
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="font-medium capitalize">{tier} Plan</p>
-                <p className="text-sm text-gray-500">
-                  {isPro ? 'Full access to all features' : 'Limited features'}
-                </p>
-              </div>
-              {isPro ? (
-                <button onClick={handleManageBilling} className="text-sm text-[var(--color-primary)] hover:underline">
-                  Manage Billing
-                </button>
-              ) : (
-                <a href="/pricing" className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm hover:bg-[var(--color-primary-light)]">
-                  Upgrade to Pro
-                </a>
-              )}
-            </>
-          )}
-        </div>
+        <h2 className="text-lg font-semibold mb-4">AI</h2>
+        {profileLoading ? (
+          <div className="h-9 bg-gray-100 rounded-lg animate-pulse" />
+        ) : (
+          <AiConsentSetting />
+        )}
+        {hasSubscription && (
+          <button onClick={handleManageBilling} className="mt-4 text-sm text-[var(--color-primary)] hover:underline">
+            Manage billing
+          </button>
+        )}
       </section>
 
       {/* Commute Addresses */}

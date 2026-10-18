@@ -31,9 +31,6 @@ export function Header() {
               </Link>
             </>
           )}
-          <Link href="/pricing" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
-            Pricing
-          </Link>
           <AuthButton />
           <UserMenu />
         </nav>

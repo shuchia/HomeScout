@@ -10,8 +10,9 @@ interface AuthContextType {
   profile: Profile | null
   loading: boolean
   profileLoading: boolean
-  isPro: boolean
-  tier: 'free' | 'pro' | 'anonymous'
+  /** Signed in and agreed to send their data to AI providers. */
+  aiEnabled: boolean
+  setAiConsent: (enabled: boolean) => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithApple: () => Promise<void>
   signOut: () => void
@@ -228,8 +229,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.signOut().catch(() => {})
   }
 
-  const tier: 'free' | 'pro' | 'anonymous' = user ? (profile?.user_tier || 'free') : 'anonymous'
-  const isPro = tier === 'pro'
+  // AI is free for every signed-in user; what it waits on is consent. The
+  // backend checks the same column before every Claude call, so this only
+  // decides what the UI offers — it is not the enforcement.
+  const aiEnabled = !!user && !!profile?.ai_consent_at
+
+  const setAiConsent = useCallback(async (enabled: boolean) => {
+    if (!user) return
+    const ai_consent_at = enabled ? new Date().toISOString() : null
+    const { error } = await supabase.from('profiles').update({ ai_consent_at }).eq('id', user.id)
+    if (error) throw error
+    setProfile(p => (p ? { ...p, ai_consent_at } : p))
+  }, [user])
 
   const refreshProfile = useCallback(async () => {
     if (user) await fetchProfile(user.id)
@@ -239,7 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, profile, loading, profileLoading, isPro, tier,
+      user, profile, loading, profileLoading, aiEnabled, setAiConsent,
       signInWithGoogle, signInWithApple, signOut, refreshProfile,
       accessToken,
     }}>

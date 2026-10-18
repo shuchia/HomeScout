@@ -17,7 +17,7 @@ interface FavoriteButtonProps {
 
 export function FavoriteButton({ apartmentId, matchedFloorplan, className = '' }: FavoriteButtonProps) {
   const { user, signInWithGoogle } = useAuth()
-  const { isFavorite, addFavorite, removeFavorite, atLimit } = useFavorites()
+  const { isFavorite, addFavorite, removeFavorite } = useFavorites()
   const [loading, setLoading] = useState(false)
 
   const favorited = isFavorite(apartmentId)
@@ -38,15 +38,7 @@ export function FavoriteButton({ apartmentId, matchedFloorplan, className = '' }
       } else {
         const success = await addFavorite(apartmentId, matchedFloorplan)
         if (!success) {
-          // Distinguish the tier cap from a request that simply failed. These
-          // used to share one message, so a 422 from a malformed request told
-          // a Pro user with no favourites to upgrade — which sent the bug
-          // hunt in precisely the wrong direction.
-          alert(
-            atLimit
-              ? 'Free limit reached (5/5). Upgrade to Pro for unlimited favorites.'
-              : "Couldn't save that listing. Please try again.",
-          )
+          alert("Couldn't save that listing. Please try again.")
         }
       }
     } catch {

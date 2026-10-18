@@ -1,4 +1,4 @@
-"""Saved search CRUD endpoints (Pro only for creation)."""
+"""Saved search CRUD endpoints."""
 import logging
 from typing import Optional
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import get_current_user, UserContext
-from app.services.tier_service import TierService, supabase_admin
+from app.services.tier_service import supabase_admin
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +49,7 @@ async def create_saved_search(
     body: SaveSearchRequest,
     user: UserContext = Depends(get_current_user),
 ):
-    """Create a saved search. Pro tier only."""
-    tier = await TierService.get_user_tier(user.user_id)
-    if tier != "pro":
-        raise HTTPException(
-            status_code=403,
-            detail="Saved searches require a Pro subscription.",
-        )
+    """Create a saved search."""
 
     if not supabase_admin:
         raise HTTPException(status_code=500, detail="Supabase not configured")

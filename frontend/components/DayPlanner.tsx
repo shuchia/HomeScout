@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { generateDayPlan } from '@/lib/api'
-import UpgradePrompt from '@/components/UpgradePrompt'
+import AiConsentPrompt from '@/components/AiConsent'
 
 // localStorage key for the day-plan starting address. Persisted across
 // visits because users typically tour from the same place (hotel, current
@@ -13,7 +13,7 @@ const STARTING_ADDRESS_KEY = 'snugd-day-plan-starting-address'
 interface DayPlannerProps {
   date: string              // ISO date (YYYY-MM-DD)
   tourIds: string[]         // tour IDs on this date
-  isPro: boolean
+  aiEnabled: boolean
   profileLoading?: boolean
 }
 
@@ -32,7 +32,7 @@ function formatDate(dateStr: string): string {
   })
 }
 
-export default function DayPlanner({ date, tourIds, isPro, profileLoading }: DayPlannerProps) {
+export default function DayPlanner({ date, tourIds, aiEnabled, profileLoading }: DayPlannerProps) {
   const [plan, setPlan] = useState<DayPlanResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,7 +66,7 @@ export default function DayPlanner({ date, tourIds, isPro, profileLoading }: Day
     }
   }
 
-  if (!isPro && !profileLoading) {
+  if (!aiEnabled && !profileLoading) {
     return (
       <div className="mb-4">
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -76,7 +76,7 @@ export default function DayPlanner({ date, tourIds, isPro, profileLoading }: Day
           <p className="text-xs text-gray-500 mb-3">
             {tourIds.length} tours on this day. Get an AI-optimized route and schedule.
           </p>
-          <UpgradePrompt feature="AI day planning" inline />
+          <AiConsentPrompt feature="Day planning" inline />
         </div>
       </div>
     )

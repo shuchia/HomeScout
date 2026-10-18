@@ -439,10 +439,11 @@ test.describe('Snugd E2E Tests', () => {
       await expect(page.locator('text=Excellent match with all key requirements met')).not.toBeVisible();
     });
 
-    test.skip('should show searches remaining for free tier', async ({ page }) => {
-      // TODO(beta-polish): the free-tier limit went from 3 → 20 (per
-      // FREE_DAILY_SEARCH_LIMIT in tier_service.py) and the "Apartments
-      // Found" selector also drifted. Re-enable after updating both.
+    test.skip('should show searches left when near the daily limit', async ({ page }) => {
+      // TODO(beta-polish): the count now shows only at <= 10 left
+      // (DAILY_SEARCH_LIMIT in tier_service.py, an abuse guard, not a tier
+      // limit) and the "Apartments Found" selector drifted. Re-enable after
+      // updating the mock's searches_remaining and both selectors.
       await page.goto('/');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
@@ -450,7 +451,7 @@ test.describe('Snugd E2E Tests', () => {
       await expect(page.locator('text=2 Apartments Found')).toBeVisible({ timeout: 15000 });
 
       // Should display remaining searches count
-      await expect(page.locator('text=/\\d+ of 20 free searches remaining/')).toBeVisible();
+      await expect(page.locator('text=/\\d+ searches left today/')).toBeVisible();
     });
   });
 

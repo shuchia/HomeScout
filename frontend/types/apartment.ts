@@ -34,7 +34,7 @@ export interface CostSources {
 }
 
 /**
- * Full cost breakdown (Pro users only)
+ * Full cost breakdown
  */
 export interface CostBreakdown {
   base_rent: number;

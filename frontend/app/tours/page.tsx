@@ -39,7 +39,7 @@ function isFuture(dateStr: string): boolean {
 }
 
 export default function ToursPage() {
-  const { user, loading: authLoading, signInWithGoogle, isPro, profileLoading } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, aiEnabled, profileLoading } = useAuth()
   const [tours, setTours] = useState<Tour[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -231,7 +231,7 @@ export default function ToursPage() {
           {readyToDecide && (
             <div className="mb-4">
               <DecisionBrief
-                isPro={isPro}
+                aiEnabled={aiEnabled}
                 profileLoading={profileLoading}
                 touredTours={touredTours}
                 apartments={apartments}
@@ -280,7 +280,7 @@ export default function ToursPage() {
                     key={`plan-${date}`}
                     date={date}
                     tourIds={toursByDate[date]}
-                    isPro={isPro}
+                    aiEnabled={aiEnabled}
                 profileLoading={profileLoading}
                   />
                 ))}
@@ -301,7 +301,7 @@ export default function ToursPage() {
                     key={`plan-${date}`}
                     date={date}
                     tourIds={toursByDate[date]}
-                    isPro={isPro}
+                    aiEnabled={aiEnabled}
                 profileLoading={profileLoading}
                   />
                 ))}
