@@ -914,39 +914,20 @@ async def enhance_note(
 
         raw_note = note_result.data[0].get("content", "")
 
-        # Fetch the tour to get apartment_id
+        # The saved listing owns its copy of the listing — the same source
+        # _resolve_apartments reads, already projected onto the floorplan the
+        # user saved. Joining the corpus by apartment_id instead returned
+        # nothing at all for a URL-added listing (apartment_id is NULL there)
+        # and the building's collapsed rent for every other row, which is not
+        # the price of the unit the user saved.
         tour_result = (
             supabase_admin.table("saved_listings")
-            .select("apartment_id")
+            .select("listing")
             .eq("id", tour_id)
             .eq("user_id", user.user_id)
             .execute()
         )
-        apartment_id = tour_result.data[0]["apartment_id"]
-
-        # Fetch apartment data
-        apartment = {}
-        from app.database import is_database_enabled, get_session_context
-
-        if is_database_enabled():
-            from sqlalchemy import select
-            from app.models.apartment import ApartmentModel
-
-            async with get_session_context() as session:
-                stmt = select(ApartmentModel).where(
-                    ApartmentModel.id == apartment_id
-                )
-                db_result = await session.execute(stmt)
-                apt = db_result.scalar_one_or_none()
-                if apt:
-                    apartment = apt.to_dict()
-        else:
-            from app.routers.apartments import _get_apartments_data
-
-            for a in _get_apartments_data():
-                if a.get("id") == apartment_id:
-                    apartment = a
-                    break
+        apartment = (tour_result.data[0].get("listing") or {}) if tour_result.data else {}
 
         from app.services.claude_service import ClaudeService
 

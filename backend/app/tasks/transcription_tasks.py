@@ -52,13 +52,25 @@ def enhance_voice_note(note_id: str, raw_text: str, tour_id: str):
         return
 
     try:
-        # Fetch apartment context
-        tour_result = supabase_admin.table("saved_listings").select("apartment_id").eq("id", tour_id).execute()
+        # The saved listing's own copy of the listing, already projected onto
+        # the floorplan the user saved.
+        #
+        # This used to select apartment_id and pass {"apartment_id": ...}.
+        # enhance_note reads address/rent/bedrooms/bathrooms and nothing else,
+        # so none of those keys were present and every voice note was enhanced
+        # with an empty identifier — the "write naturally about this unit"
+        # affordance never worked on this path. Reading `listing` also covers
+        # the URL-added case, where apartment_id is NULL.
+        tour_result = (
+            supabase_admin.table("saved_listings")
+            .select("listing")
+            .eq("id", tour_id)
+            .execute()
+        )
         if not tour_result.data:
             return
 
-        apartment_id = tour_result.data[0]["apartment_id"]
-        apartment_context = {"apartment_id": apartment_id}
+        apartment_context = tour_result.data[0].get("listing") or {}
 
         claude = ClaudeService()
         result = claude.enhance_note(raw_text, apartment_context)

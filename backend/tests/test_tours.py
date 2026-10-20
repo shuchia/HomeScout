@@ -1003,11 +1003,11 @@ class TestEnhanceNote:
                 ],
             }
 
+            # No corpus patches: the endpoint reads saved_listings.listing and
+            # never touches the apartments table or the JSON fixture.
             with patch("app.routers.tours.supabase_admin", mock_sb), \
                  patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
-                 patch("app.database.is_database_enabled", return_value=False), \
-                 patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT]), \
-                 patch("app.services.claude_service.ClaudeService.enhance_note", return_value=mock_claude_result):
+                 patch("app.services.claude_service.ClaudeService.enhance_note", return_value=mock_claude_result) as mock_enhance:
                 response = client.post(
                     "/api/tours/tour-001/enhance-note",
                     json={"note_id": "note-001"},
@@ -1019,6 +1019,13 @@ class TestEnhanceNote:
             assert "enhanced_text" in data
             assert len(data["suggested_tags"]) == 2
             assert data["suggested_tags"][0]["sentiment"] in ("pro", "con")
+
+            # The context handed to Claude is the user's own saved copy —
+            # the floorplan they saved, not a corpus row for the building.
+            ctx = mock_enhance.call_args.kwargs["apartment_context"]
+            assert ctx == SAMPLE_TOUR["listing"]
+            assert ctx["address"] == "123 Main St, Philadelphia, PA 19103"
+            assert ctx["rent"] == 2200
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 
