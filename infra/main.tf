@@ -57,6 +57,7 @@ module "networking" {
   vpc_cidr             = var.vpc_cidr
   aws_region           = var.aws_region
   enable_redundant_nat = var.enable_redundant_nat
+  enable_nat           = var.enable_nat
 }
 
 module "rds" {
@@ -67,6 +68,8 @@ module "rds" {
   multi_az                = var.rds_multi_az
   backup_retention_period = var.rds_backup_retention
   deletion_protection     = var.rds_deletion_protection
+  engine_version          = var.rds_engine_version
+  snapshot_identifier     = var.rds_snapshot_identifier
   private_subnet_ids      = module.networking.private_subnet_ids
   security_group_id       = module.networking.rds_security_group_id
 }
@@ -132,28 +135,30 @@ resource "aws_s3_bucket_lifecycle_configuration" "tours" {
 }
 
 module "ecs" {
-  source                = "./modules/ecs"
-  environment           = var.environment
-  aws_region            = var.aws_region
-  ecr_repository_url    = data.aws_ecr_repository.backend.repository_url
-  image_tag             = var.image_tag
-  private_subnet_ids    = module.networking.private_subnet_ids
-  ecs_security_group_id = module.networking.ecs_security_group_id
-  target_group_arn      = module.alb.target_group_arn
-  secrets_arn           = aws_secretsmanager_secret.app_secrets.arn
-  tours_bucket_name     = aws_s3_bucket.tours.id
-  tours_bucket_arn      = aws_s3_bucket.tours.arn
-  api_cpu               = var.api_cpu
-  api_memory            = var.api_memory
-  api_desired_count     = var.api_desired_count
-  worker_cpu            = var.worker_cpu
-  worker_memory         = var.worker_memory
-  worker_desired_count  = var.worker_desired_count
-  beat_desired_count    = var.beat_desired_count
-  frontend_url          = var.frontend_url
-  alert_from_email      = var.alert_from_email
-  log_level             = var.log_level
-  use_floorplan_search  = var.use_floorplan_search
+  source                    = "./modules/ecs"
+  environment               = var.environment
+  aws_region                = var.aws_region
+  ecr_repository_url        = data.aws_ecr_repository.backend.repository_url
+  image_tag                 = var.image_tag
+  subnet_ids                = module.networking.ecs_subnet_ids
+  assign_public_ip          = module.networking.ecs_assign_public_ip
+  enable_container_insights = var.enable_container_insights
+  ecs_security_group_id     = module.networking.ecs_security_group_id
+  target_group_arn          = module.alb.target_group_arn
+  secrets_arn               = aws_secretsmanager_secret.app_secrets.arn
+  tours_bucket_name         = aws_s3_bucket.tours.id
+  tours_bucket_arn          = aws_s3_bucket.tours.arn
+  api_cpu                   = var.api_cpu
+  api_memory                = var.api_memory
+  api_desired_count         = var.api_desired_count
+  worker_cpu                = var.worker_cpu
+  worker_memory             = var.worker_memory
+  worker_desired_count      = var.worker_desired_count
+  beat_desired_count        = var.beat_desired_count
+  frontend_url              = var.frontend_url
+  alert_from_email          = var.alert_from_email
+  log_level                 = var.log_level
+  use_floorplan_search      = var.use_floorplan_search
 }
 
 module "monitoring" {

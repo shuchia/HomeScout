@@ -56,8 +56,15 @@ resource "aws_subnet" "private" {
 }
 
 # --- NAT Gateway ---
+# Optional. Without it there is no route out of the private subnets, so ECS
+# tasks run in the public subnets with public IPs instead (ecs_subnet_ids /
+# ecs_assign_public_ip below). RDS and Redis stay private either way.
+locals {
+  nat_count = var.enable_nat ? (var.enable_redundant_nat ? 2 : 1) : 0
+}
+
 resource "aws_eip" "nat" {
-  count  = var.enable_redundant_nat ? 2 : 1
+  count  = local.nat_count
   domain = "vpc"
 
   tags = {
@@ -67,7 +74,7 @@ resource "aws_eip" "nat" {
 }
 
 resource "aws_nat_gateway" "main" {
-  count         = var.enable_redundant_nat ? 2 : 1
+  count         = local.nat_count
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
 
@@ -104,9 +111,12 @@ resource "aws_route_table" "private" {
   count  = 2
   vpc_id = aws_vpc.main.id
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main[var.enable_redundant_nat ? count.index : 0].id
+  dynamic "route" {
+    for_each = var.enable_nat ? [1] : []
+    content {
+      cidr_block     = "0.0.0.0/0"
+      nat_gateway_id = aws_nat_gateway.main[var.enable_redundant_nat ? count.index : 0].id
+    }
   }
 
   tags = {

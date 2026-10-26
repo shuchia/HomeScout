@@ -2,6 +2,7 @@
 
 > Last updated: **2026-06-22**.
 > Status: **beta in production on `qa.snugd.ai`** with 5 active Pro testers, 17 invite codes minted, 7 tours created. Prod environment dormant; launch gated by human-side prerequisites (Stripe live keys, prod-tier API keys, DNS cutover) — no remaining engineering blockers.
+> **2026-10-18:** the prod section below was stale (Stripe is no longer needed; `snugd/prod/secrets` does not exist). Current runbook: [prod-standup.md](prod-standup.md).
 
 ## Status at a glance
 
@@ -49,37 +50,16 @@ Each item references the in-session task tracker.
 
 ## Production launch prerequisites
 
-These need human-side action before `terraform apply -var-file=environments/prod.tfvars` is safe:
+> **Superseded 2026-10-18 by [prod-standup.md](prod-standup.md)** — the ordered runbook with exact commands, verified against the live account. Corrections to what this section used to say:
+>
+> - **`snugd/prod/secrets` does not exist** (verified 2026-10-18). This section claimed the prod Supabase anon/service-role/JWT secret were already stored there; they are not. The Supabase prod *project* (`arbfkxvrkdsaojyecjby`) does exist and the snugd.ai waitlist writes to it.
+> - **Stripe live mode is no longer a prerequisite.** AI features are becoming free for all signed-in users and billing is going dormant. The three `STRIPE_*` keys must still exist in the secret (ECS won't start a task with a missing key), but placeholders do.
+> - **Don't restore `snugd-prod-final`** (2026-05-04). Prod now bootstraps from a fresh manual QA snapshot (`rds_snapshot_identifier` in `prod.tfvars`), so it starts with the current corpus and `market_configs`.
+> - **`beat_desired_count` is now 1** in `prod.tfvars` — without scraping, decay drops every listing below the search floor in ~4 weeks.
+> - **Invite codes aren't needed for access** once AI is free; minting BETA codes is no longer a launch step.
+> - Infra cost estimate revised to ~$115–120/mo (the NAT gateway alone is ~$36).
 
-1. **Cost approval.** Prod is dormant per `docs/deployment.md`; re-provisioning RDS + ALB + ECS + Redis = ~$50–100/mo. Snapshot `snugd-prod-final` exists for RDS restore.
-2. **Supabase prod project.** ✅ Already configured (`arbfkxvrkdsaojyecjby`). Site URL set to `https://snugd.ai`, redirect URLs to `https://snugd.ai/**`. Anon + service-role + JWT secret in AWS Secrets Manager at `snugd/prod/secrets`. Prod waitlist already live on snugd.ai writing directly to this project.
-3. **Stripe live mode.** Real `STRIPE_SECRET_KEY`, real `STRIPE_PRICE_ID` for the $12/mo Pro plan, webhook endpoint configured to `https://api.snugd.ai/api/webhooks/stripe` with its own `STRIPE_WEBHOOK_SECRET`.
-4. **OpenAI prod key.** Separate from QA so spend is segregated. Set a budget alert in the OpenAI dashboard.
-5. **Anthropic key.** Same — separate key for prod budget tracking. Worth noting: compare endpoint now defaults to Haiku, which is ~10× cheaper than the prior Sonnet default.
-6. **DNS update.** After `terraform apply prod` outputs the new ALB DNS, update the registrar (managed outside Terraform) to point `api.snugd.ai` at the prod ALB. Vercel-managed domains (`snugd.ai`, `qa.snugd.ai`) are unaffected.
-7. **Launch city set.** Pick 2–4 cities to enable in `market_configs` (currently all disabled in prod by design). Beat will re-scrape those daily so `freshness_confidence ≥ 40` keeps them in search results.
-8. **Smoke + invite.** Run `scripts/smoke-test.sh prod`, mint BETA codes against `snugd/prod/secrets`'s ADMIN_API_KEY, hand them out.
-
-## Production deploy sequence (when ready)
-
-```
-1. terraform apply -var-file=environments/prod.tfvars
-   - creates: VPC, RDS (from snugd-prod-final snapshot), Redis, ECS cluster + services, ALB
-   - tfvars currently has beat_desired_count = 0 (intentional — see deployment.md)
-   - image_tag = "prod-latest" (set in tfvars), CI publishes both :prod-{SHA} and :prod-latest
-   - lifecycle.ignore_changes on container_definitions / task_definition means TF
-     no longer fights CI for image ownership (a66cc2e)
-2. Push to release/prod branch
-   - CI builds image, pushes to ECR as prod-${SHA} AND prod-latest
-   - registers new TD revision, updates ECS service
-   - runs alembic migrations, smoke test
-3. Update DNS: api.snugd.ai → new ALB DNS name
-4. Vercel: confirm production env vars (NEXT_PUBLIC_API_URL=https://api.snugd.ai, prod Supabase URL + anon key)
-5. Run scripts/smoke-test.sh prod
-6. Enable selected market_configs for launch cities, scale beat to 1
-7. Mint BETA codes against prod admin endpoint, hand out
-8. scripts/beta-report.sh prod  (sanity-check empty cohort + healthy infra)
-```
+Still true: separate OpenAI and Anthropic prod keys with budget caps; DNS for `api.snugd.ai` is manual at the registrar; Vercel prod env vars must be set and the frontend rebuilt.
 
 ## Git state
 

@@ -57,6 +57,7 @@ Architecture: Next.js (frontend) + FastAPI (backend) + PostgreSQL + Redis + Supa
 | Auth flow deeper diagrams | [docs/auth-flow.md](docs/auth-flow.md) |
 | Live scraping config (cities + frequencies) | [docs/scraping-frequency.md](docs/scraping-frequency.md) |
 | Beta launch open items | [docs/launch-readiness.md](docs/launch-readiness.md) |
+| Standing up prod (runbook) | [docs/prod-standup.md](docs/prod-standup.md) |
 | Old plans / superseded docs | [docs/archive/](docs/archive/) |
 
 ## Environments

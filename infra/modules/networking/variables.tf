@@ -18,3 +18,9 @@ variable "enable_redundant_nat" {
   type        = bool
   default     = false
 }
+
+variable "enable_nat" {
+  description = "Create a NAT gateway for the private subnets. false = ECS tasks run in the public subnets with public IPs"
+  type        = bool
+  default     = true
+}

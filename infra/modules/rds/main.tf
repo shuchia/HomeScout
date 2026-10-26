@@ -16,7 +16,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "main" {
   identifier     = "snugd-${var.environment}"
   engine         = "postgres"
-  engine_version = "16.6"
+  engine_version = var.engine_version
   instance_class = var.instance_class
 
   allocated_storage = var.allocated_storage
@@ -38,6 +38,22 @@ resource "aws_db_instance" "main" {
 
   skip_final_snapshot       = var.environment != "prod"
   final_snapshot_identifier = var.environment == "prod" ? "snugd-prod-final" : null
+
+  # Read only on create. On restore, RDS takes db_name and username from the
+  # snapshot (both default to "snugd", same as QA) and the provider applies
+  # `password` in a follow-up modify, so snugd/{env}/db-password stays right.
+  snapshot_identifier = var.snapshot_identifier
+
+  lifecycle {
+    # snapshot_identifier forces replacement when it changes. Without this,
+    # clearing it after the bootstrap restore would destroy and recreate the
+    # database.
+    # engine_version: RDS applies minor upgrades itself (QA went 16.6 ->
+    # 16.13), after which a pinned minor reads as a downgrade on every plan.
+    # The variable sets the version at create; major upgrades are deliberate
+    # and done outside Terraform, then the variable is updated to match.
+    ignore_changes = [snapshot_identifier, engine_version]
+  }
 
   tags = {
     Name        = "snugd-${var.environment}"

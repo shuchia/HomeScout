@@ -134,3 +134,27 @@ variable "use_floorplan_search" {
   type        = string
   default     = "false"
 }
+
+variable "rds_engine_version" {
+  description = "Postgres engine version. QA keeps the 16.6 it was created with; prod uses \"16\"."
+  type        = string
+  default     = "16.6"
+}
+
+variable "rds_snapshot_identifier" {
+  description = "Snapshot to restore RDS from on first create (null = empty DB). See docs/prod-standup.md."
+  type        = string
+  default     = null
+}
+
+variable "enable_nat" {
+  description = "NAT gateway for the private subnets (~$36/mo). false = ECS tasks get public IPs instead"
+  type        = bool
+  default     = true
+}
+
+variable "enable_container_insights" {
+  description = "ECS Container Insights (per-task CloudWatch metrics, billed)"
+  type        = bool
+  default     = false
+}

@@ -27,7 +27,12 @@ output "redis_endpoint" {
 
 output "private_subnet_ids" {
   value       = module.networking.private_subnet_ids
-  description = "Private subnet IDs — needed for GitHub environment secrets"
+  description = "Private subnet IDs"
+}
+
+output "ecs_subnet_ids" {
+  value       = module.networking.ecs_subnet_ids
+  description = "Subnets ECS tasks run in — the value for the {ENV}_PRIVATE_SUBNETS GitHub environment secret"
 }
 
 output "ecs_security_group_id" {
