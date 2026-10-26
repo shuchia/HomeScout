@@ -358,9 +358,16 @@ class UpdateTourRequest(BaseModel):
 
 
 class NoteResponse(BaseModel):
-    """Response model for a tour note."""
+    """Response model for a tour note.
+
+    `content` is what the user said or typed; `enhanced_content` is the AI
+    cleanup, NULL until one runs. Display prefers enhanced and falls back to
+    content. Notes enhanced before migration 016 hold the cleanup in
+    `content` instead, so content is not verbatim for historical rows.
+    """
     id: str
     content: Optional[str] = None
+    enhanced_content: Optional[str] = None
     source: str
     transcription_status: Optional[str] = None
     created_at: str

@@ -76,8 +76,16 @@ def enhance_voice_note(note_id: str, raw_text: str, tour_id: str):
         result = claude.enhance_note(raw_text, apartment_context)
 
         enhanced_text = result.get("enhanced_text", raw_text)
+
+        # Write the cleanup beside the transcript, never over it. `content`
+        # is what the user actually said; this used to overwrite it, which
+        # destroyed the only copy of their words — the audio is on a 365-day
+        # expiry (none at all in prod), so the recording outlived the text it
+        # produced. The decision brief reads `content`, so it was also
+        # reasoning over the paraphrase with nothing left to check it
+        # against. See migration 016.
         supabase_admin.table("tour_notes").update({
-            "content": enhanced_text,
+            "enhanced_content": enhanced_text,
         }).eq("id", note_id).execute()
 
         logger.info(f"Enhanced voice note {note_id}")
