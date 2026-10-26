@@ -6,7 +6,8 @@ How to bring `api.snugd.ai` + `snugd.ai` up as the real app, with `qa.snugd.ai` 
 - Prod starts from a copy of QA — **both** the RDS corpus (step 3) and the Supabase project: users, profiles, saved listings, tours, notes, invite codes (step 7) — plus the tour-assets bucket (step 6), so testers keep their history when they move to snugd.ai.
 - snugd.ai builds from `release/prod` (step 9).
 - Prod Supabase is the existing project `arbfkxvrkdsaojyecjby`.
-- Still open: the `alert_email` address (step 4) and the mobile deep-link scheme (not needed until the mobile apps — step 7.5).
+- Alarms go to `shuchi@snugd.ai` (`alert_email`, step 3).
+- Still open: the mobile deep-link scheme (not needed until the mobile apps — step 7.5).
 
 **Owner key:** **[human]** = needs you (console, credentials, DNS, or a judgement call). **[Claude w/ approval]** = Claude can run it, but it changes something live, so it asks first.
 
@@ -26,7 +27,7 @@ How to bring `api.snugd.ai` + `snugd.ai` up as the real app, with `qa.snugd.ai` 
 
 ## Terraform changes already made (branch `chore/prod-standup-prep`)
 
-- `prod.tfvars`: `use_floorplan_search = "true"`, `beat_desired_count = 1`, `rds_snapshot_identifier = "snugd-qa-prod-bootstrap"`, `rds_engine_version = "16"`, storage 50 → 20 GB, `alert_email = ""` placeholder.
+- `prod.tfvars`: `use_floorplan_search = "true"`, `beat_desired_count = 1`, `rds_snapshot_identifier = "snugd-qa-prod-bootstrap"`, `rds_engine_version = "16"`, storage 50 → 20 GB, `alert_email = "shuchi@snugd.ai"`.
 - `modules/rds`: optional `snapshot_identifier` (null default; `ignore_changes` so clearing it later can't replace the DB) and `engine_version` variable (default `16.6` — QA's config is unchanged).
 - `scripts/deploy.sh tf-plan|tf-apply`: `init` now passes `-reconfigure`.
 - `terraform validate` and `fmt -check` pass. `plan` for prod has **not** been run — it is blocked by the stale digest (step 1).
@@ -79,7 +80,7 @@ Prod then starts with QA's corpus, floorplan buckets, `market_configs` and alemb
 
 Alternative: delete `rds_snapshot_identifier` from `prod.tfvars` for an empty DB; the CI migrate step builds the schema and the first scrape fills it (a few hours of empty search).
 
-**`alert_email`** — set it in `prod.tfvars` before this step. It subscribes that address to the prod SNS topic for the four CloudWatch alarms: API 5xx errors, API p95 latency, RDS CPU, and RDS low storage. AWS sends a "confirm subscription" email first; nothing arrives until it's clicked. Leaving it `""` creates the alarms with nowhere to send them. These cover infrastructure only — a stopped worker or a stale scrape shows up in `pipeline-health`, not here.
+**`alert_email`** (`shuchi@snugd.ai` in `prod.tfvars`) subscribes that address to the prod SNS topic for the four CloudWatch alarms: API 5xx errors, API p95 latency, RDS CPU, and RDS low storage. AWS sends a "confirm subscription" email first; nothing arrives until it's clicked. Leaving it `""` creates the alarms with nowhere to send them. These cover infrastructure only — a stopped worker or a stale scrape shows up in `pipeline-health`, not here.
 
 ## 4. Terraform, phase A: data stores + secret container **[Claude w/ approval]**
 

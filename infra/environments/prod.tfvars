@@ -6,9 +6,9 @@ alert_from_email     = "alerts@snugd.ai"
 log_level            = "INFO"
 use_floorplan_search = "true" # Same as QA; the frontend flag is set separately in Vercel
 
-# CloudWatch alarm notifications (SNS email subscription). Empty = alarms
-# exist but notify nobody. Set before launch.
-alert_email = ""
+# CloudWatch alarm notifications (SNS email subscription). AWS emails a
+# confirmation link after the apply; alarms notify nobody until it's clicked.
+alert_email = "shuchi@snugd.ai"
 
 # Initial image (see qa.tfvars for the same lifecycle-ignore rationale).
 # docs/prod-standup.md retags the current QA image as :prod-latest before the
