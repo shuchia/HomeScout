@@ -24,8 +24,8 @@ class TestTranscribeVoiceNote:
         mock_update = MagicMock()
         mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
 
-        # Mock tier check to return "free" (no enhancement)
-        with patch("app.services.tier_service.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
+        # No AI consent → no enhancement
+        with patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=False):
             from app.tasks.transcription_tasks import transcribe_voice_note
             transcribe_voice_note(
                 "note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1"
@@ -73,10 +73,10 @@ class TestTranscribeVoiceNote:
     @patch("app.tasks.transcription_tasks.supabase_admin")
     @patch("app.services.transcription.whisper_service._get_openai_client")
     @patch("app.services.storage.photo_service._get_s3_client")
-    def test_pro_user_chains_enhancement(
+    def test_consented_user_chains_enhancement(
         self, mock_get_s3, mock_get_openai, mock_sb, mock_enhance
     ):
-        """Pro user triggers enhance_voice_note.delay after transcription."""
+        """A user who consented to AI gets enhance_voice_note.delay after transcription."""
         # Mock S3
         mock_s3 = MagicMock()
         mock_body = MagicMock()
@@ -92,8 +92,8 @@ class TestTranscribeVoiceNote:
         # Mock Supabase
         mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
 
-        # Mock tier check to return "pro"
-        with patch("app.services.tier_service.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"):
+        # Consented, with cap headroom
+        with patch("app.services.tier_service.TierService.ai_denial", new_callable=AsyncMock, return_value=None):
             from app.tasks.transcription_tasks import transcribe_voice_note
             transcribe_voice_note(
                 "note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1"

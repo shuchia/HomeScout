@@ -315,9 +315,8 @@ async def compare_apartments(
 ):
     """
     Compare up to 3 apartments with optional preference scoring.
-    When the user provides preferences AND is on the pro tier, Claude
-    performs a head-to-head analysis. Claude analysis is only available
-    to pro-tier users.
+    When a signed-in user who consented to AI provides preferences, Claude
+    performs a head-to-head analysis.
 
     Performance notes (task #30, 2026-06-18):
       - Result is cached in Redis (1hr TTL, key = sha256 of sorted IDs +
@@ -371,12 +370,20 @@ async def compare_apartments(
             if aid in apt_map:
                 apartments.append(apt_map[aid])
 
-    # Pro-tier Claude analysis. Runs only when the user actually stated
-    # preferences — the prior "general comparison" placeholder was a 30s
-    # call with weak prompting that delivered marginal value.
+    # Claude analysis for signed-in users who consented. Runs only when the
+    # user actually stated preferences — the prior "general comparison"
+    # placeholder was a 30s call with weak prompting that delivered marginal
+    # value. A denial (no consent, cap spent) degrades to the plain table
+    # rather than failing the compare.
     comparison_analysis = None
     user_prefs = (request.preferences or "").strip()
-    if tier == "pro" and len(apartments) >= 2 and user_prefs:
+    use_ai = (
+        user is not None
+        and len(apartments) >= 2
+        and bool(user_prefs)
+        and await TierService.ai_denial(user.user_id) is None
+    )
+    if use_ai:
         from app.services.claude_service import ClaudeService
 
         claude = _get_claude_service()
@@ -450,7 +457,7 @@ async def compare_apartments(
     await AnalyticsService.log_event(
         "compare",
         user_id=user.user_id if user else None,
-        metadata={"apartment_count": len(request.apartment_ids), "used_ai": tier == "pro"},
+        metadata={"apartment_count": len(request.apartment_ids), "used_ai": use_ai},
     )
 
     return {

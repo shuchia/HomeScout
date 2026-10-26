@@ -107,11 +107,12 @@ async function mockAuth(page: Page) {
 }
 
 /**
- * Mock Supabase auth with Pro tier.
+ * Mock Supabase auth for a user who has turned AI on.
  * The AuthContext reads __test_auth_profile from localStorage to set the profile
- * (and thus isPro) during the E2E test bypass flow.
+ * (and thus aiEnabled) during the E2E test bypass flow. The tier is 'free' on
+ * purpose: AI no longer needs Pro, only consent.
  */
-async function mockProAuth(page: Page) {
+async function mockAiAuth(page: Page) {
   const mockUser = {
     id: 'test-user-id',
     email: 'test@example.com',
@@ -124,8 +125,8 @@ async function mockProAuth(page: Page) {
 
   const mockProfile = {
     id: 'test-user-id',
-    user_tier: 'pro',
-    subscription_status: 'active',
+    user_tier: 'free',
+    ai_consent_at: '2026-10-18T00:00:00Z',
   }
 
   await page.addInitScript(({ user, profile }: { user: string; profile: string }) => {
@@ -470,8 +471,8 @@ test.describe('Tour Pipeline E2E Tests', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Tour AI Features E2E Tests', () => {
-  test('contact tab shows upgrade prompt for free users', async ({ page }) => {
-    // Default mockAuth creates a free-tier user (no profile = free)
+  test('contact tab asks to turn on AI without consent', async ({ page }) => {
+    // Default mockAuth has no profile, so no ai_consent_at
     await mockAuth(page)
     await mockTourApis(page)
     await page.goto('/tours/tour-001')
@@ -479,29 +480,28 @@ test.describe('Tour AI Features E2E Tests', () => {
     // Click Contact tab (renamed from Email)
     await page.locator('button:has-text("contact")').first().click()
 
-    // Free users should see the UpgradePrompt with "Upgrade" text
     await expect(
-      page.locator('text=Upgrade').first(),
+      page.locator('button:has-text("Turn on AI")').first(),
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('contact tab shows generate button for pro users', async ({ page }) => {
-    await mockProAuth(page)
+  test('contact tab shows generate button with AI on', async ({ page }) => {
+    await mockAiAuth(page)
     await mockTourApis(page)
     await page.goto('/tours/tour-001')
 
     // Click Contact tab
     await page.locator('button:has-text("contact")').first().click()
 
-    // Pro users should see the "Generate Inquiry Message" button
+    // With AI on, the "Generate Inquiry Message" button shows
     // (renamed from "Generate Inquiry Email" in the Contact tab refactor)
     await expect(
       page.locator('button:has-text("Generate Inquiry Message")'),
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('inquiry-message generation works for pro users', async ({ page }) => {
-    await mockProAuth(page)
+  test('inquiry-message generation works with AI on', async ({ page }) => {
+    await mockAiAuth(page)
 
     // Track whether the inquiry-email endpoint has been called so we can
     // return the updated tour (with draft) on subsequent GET requests.
@@ -589,7 +589,7 @@ test.describe('Tour AI Features E2E Tests', () => {
   })
 
   test('day planner shows on tours page with multiple same-day tours', async ({ page }) => {
-    await mockProAuth(page)
+    await mockAiAuth(page)
 
     // Use today's date so the tours appear in the "Today" tab
     const today = new Date().toISOString().split('T')[0]
@@ -602,14 +602,14 @@ test.describe('Tour AI Features E2E Tests', () => {
     })
     await page.goto('/tours')
 
-    // Should show "Plan This Day" button (DayPlanner for pro users)
+    // Should show "Plan This Day" button (DayPlanner with AI on)
     await expect(
       page.locator('button:has-text("Plan This Day")'),
     ).toBeVisible({ timeout: 10000 })
   })
 
   test('decision brief shows when 2+ tours are in toured stage', async ({ page }) => {
-    await mockProAuth(page)
+    await mockAiAuth(page)
 
     const tour1 = { ...MOCK_TOUR, id: 'tour-001', apartment_id: 'test-001', stage: 'toured', tour_rating: 4 }
     const tour2 = { ...MOCK_TOUR, id: 'tour-002', apartment_id: 'test-002', stage: 'toured', tour_rating: 3 }
@@ -620,7 +620,7 @@ test.describe('Tour AI Features E2E Tests', () => {
     })
     await page.goto('/tours')
 
-    // Should show "Get AI Recommendation" button (DecisionBrief for pro users)
+    // Should show "Get AI Recommendation" button (DecisionBrief with AI on)
     await expect(
       page.locator('button:has-text("Get AI Recommendation")'),
     ).toBeVisible({ timeout: 10000 })

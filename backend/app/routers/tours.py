@@ -228,12 +228,7 @@ async def generate_day_plan(
     """Generate an optimized day plan for multiple scheduled tours."""
     _ensure_supabase()
 
-    tier = await TierService.get_user_tier(user.user_id)
-    if tier != "pro":
-        raise HTTPException(
-            status_code=403,
-            detail="AI tour features require a Pro subscription.",
-        )
+    await TierService.require_ai(user.user_id)
 
     try:
         # Fetch the specified tours and verify ownership
@@ -308,12 +303,7 @@ async def generate_decision_brief(
     """
     _ensure_supabase()
 
-    tier = await TierService.get_user_tier(user.user_id)
-    if tier != "pro":
-        raise HTTPException(
-            status_code=403,
-            detail="AI tour features require a Pro subscription.",
-        )
+    await TierService.require_ai(user.user_id)
 
     try:
         # Fetch all tours in "toured" or "deciding" stage
@@ -790,12 +780,7 @@ async def generate_inquiry_email(
     """Generate an AI inquiry email draft for this tour's apartment."""
     _ensure_supabase()
 
-    tier = await TierService.get_user_tier(user.user_id)
-    if tier != "pro":
-        raise HTTPException(
-            status_code=403,
-            detail="AI tour features require a Pro subscription.",
-        )
+    await TierService.require_ai(user.user_id)
 
     try:
         # Verify ownership and fetch tour data
@@ -891,12 +876,7 @@ async def enhance_note(
     """Enhance a tour note with AI — clean up text and suggest tags."""
     _ensure_supabase()
 
-    tier = await TierService.get_user_tier(user.user_id)
-    if tier != "pro":
-        raise HTTPException(
-            status_code=403,
-            detail="AI tour features require a Pro subscription.",
-        )
+    await TierService.require_ai(user.user_id)
 
     try:
         _verify_tour_ownership(tour_id, user.user_id)

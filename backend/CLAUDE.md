@@ -83,9 +83,9 @@ Two data modes:
 Set `USE_DATABASE=true` in `.env` to enable database mode. **All apartment endpoints** (`get/{id}`, `batch`, `compare`, `list`, `count`, `stats`) check `is_database_enabled()` and query the appropriate source.
 
 ### Tier-Gated Endpoints
-- **`/api/search`**: Pro gets `heuristic_score` immediately + Claude AI scoring via a separate `/api/search/score-batch` call (lazy AI); free gets filtered results (20/day via Redis counter, `FREE_DAILY_SEARCH_LIMIT` in `tier_service.py`); anonymous gets filtered results with no limit tracking.
-- **`/api/apartments/compare`**: Pro gets Claude head-to-head analysis; free/anonymous get a basic comparison table.
-- Auth is via Supabase JWT (`auth.py` → `get_optional_user`), tier checked via `TierService.get_user_tier()`.
+- **`/api/search`**: everyone gets `heuristic_score` results; signed-in users who consented to AI then get Claude scores via a separate `/api/search/score-batch` call (lazy AI). Signed-in users are capped at `DAILY_SEARCH_LIMIT` (100) searches/day as an abuse guard; anonymous callers are not metered.
+- **`/api/apartments/compare`**: signed-in users who consented get Claude head-to-head analysis; everyone else gets the basic table.
+- Auth is via Supabase JWT (`auth.py` → `get_optional_user`). AI access is `TierService.require_ai()` / `ai_denial()` — consent (`profiles.ai_consent_at`) plus the `DAILY_AI_LIMIT` cap. There is no paid tier; `get_user_tier()` only feeds the response's `tier` field and the beta report.
 
 ### Claude Models
 | Use | Model |
@@ -173,7 +173,7 @@ PostgreSQL (ApartmentModel)
 | File | Purpose |
 |------|---------|
 | `auth.py` | JWT decode (HS256, audience "authenticated"), `UserContext` dataclass |
-| `services/tier_service.py` | Tier checking (Supabase), Redis daily search metering, tier updates |
+| `services/tier_service.py` | AI access (consent + daily AI cap), Redis daily search metering, dormant tier lookups/updates |
 | `services/analytics_service.py` | Fire-and-forget event logging to Supabase `analytics_events` |
 | `middleware/rate_limit.py` | Redis-based rate limiting (120/min auth, 30/min anon, 20/min expensive) |
 | `tasks/alert_tasks.py` | Daily email alerts for Pro users via Resend |
@@ -556,7 +556,8 @@ Markets are the only enable/disable lever for scheduled scraping.
 - `UserContext` dataclass: `user_id: str`, `email: str | None`
 
 ### Tier Service (`services/tier_service.py`)
-- `FREE_DAILY_SEARCH_LIMIT = 20`
+- `DAILY_SEARCH_LIMIT = 100`, `DAILY_AI_LIMIT = 100` (env-overridable)
+- `TierService.require_ai(user_id)` → raises 403 without `ai_consent_at`, 429 once the day's AI cap is spent; `ai_denial()` returns the error instead of raising (compare and the voice-note task use it to degrade)
 - `TierService.get_user_tier(user_id)` → queries `profiles.user_tier` from Supabase (defaults to "free")
 - `TierService.check_search_limit(user_id)` → Redis counter `search_count:{user_id}:{date}` with 48h TTL
 - `TierService.increment_search_count(user_id)` → Redis INCR

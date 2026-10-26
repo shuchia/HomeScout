@@ -173,15 +173,13 @@ async def search_apartments(
     """
     Search for apartments based on user preferences.
 
-    Behaviour varies by user tier:
-    - **pro** (authenticated + paid): full Claude AI-scored results.
-    - **free** (authenticated, no subscription): filtered results without AI
-      scoring, limited to FREE_DAILY_SEARCH_LIMIT searches per day.
-    - **anonymous** (no auth token): filtered results without AI scoring,
-      no daily limit tracking.
+    Results are heuristic-scored here; signed-in users who consented to AI
+    get Claude scores afterwards via /api/search/score-batch. Signed-in
+    users are capped at DAILY_SEARCH_LIMIT searches a day as an abuse guard;
+    anonymous callers are not metered (the rate limiter covers them).
 
     Returns a dict with apartments, total_results, tier, and
-    searches_remaining (null for pro/anonymous).
+    searches_remaining (null for anonymous).
     """
     # ── Determine tier ──────────────────────────────────────────────
     if user is None:
@@ -189,18 +187,18 @@ async def search_apartments(
     else:
         tier = await TierService.get_user_tier(user.user_id)
 
-    # ── Enforce daily limit for free users ──────────────────────────
+    # ── Enforce the daily limit for signed-in users ─────────────────
     searches_remaining: int | None = None
-    if tier == "free":
+    if user is not None:
         allowed, remaining = await TierService.check_search_limit(user.user_id)
         searches_remaining = remaining
         if not allowed:
             raise HTTPException(
                 status_code=429,
-                detail="Daily search limit reached. Upgrade to Pro for unlimited searches.",
+                detail="Daily search limit reached. It resets tomorrow.",
             )
 
-    # Proximity is Pro-only and is pushed into the query, not applied to the
+    # Proximity is pushed into the query, not applied to the
     # page afterwards. Done after pagination it filtered ten already-chosen
     # rows, so "within 5 miles" meant "whichever of the top ten happen to
     # qualify" — a Fenway search returned nothing out of 35 matches — and
@@ -211,7 +209,6 @@ async def search_apartments(
         request.near_lat is not None
         and request.near_lng is not None
         and request.max_distance_miles
-        and tier == "pro"
     ):
         near = (request.near_lat, request.near_lng, request.max_distance_miles)
 
@@ -241,8 +238,8 @@ async def search_apartments(
             for apt in page_results
         ]
 
-        # Increment counter for free users (only on page 1)
-        if tier == "free" and request.page == 1:
+        # Increment the counter for signed-in users (only on page 1)
+        if user is not None and request.page == 1:
             await TierService.increment_search_count(user.user_id)
             searches_remaining = max(0, searches_remaining - 1)
 
@@ -315,13 +312,11 @@ async def score_batch(
     request: ScoreBatchRequest,
     user: UserContext = Depends(get_current_user),
 ):
-    """Score a batch of apartments using Claude AI. Pro only."""
-    tier = await TierService.get_user_tier(user.user_id)
-    if tier != "pro":
-        raise HTTPException(status_code=403, detail="AI scoring requires a Pro subscription.")
-
+    """Score a batch of apartments using Claude AI. Signed-in, consented users."""
     if len(request.apartment_ids) > 10:
         raise HTTPException(status_code=400, detail="Maximum 10 apartments per batch.")
+
+    await TierService.require_ai(user.user_id)
 
     ctx = request.search_context
 

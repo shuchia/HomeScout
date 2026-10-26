@@ -1,3 +1,4 @@
+import pytest
 """Tests for tour pipeline CRUD endpoints."""
 from io import BytesIO
 from unittest.mock import patch, MagicMock, ANY, AsyncMock
@@ -848,7 +849,7 @@ class TestInquiryEmail:
             }
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.routers.tours.TierService.require_ai", new_callable=AsyncMock, return_value=None), \
                  patch("app.database.is_database_enabled", return_value=False), \
                  patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT]), \
                  patch("app.services.claude_service.ClaudeService.generate_inquiry_email", return_value=mock_claude_result):
@@ -876,7 +877,7 @@ class TestInquiryEmail:
             )
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"):
+                 patch("app.routers.tours.TierService.require_ai", new_callable=AsyncMock, return_value=None):
                 response = client.post(
                     "/api/tours/nonexistent/inquiry-email",
                     headers={"Authorization": "Bearer fake-token"},
@@ -942,7 +943,7 @@ class TestDayPlan:
             }
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.routers.tours.TierService.require_ai", new_callable=AsyncMock, return_value=None), \
                  patch("app.database.is_database_enabled", return_value=False), \
                  patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT, {**SAMPLE_APARTMENT, "id": "apt-002", "address": "456 Oak Ave"}]), \
                  patch("app.services.claude_service.ClaudeService.generate_day_plan", return_value=mock_claude_result):
@@ -1006,7 +1007,7 @@ class TestEnhanceNote:
             # No corpus patches: the endpoint reads saved_listings.listing and
             # never touches the apartments table or the JSON fixture.
             with patch("app.routers.tours.supabase_admin", mock_sb), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.routers.tours.TierService.require_ai", new_callable=AsyncMock, return_value=None), \
                  patch("app.services.claude_service.ClaudeService.enhance_note", return_value=mock_claude_result) as mock_enhance:
                 response = client.post(
                     "/api/tours/tour-001/enhance-note",
@@ -1102,7 +1103,7 @@ class TestDecisionBrief:
             }
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="pro"), \
+                 patch("app.routers.tours.TierService.require_ai", new_callable=AsyncMock, return_value=None), \
                  patch("app.database.is_database_enabled", return_value=False), \
                  patch("app.routers.apartments._get_apartments_data", return_value=[SAMPLE_APARTMENT, {**SAMPLE_APARTMENT, "id": "apt-002", "address": "456 Oak Ave"}]), \
                  patch("app.services.claude_service.ClaudeService.generate_decision_brief", return_value=mock_claude_result):
@@ -1123,68 +1124,40 @@ class TestDecisionBrief:
 # ── Pro tier gating tests ──────────────────────────────────────────
 
 
-class TestProTierGating:
-    """AI tour endpoints require Pro tier; free users get 403."""
+AI_TOUR_ENDPOINTS = [
+    ("/api/tours/tour-001/inquiry-email", None),
+    ("/api/tours/day-plan", {"date": "2026-03-25", "tour_ids": ["tour-001", "tour-002"]}),
+    ("/api/tours/tour-001/enhance-note", {"note_id": "note-001"}),
+    ("/api/tours/decision-brief", None),
+]
 
-    def test_inquiry_email_free_tier_returns_403(self):
-        """POST /api/tours/{id}/inquiry-email as free user returns 403."""
+
+class TestAiGating:
+    """AI tour endpoints need consent and cap headroom — not a Pro tier."""
+
+    @pytest.mark.parametrize("path,body", AI_TOUR_ENDPOINTS)
+    def test_without_consent_returns_403(self, path, body):
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
         try:
             with patch("app.routers.tours.supabase_admin", MagicMock()), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
-                response = client.post(
-                    "/api/tours/tour-001/inquiry-email",
-                    headers={"Authorization": "Bearer fake-token"},
-                )
+                 patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=False), \
+                 patch("app.services.tier_service.TierService.consume_ai_call", new_callable=AsyncMock) as consume:
+                response = client.post(path, json=body, headers={"Authorization": "Bearer fake-token"})
             assert response.status_code == 403
-            assert "Pro" in response.json()["detail"]
+            assert "Settings" in response.json()["detail"]
+            consume.assert_not_awaited()
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 
-    def test_day_plan_free_tier_returns_403(self):
-        """POST /api/tours/day-plan as free user returns 403."""
+    @pytest.mark.parametrize("path,body", AI_TOUR_ENDPOINTS)
+    def test_cap_spent_returns_429(self, path, body):
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
         try:
             with patch("app.routers.tours.supabase_admin", MagicMock()), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
-                response = client.post(
-                    "/api/tours/day-plan",
-                    json={"date": "2026-03-25", "tour_ids": ["tour-001", "tour-002"]},
-                    headers={"Authorization": "Bearer fake-token"},
-                )
-            assert response.status_code == 403
-            assert "Pro" in response.json()["detail"]
-        finally:
-            app.dependency_overrides.pop(get_current_user, None)
-
-    def test_enhance_note_free_tier_returns_403(self):
-        """POST /api/tours/{id}/enhance-note as free user returns 403."""
-        app.dependency_overrides[get_current_user] = lambda: _mock_user()
-        try:
-            with patch("app.routers.tours.supabase_admin", MagicMock()), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
-                response = client.post(
-                    "/api/tours/tour-001/enhance-note",
-                    json={"note_id": "note-001"},
-                    headers={"Authorization": "Bearer fake-token"},
-                )
-            assert response.status_code == 403
-            assert "Pro" in response.json()["detail"]
-        finally:
-            app.dependency_overrides.pop(get_current_user, None)
-
-    def test_decision_brief_free_tier_returns_403(self):
-        """POST /api/tours/decision-brief as free user returns 403."""
-        app.dependency_overrides[get_current_user] = lambda: _mock_user()
-        try:
-            with patch("app.routers.tours.supabase_admin", MagicMock()), \
-                 patch("app.routers.tours.TierService.get_user_tier", new_callable=AsyncMock, return_value="free"):
-                response = client.post(
-                    "/api/tours/decision-brief",
-                    headers={"Authorization": "Bearer fake-token"},
-                )
-            assert response.status_code == 403
-            assert "Pro" in response.json()["detail"]
+                 patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True), \
+                 patch("app.services.tier_service.TierService.consume_ai_call", new_callable=AsyncMock, return_value=False):
+                response = client.post(path, json=body, headers={"Authorization": "Bearer fake-token"})
+            assert response.status_code == 429
         finally:
             app.dependency_overrides.pop(get_current_user, None)
 

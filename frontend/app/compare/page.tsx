@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useComparison } from '@/hooks/useComparison'
 import { useAuth } from '@/contexts/AuthContext'
-import UpgradePrompt from '@/components/UpgradePrompt'
+import AiConsentPrompt from '@/components/AiConsent'
 import { compareApartments, ApiError, CompareResponse } from '@/lib/api'
 import { Apartment, ComparisonAnalysis, SearchContext } from '@/types/apartment'
 import { commuteModeLine } from '@/components/CommutePanel'
@@ -27,7 +27,7 @@ const getScoreColor = (score: number): string => {
 
 export default function ComparePage() {
   const router = useRouter()
-  const { user, loading: authLoading, signInWithGoogle, isPro, profileLoading } = useAuth()
+  const { user, loading: authLoading, signInWithGoogle, aiEnabled, profileLoading } = useAuth()
   const { apartmentIds, removeFromCompare, clearComparison, searchContext } = useComparison()
 
   const [apartments, setApartments] = useState<Apartment[]>([])
@@ -238,7 +238,7 @@ export default function ComparePage() {
           </p>
           {profileLoading ? (
             <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
-          ) : isPro ? (
+          ) : aiEnabled ? (
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
@@ -269,7 +269,7 @@ export default function ComparePage() {
               </button>
             </div>
           ) : (
-            <UpgradePrompt feature="AI comparison analysis" />
+            <AiConsentPrompt feature="Comparison analysis" />
           )}
         </div>
 

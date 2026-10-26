@@ -4,13 +4,16 @@ import { useAuth } from '@/contexts/AuthContext'
 import { redeemInviteCode } from '@/lib/api'
 
 export function InviteCodeBanner() {
-  const { user, isPro, profileLoading, refreshProfile } = useAuth()
+  const { user, profile, profileLoading, refreshProfile } = useAuth()
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [dismissed, setDismissed] = useState(false)
 
-  if (!user || isPro || profileLoading || dismissed) return null
+  // Codes no longer unlock anything — every feature is free — but the landing
+  // page still hands them out per channel, and redeeming one is how a sign-up
+  // is attributed to that channel. Hidden once the user has redeemed one.
+  if (!user || profile?.pro_expires_at || profileLoading || dismissed) return null
 
   async function handleRedeem(e: React.FormEvent) {
     e.preventDefault()
@@ -37,7 +40,7 @@ export function InviteCodeBanner() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-[var(--color-text)]">Have an invite code?</p>
-          <p className="text-xs text-[var(--color-text-muted)]">Enter it below to unlock Pro features for 90 days.</p>
+          <p className="text-xs text-[var(--color-text-muted)]">Enter it so we know who sent you.</p>
         </div>
         <form onSubmit={handleRedeem} className="flex items-center gap-2">
           <input

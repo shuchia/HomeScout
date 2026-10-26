@@ -29,6 +29,7 @@ Applied in order from `migrations/`. There is no migration runner in the repo �
 | `007_waitlist.sql` | `waitlist` |
 | `008_tour_contact_info.sql` | `contact_phone`, `contact_email` on `tour_pipeline` |
 | `009_add_user_locations.sql` | `user_locations` (commute destinations) |
+| `015_ai_consent_and_profile_grants.sql` | `ai_consent_at` on `profiles`; drops the public "Service can update profiles" policy; limits client profile updates to name, avatar_url, email_notifications, has_completed_onboarding, ai_consent_at |
 
 ## Key Tables
 
@@ -46,7 +47,7 @@ current_period_end timestamptz
 created_at, updated_at timestamptz
 ```
 
-`user_tier` is the single source of truth for gating. It is written by the Stripe webhook handler **and** by invite redemption — both via the service-role client in `backend/app/services/tier_service.py`.
+`user_tier` no longer gates anything (2026-10: AI and every former Pro feature are free for signed-in users). It is still written by the Stripe webhook handler and by invite redemption, via the service-role client, and read by the beta report. What gates AI is `ai_consent_at` (migration 015): NULL means the user never agreed to send their data to AI providers. Clients can update only the columns 015 grants back, so `user_tier` cannot be self-set.
 
 ### `tour_pipeline`
 The core touring feature. One row per (user, apartment) — enforced by `unique(user_id, apartment_id)`.

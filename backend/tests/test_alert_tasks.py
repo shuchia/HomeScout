@@ -31,15 +31,15 @@ def _make_supabase(searches, profiles):
     searches_tbl.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{}])
 
     profiles_tbl = MagicMock()
-    profiles_tbl.select.return_value.in_.return_value.eq.return_value.execute.return_value = MagicMock(data=profiles)
+    profiles_tbl.select.return_value.in_.return_value.execute.return_value = MagicMock(data=profiles)
 
     mock_sb = MagicMock()
     mock_sb.table.side_effect = lambda name: searches_tbl if name == "saved_searches" else profiles_tbl
     return mock_sb, searches_tbl
 
 
-# Profile row as returned by the separate profiles query (Pro tier).
-SAMPLE_PROFILE = {"id": "user-123", "user_tier": "pro", "email": "jane@example.com", "name": "Jane"}
+# Profile row as returned by the separate profiles query.
+SAMPLE_PROFILE = {"id": "user-123", "email": "jane@example.com", "name": "Jane"}
 
 SAMPLE_APARTMENT = {
     "id": "apt-001",

@@ -22,7 +22,7 @@ import { MatchedFloorplan } from '@/types/apartment'
  * not have to move.
  */
 export function useFavorites() {
-  const { user, isPro, profileLoading } = useAuth()
+  const { user } = useAuth()
 
   const favorites = useFavoritesStore(s => s.favorites)
   const loading = useFavoritesStore(s => s.loading)
@@ -48,12 +48,6 @@ export function useFavorites() {
   ): Promise<boolean> {
     if (!user) return false
 
-    // Free tier cap. Skipped while the profile is still loading, so a slow
-    // tier lookup cannot wrongly block a Pro user.
-    if (!isPro && !profileLoading && favorites.length >= 5) {
-      return false // Caller handles the UI feedback
-    }
-
     return add(user.id, apartmentId, matchedFloorplan)
   }
 
@@ -74,6 +68,5 @@ export function useFavorites() {
     dismissChange,
     isFavorite,
     refresh: () => (user ? load(user.id, { force: true }) : Promise.resolve()),
-    atLimit: !isPro && !profileLoading && favorites.length >= 5,
   }
 }

@@ -80,7 +80,7 @@ Architecture: Next.js (frontend) + FastAPI (backend) + PostgreSQL + Redis + Supa
 - **Claude models**: `claude-haiku-4-5-20251001` for search/emails/notes/day-plan; `claude-sonnet-4-5-20250929` for comparison and decision brief.
 - **Claude calls**: 15 s timeout (search), 45 s (compare); heuristic fallback on any exception; max 5 concurrent via `asyncio.Semaphore(5)`; system-prompt caching enabled.
 - **Rate limiting** (`middleware/rate_limit.py`): authed 120/min, anonymous 30/min, expensive paths (`/api/search`, `/api/apartments/compare`) 20/min. Fail-open on Redis errors. Anonymous callers are keyed on the **rightmost** `X-Forwarded-For` entry, not `request.client.host` — behind the ALB that is the balancer, so every anonymous user in the world shared one bucket. Rightmost because the ALB appends what it observed; the leftmost is caller-supplied and forgeable. `/health` and `/metrics` are in `EXEMPT_PATHS` — throttling a health check lets load become an outage, since the ALB's own polls start 429ing and ECS then kills healthy tasks.
-- **Tests**: `TESTING=1` disables rate limiting; E2E mocks auth via `localStorage.__test_auth_user` (only when `NODE_ENV !== 'production'`).
+- **Tests**: `TESTING=1` disables rate limiting; backend tests also need `ANTHROPIC_API_KEY` set to any value (CI uses `test-key`); E2E mocks auth via `localStorage.__test_auth_user` (only when `NODE_ENV !== 'production'`).
 - **Auth**: 5-second timeout in `AuthContext` to avoid infinite loading; fail-open for Redis/Supabase outages.
 - **Analytics**: fire-and-forget — never blocks or raises.
 - **True cost**: precomputed at ingestion in DB mode; `_add_cost_breakdown()` fills gaps in JSON mode.
@@ -113,18 +113,20 @@ Architecture: Next.js (frontend) + FastAPI (backend) + PostgreSQL + Redis + Supa
 | `USE_FLOORPLAN_SEARCH` | backend | `false` | `true` |
 | `NEXT_PUBLIC_FLOORPLAN_SEARCH` | frontend (build-time) | unset | `true` |
 
-## Tier System (Quick Reference)
+## Access Model (Quick Reference)
 
-| Feature | Free | Pro ($12/mo) |
-|---------|------|--------------|
-| Search | 20/day, heuristic only | Unlimited + Claude AI |
-| Compare | Basic table | Claude head-to-head analysis |
-| Favorites | 5 max | Unlimited |
-| Tours | Full pipeline (manual) | Full pipeline + AI emails, day plan, decision brief, note enhancement |
-| Saved searches | No | Unlimited + daily email alerts |
-| Cost breakdown | Headline only | Full with sources |
+**There is no paid tier** (2026-10). Every signed-in user gets AI and every feature that used to be Pro: AI search scoring, Claude compare, AI tour features (emails, day plan, decision brief, note enhancement), unlimited favourites, the distance radius, saved searches + daily alerts, full cost breakdown.
 
-Anonymous users get filtered search results with no AI and no daily metering. Free users get 20 searches/day (`FREE_DAILY_SEARCH_LIMIT` in `tier_service.py`).
+| Who | AI | Limits |
+|-----|----|--------|
+| Anonymous | No — heuristic results only (the reason to sign up, and the bound on spend from the open internet) | Rate limiter only |
+| Signed in, no AI consent | No — every AI surface shows "Turn on AI" | `DAILY_SEARCH_LIMIT` (100) searches/day |
+| Signed in + `profiles.ai_consent_at` set | Yes | Same search cap + `DAILY_AI_LIMIT` (100) AI calls/day |
+
+- **Consent gates AI, not tier.** `TierService.require_ai()` / `ai_denial()` check `ai_consent_at` (migration 015; fails closed), then spend one unit of the Redis cap `ai_calls:{user}:{date}` (fails open). 403 = no consent, 429 = cap spent. Compare degrades to the plain table instead of failing. The app stores require that permission before data goes to Anthropic/OpenAI.
+- Both caps are env-overridable and exist to bound spend and abuse, not to upsell.
+- `user_tier`, Stripe and `/api/billing/*` are **dormant, not deleted** — kept so a paid tier can come back. `/pricing` redirects to `/`.
+- Invite codes no longer unlock anything; redemption still records which channel a sign-up came from.
 
 ## Live Markets
 

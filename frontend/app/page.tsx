@@ -6,7 +6,7 @@ import ApartmentCard from '@/components/ApartmentCard';
 import { ApartmentWithScore, SearchParams } from '@/types/apartment';
 import { searchApartments, scoreBatch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import UpgradePrompt from '@/components/UpgradePrompt';
+import AiConsentPrompt, { AiConsentOnboarding } from '@/components/AiConsent';
 import { InviteCodeBanner } from '@/components/InviteCodeBanner';
 
 function loadSessionResults(): { results: ApartmentWithScore[]; remaining: number | null; currentPage: number; hasMore: boolean } {
@@ -28,7 +28,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(() => loadSessionResults().results.length > 0);
   const [searchesRemaining, setSearchesRemaining] = useState<number | null>(() => loadSessionResults().remaining);
-  const [rateLimited, setRateLimited] = useState(false);
   const [moveInDate, setMoveInDate] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(() => loadSessionResults().currentPage);
   const [hasMore, setHasMore] = useState(() => loadSessionResults().hasMore);
@@ -38,7 +37,7 @@ export default function Home() {
   const [aiLoadingIds, setAiLoadingIds] = useState<Set<string>>(new Set());
   const [lastSearchParams, setLastSearchParams] = useState<(SearchParams & { page?: number }) | null>(null);
 
-  const { user, loading: authLoading, signInWithGoogle, tier, isPro } = useAuth();
+  const { user, loading: authLoading, signInWithGoogle, aiEnabled } = useAuth();
 
   // Persist search results to sessionStorage
   useEffect(() => {
@@ -55,7 +54,6 @@ export default function Home() {
       setResults([]);
       setHasSearched(false);
       setError(null);
-      setRateLimited(false);
       setSearchesRemaining(null);
       setCurrentPage(1);
       setHasMore(false);
@@ -65,9 +63,9 @@ export default function Home() {
     }
   }, [user]);
 
-  // Trigger AI score backfill when new results arrive (Pro only)
+  // Trigger AI score backfill when new results arrive (AI turned on)
   useEffect(() => {
-    if (!isPro || results.length === 0 || aiLoadingIds.size === 0) return;
+    if (!aiEnabled || results.length === 0 || aiLoadingIds.size === 0) return;
 
     const idsToScore = Array.from(aiLoadingIds);
     if (idsToScore.length === 0 || !lastSearchParams) return;
@@ -103,19 +101,16 @@ export default function Home() {
   const handleResults = (apartments: ApartmentWithScore[]) => {
     setResults(apartments);
     setHasSearched(true);
-    setRateLimited(false);
     setCurrentPage(1);
-    // Set AI loading for Pro users
-    if (isPro) {
+    // Set AI loading when AI is on
+    if (aiEnabled) {
       setAiLoadingIds(new Set(apartments.map(a => a.id)));
     }
   };
 
-  // Handle errors — detect rate limiting or daily limit
+  // Handle errors
   const handleError = (err: string | null) => {
     setError(err);
-    const lower = err?.toLowerCase() ?? '';
-    setRateLimited(lower.includes('too many') || lower.includes('limit') || lower.includes('rate'));
   };
 
   // Handle search metadata (tier, remaining searches, pagination)
@@ -141,8 +136,8 @@ export default function Home() {
       setCurrentPage(nextPage);
       setHasMore(response.has_more);
 
-      // Set AI loading for new apartments (Pro only)
-      if (isPro && newApts.length > 0) {
+      // Set AI loading for new apartments (AI turned on)
+      if (aiEnabled && newApts.length > 0) {
         setAiLoadingIds(new Set(newApts.map(a => a.id)));
       }
     } catch {
@@ -167,6 +162,7 @@ export default function Home() {
     <div className="min-h-screen bg-[var(--color-bg)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <InviteCodeBanner />
+        <AiConsentOnboarding />
         {/* Hero Section - only show before first search */}
         {!hasSearched && (
           <div className="text-center mb-8">
@@ -206,16 +202,17 @@ export default function Home() {
                 onSearchParams={(params) => setLastSearchParams(params)}
               />
               )}
-              {tier === 'free' && searchesRemaining !== null && (
+              {/* The daily cap is an abuse guard, so it only surfaces near the end */}
+              {user && searchesRemaining !== null && searchesRemaining <= 10 && (
                 <p className="text-sm text-gray-500 mt-3">
                   {searchesRemaining > 0
-                    ? `${searchesRemaining} free searches remaining today`
-                    : 'Daily search limit reached'}
+                    ? `${searchesRemaining} searches left today`
+                    : 'Daily search limit reached. It resets tomorrow.'}
                 </p>
               )}
-              {tier === 'free' && searchesRemaining === 0 && (
+              {user && hasSearched && !aiEnabled && (
                 <div className="mt-3">
-                  <UpgradePrompt feature="unlimited searches" inline />
+                  <AiConsentPrompt feature="Match scoring" inline />
                 </div>
               )}
               {/* Error shown below search form when no results yet */}
@@ -229,9 +226,6 @@ export default function Home() {
                       <p className="text-red-700">{error}</p>
                     </div>
                   </div>
-                  {rateLimited && !isPro && (
-                    <UpgradePrompt feature="higher rate limits and unlimited searches" inline />
-                  )}
                 </div>
               )}
             </div>
@@ -261,9 +255,6 @@ export default function Home() {
                       <p className="text-red-700">{error}</p>
                     </div>
                   </div>
-                  {rateLimited && !isPro && (
-                    <UpgradePrompt feature="higher rate limits and unlimited searches" inline />
-                  )}
                 </div>
               )}
 

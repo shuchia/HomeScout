@@ -19,7 +19,7 @@ class SearchRequest(BaseModel):
     near_lat: Optional[float] = Field(None, description="Latitude of reference location")
     near_lng: Optional[float] = Field(None, description="Longitude of reference location")
     near_label: Optional[str] = Field(None, description="Display name of reference location")
-    max_distance_miles: Optional[float] = Field(None, ge=0.5, le=10, description="Max distance filter (Pro only)")
+    max_distance_miles: Optional[float] = Field(None, ge=0.5, le=10, description="Max distance filter")
     page: int = Field(1, ge=1, description="Page number (1-indexed)")
     page_size: int = Field(10, ge=1, le=50, description="Results per page")
 
@@ -45,7 +45,7 @@ class CostSources(BaseModel):
 
 
 class CostBreakdown(BaseModel):
-    """Full cost breakdown for Pro users."""
+    """Full cost breakdown."""
     base_rent: int
     pet_rent: int = 0
     parking_fee: int = 0
@@ -123,7 +123,7 @@ class Apartment(BaseModel):
     # True cost fields (available to all tiers)
     true_cost_monthly: Optional[int] = None
     true_cost_move_in: Optional[int] = None
-    # Full breakdown (Pro only — populated by API layer)
+    # Full breakdown (populated by API layer)
     cost_breakdown: Optional[CostBreakdown] = None
     pricing_model: Optional[str] = None
     # Proximity (populated when near_lat/near_lng provided in search)

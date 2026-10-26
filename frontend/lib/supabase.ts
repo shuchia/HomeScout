@@ -30,6 +30,7 @@ export interface Profile {
   current_period_end: string | null
   pro_expires_at: string | null
   has_completed_onboarding: boolean
+  ai_consent_at: string | null
 }
 
 export interface Favorite {
