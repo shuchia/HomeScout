@@ -248,7 +248,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Homepage', () => {
     test('should load the homepage with header and hero section', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await expect(page.locator('header')).toBeVisible();
       await expect(page.locator('header').locator('text=Snugd')).toBeVisible();
@@ -257,7 +257,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should display the search form', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await expect(page.locator('label:has-text("City")')).toBeVisible();
       await expect(page.locator('label:has-text("Maximum Budget")')).toBeVisible();
@@ -273,7 +273,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Search Form Interactions', () => {
     test('should have default values pre-filled', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await expect(page.locator('select#city')).toHaveValue('New York, NY');
       await expect(page.locator('input#budget')).toHaveValue('2000');
@@ -282,7 +282,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should allow changing form values', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await page.selectOption('select#city', 'Bryn Mawr, PA');
       await expect(page.locator('select#city')).toHaveValue('Bryn Mawr, PA');
@@ -308,7 +308,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Search and Results (Mocked)', () => {
     test('should show loading state and then results', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -316,7 +316,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should display apartment cards with all required information', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -334,7 +334,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should display match score badge with correct color coding', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -350,7 +350,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should handle empty search results', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await page.route('**/api/search', async (route) => {
         await route.fulfill({
@@ -366,7 +366,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should display AI reasoning for each apartment', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -376,7 +376,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should display highlight checkmarks', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -396,7 +396,7 @@ test.describe('Snugd E2E Tests', () => {
     test.skip('should display qualitative labels instead of numeric scores', async ({ page }) => {
       // TODO(beta-polish): selector for "2 Apartments Found" appears to have
       // changed; verify current results-list header copy and re-enable.
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
       await page.click('button:has-text("Find Apartments")');
@@ -413,7 +413,7 @@ test.describe('Snugd E2E Tests', () => {
 
     test.skip('should show correct label colors', async ({ page }) => {
       // TODO(beta-polish): same selector drift as the test above.
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
       await page.click('button:has-text("Find Apartments")');
@@ -429,7 +429,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should not show AI reasoning for free tier results', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
       await page.click('button:has-text("Find Apartments")');
@@ -444,7 +444,7 @@ test.describe('Snugd E2E Tests', () => {
       // (DAILY_SEARCH_LIMIT in tier_service.py, an abuse guard, not a tier
       // limit) and the "Apartments Found" selector drifted. Re-enable after
       // updating the mock's searches_remaining and both selectors.
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
       await page.click('button:has-text("Find Apartments")');
@@ -457,7 +457,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Image Carousel (Mocked)', () => {
     test('should display images in apartment cards', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -468,7 +468,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should have carousel navigation arrows', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -479,7 +479,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should navigate carousel on arrow click', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -494,7 +494,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Responsive Layout', () => {
     test('should have responsive grid layout on desktop', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.setViewportSize({ width: 1280, height: 720 });
@@ -507,7 +507,7 @@ test.describe('Snugd E2E Tests', () => {
 
     test('should stack layout on mobile', async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.goto('/');
+      await page.goto('/search');
 
       const form = page.locator('form.space-y-6');
       await expect(form).toBeVisible();
@@ -519,7 +519,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Error Handling', () => {
     test('should recover from failed API request', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await page.route('**/api/search', (route) => {
         route.abort('connectionrefused');
@@ -531,7 +531,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should display error message on API failure', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await page.route('**/api/search', (route) => {
         route.abort('connectionrefused');
@@ -544,7 +544,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Favorite Button', () => {
     test('should display favorite button on apartment cards', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -557,7 +557,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should toggle favorite state on click', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       // Favourites go through /api/saved-listings now, not a direct Supabase
@@ -612,7 +612,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Compare Flow', () => {
     test('should display compare button on apartment cards', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -624,7 +624,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should add apartments to comparison and show comparison bar', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -642,7 +642,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should enable compare navigation when 2+ apartments selected', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -663,7 +663,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should clear comparison when Clear is clicked', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
       await mockSearchApi(page);
 
       await page.click('button:has-text("Find Apartments")');
@@ -684,7 +684,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('Navigation (Authenticated)', () => {
     test('should show Favorites and Compare links in header when logged in', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       const header = page.locator('header');
       await expect(header.locator('a:has-text("Favorites")')).toBeVisible();
@@ -693,7 +693,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should navigate to favorites page', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await page.click('header >> a:has-text("Favorites")');
       await expect(page).toHaveURL(/\/favorites/);
@@ -701,7 +701,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should navigate to compare page', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       await page.click('header >> a:has-text("Compare")');
       await expect(page).toHaveURL(/\/compare/);
@@ -843,7 +843,7 @@ test.describe('Snugd E2E Tests', () => {
 
   test.describe('User Menu & Sign Out', () => {
     test('should show user avatar/initial in header', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       // The UserMenu shows user initial — use .first() since desktop+mobile both render
       const userButton = page.locator('header button:has(div.rounded-full)').first();
@@ -851,7 +851,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should open user menu dropdown on click', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       // Click the user avatar button — use .first() for desktop instance
       const userButton = page.locator('header button:has(div.rounded-full)').first();
@@ -870,7 +870,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should sign out when Sign Out is clicked', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       // Open user menu
       const userButton = page.locator('header button:has(div.rounded-full)').first();
@@ -887,7 +887,7 @@ test.describe('Snugd E2E Tests', () => {
     });
 
     test('should hide Favorites and Compare links after sign out', async ({ page }) => {
-      await page.goto('/');
+      await page.goto('/search');
 
       // Verify links are present while logged in
       await expect(page.locator('header >> a:has-text("Favorites")')).toBeVisible();
@@ -1007,7 +1007,7 @@ test.describe('Snugd E2E Tests', () => {
     test('should perform a real search and render results in the UI', async ({ page }) => {
       test.setTimeout(120000);
 
-      await page.goto('/');
+      await page.goto('/search');
       await page.click('button:has-text("Find Apartments")');
 
       await expect(
@@ -1036,7 +1036,7 @@ test.describe('Anonymous User Flow', () => {
   test.skip('should show search form for anonymous users', async ({ page }) => {
     // TODO(beta-polish): h2 copy "Find Your Perfect Apartment" appears to
     // have changed; verify and update the selector.
-    await page.goto('/');
+    await page.goto('/search');
 
     // Hero section should be visible
     await expect(page.locator('h2')).toContainText('Find Your Perfect Apartment');
@@ -1048,13 +1048,13 @@ test.describe('Anonymous User Flow', () => {
   });
 
   test('should show Sign In button in header', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/search');
 
     await expect(page.locator('button:has-text("Sign In")').first()).toBeVisible();
   });
 
   test('should not show Favorites or Compare links for anonymous users', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/search');
 
     // Wait for header to be visible
     await expect(page.locator('header')).toBeVisible();
@@ -1067,7 +1067,7 @@ test.describe('Anonymous User Flow', () => {
   test.skip('should allow anonymous search and show qualitative labels', async ({ page }) => {
     // TODO(beta-polish): same "2 Apartments Found" selector drift as the
     // tests above. Re-enable after verifying current results-list copy.
-    await page.goto('/');
+    await page.goto('/search');
     await mockSearchApi(page, MOCK_FREE_SEARCH_RESPONSE);
 
     await page.click('button:has-text("Find Apartments")');
@@ -1079,7 +1079,7 @@ test.describe('Anonymous User Flow', () => {
   });
 
   test('should show hero text encouraging sign-in', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/search');
 
     // Anonymous users see "Sign in for AI-powered matching"
     await expect(page.locator('text=Sign in for AI-powered matching')).toBeVisible();

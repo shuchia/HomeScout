@@ -13,7 +13,7 @@ export default function AuthCallback() {
     const safeRedirect = () => {
       if (redirected) return
       redirected = true
-      router.replace('/')
+      router.replace('/search')
     }
 
     // detectSessionInUrl (enabled on the Supabase client) automatically

@@ -54,15 +54,16 @@ frontend/
 
 | Path | Auth | Purpose |
 |------|------|---------|
-| `/` | optional | Search form + results grid (sticky form on desktop, sessionStorage persists results) |
+| `/` | optional | Landing page for visitors; signed-in users are redirected to `/search` |
+| `/search` | optional | Search form + results grid (sticky form on desktop, sessionStorage persists results) |
 | `/compare` | optional | Compare up to 3 apartments; Pro gets Claude head-to-head analysis |
 | `/favorites` | required | List saved apartments; "Start Touring" button per card |
 | `/tours` | required | Tour dashboard with Today/Upcoming/All tabs, Day Planner banner, Decision Brief banner |
 | `/tours/[id]` | required | Tour detail with Capture/Email/Schedule tabs; sticky Apply/Pass/Undecided bar |
 | `/pricing` | optional | Stripe Checkout CTA, feature table |
 | `/settings` | required | Profile, current tier, subscription portal, sign out |
-| `/landing` | optional | Public marketing page (separate visual layout) |
-| `/auth/callback` | n/a | OAuth PKCE code exchange, redirects to `/` |
+| `/landing` | optional | Redirects to `/` (query string kept, for old invite links) |
+| `/auth/callback` | n/a | OAuth PKCE code exchange, redirects to `/search` |
 
 ## Components
 

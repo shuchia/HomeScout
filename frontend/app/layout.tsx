@@ -9,6 +9,7 @@ import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { OnboardingWalkthrough } from "@/components/OnboardingWalkthrough";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { PendingInviteRedeemer } from "@/components/PendingInvite";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -18,7 +19,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: "snugd — Find Your Perfect Apartment",
-  description: "AI-powered apartment matching across 19 East Coast cities. Search, compare, tour, and decide — all in one place.",
+  description: "AI-powered apartment hunting in 8 cities. Search, compare, tour, and decide — all in one place, free.",
   manifest: "/manifest.json",
   // iOS Safari uses these for "Add to Home Screen". The Next.js metadata
   // API emits the matching <meta name="apple-mobile-web-app-*"> and
@@ -69,6 +70,7 @@ export default function RootLayout({
           <BottomNav />
           <FeedbackWidget />
           <InstallPrompt />
+          <PendingInviteRedeemer />
         </AuthProvider>
         <ServiceWorkerRegistration />
       </body>

@@ -15,7 +15,7 @@ export function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">
-          <Link href="/" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
+          <Link href="/search" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
             Search
           </Link>
           {user && (

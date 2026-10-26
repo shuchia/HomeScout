@@ -35,21 +35,24 @@ NEXT_PUBLIC_FLOORPLAN_SEARCH=true    # true on QA, unset by default
 
 | Route | File | Purpose |
 |-------|------|---------|
-| `/` | `app/page.tsx` | Search app (the main product) |
-| `/landing` | `app/landing/page.tsx` | Marketing landing + consolidated beta invite |
+| `/` | `app/page.tsx` | Front door: landing page (`components/LandingPage.tsx`) for visitors; signed-in users are sent to `/search` |
+| `/search` | `app/search/page.tsx` | Search app (the main product) — works signed out, AI needs sign-in + consent |
+| `/landing` | `app/landing/page.tsx` | Redirect to `/`, query string kept (old invite links) |
 | `/compare` | `app/compare/page.tsx` | Side-by-side comparison |
 | `/favorites` | `app/favorites/page.tsx` | Saved apartments |
 | `/tours` | `app/tours/page.tsx` | Tour pipeline board |
 | `/tours/[id]` | `app/tours/[id]/page.tsx` | Single tour — notes, photos, tags, AI features |
-| `/pricing` | `app/pricing/page.tsx` | Tier comparison + Stripe checkout |
-| `/settings` | `app/settings/page.tsx` | Account, commute addresses, billing portal |
-| `/auth/callback` | `app/auth/callback/page.tsx` | Supabase OAuth callback |
+| `/pricing` | `app/pricing/page.tsx` | Redirects to `/` (billing dormant) |
+| `/settings` | `app/settings/page.tsx` | Account, AI consent, commute addresses |
+| `/auth/callback` | `app/auth/callback/page.tsx` | Supabase OAuth callback → `/search` |
 
-### Host-based rewrite (important)
+### Landing page and invite codes
 
-`next.config.ts` rewrites `/` → `/landing` **only** when the host is `snugd.ai` or `www.snugd.ai`. It uses the object form so the rewrite runs in `beforeFiles` — ahead of filesystem routing, which is required because `app/page.tsx` would otherwise already match `/`. Middleware cannot do this: Vercel applies rewrites before the static HTML cache lookup.
+Same on every host (2026-10-26) — the old `snugd.ai`-only host rewrite in `next.config.ts` is gone, so QA shows exactly what prod shows. Signup is open; the landing page's job is to send visitors to `/search` and collect city requests for markets Snugd doesn't cover (`waitlist.city`, migration 017).
 
-Consequence: **`qa.snugd.ai` and local dev serve the search app at `/`**, production serves the marketing page. When testing the landing page locally, go to `/landing` directly.
+`?code=BETA-…` on `/` (or the old `/landing` and `/beta.html` links, which redirect there) is saved to `localStorage` (`snugd-pending-invite`) and redeemed by `PendingInviteRedeemer` (mounted in `layout.tsx`) the first time the visitor is signed in. Codes unlock nothing — redemption records the channel. `InviteCodeBanner` remains for typing one in by hand.
+
+The installed PWA starts at `/search?source=pwa` (`manifest.json`), not the landing page.
 
 ## Components (`components/`)
 
@@ -156,7 +159,7 @@ Two Vercel projects — `snugd` (production, `snugd.ai`) and `snugd-dev`. `qa.sn
 
 | Issue | Cause |
 |-------|-------|
-| Landing page shows on `/` locally | It shouldn't — the rewrite is host-gated to `snugd.ai`. Use `/landing` |
+| Signed in, but `/` shows the landing page | `/` redirects only once `AuthContext` has a user; check the session, or go to `/search` |
 | Floorplan badges missing | `NEXT_PUBLIC_FLOORPLAN_SEARCH` is build-time; rebuild, don't just redeploy |
 | Auth spinner forever | Should be impossible — `AuthContext` has a 5 s timeout; if it happens, check that timeout wasn't removed |
 | E2E auth mock ignored | Only honored when `NODE_ENV !== 'production'` |

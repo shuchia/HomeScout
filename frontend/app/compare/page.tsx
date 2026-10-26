@@ -137,7 +137,7 @@ export default function ComparePage() {
         <header className="bg-[var(--color-surface)] border border-[var(--color-border)]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center gap-4">
-              <Link href="/" className="text-gray-600 hover:text-gray-900">
+              <Link href="/search" className="text-gray-600 hover:text-gray-900">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
@@ -169,7 +169,7 @@ export default function ComparePage() {
         <header className="bg-[var(--color-surface)] border border-[var(--color-border)]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center gap-4">
-              <Link href="/" className="text-gray-600 hover:text-gray-900">
+              <Link href="/search" className="text-gray-600 hover:text-gray-900">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
@@ -185,7 +185,7 @@ export default function ComparePage() {
             </svg>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Select at least 2 apartments to compare</h2>
             <p className="text-gray-600 mb-6">Go back to search results and add apartments using the Compare button.</p>
-            <Link href="/" className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors">
+            <Link href="/search" className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-light)] transition-colors">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -207,7 +207,7 @@ export default function ComparePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/" className="text-gray-600 hover:text-gray-900">
+              <Link href="/search" className="text-gray-600 hover:text-gray-900">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
@@ -215,7 +215,7 @@ export default function ComparePage() {
               <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Compare</h1>
             </div>
             <button
-              onClick={() => { clearComparison(); router.push('/') }}
+              onClick={() => { clearComparison(); router.push('/search') }}
               className="text-gray-600 hover:text-gray-900 text-sm whitespace-nowrap"
             >
               Clear All
