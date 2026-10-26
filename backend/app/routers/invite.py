@@ -59,7 +59,13 @@ async def redeem_invite_code(
     body: RedeemRequest,
     user: UserContext = Depends(get_current_user),
 ):
-    """Redeem an invite code to get Pro access for 90 days."""
+    """Redeem an invite code.
+
+    Codes unlock nothing now (AI is free for signed-in users); redemption is
+    how a sign-up is credited to the channel that handed out the code. The
+    tier columns are still written — the beta report reads them — but no
+    longer gate anything.
+    """
     _ensure_supabase()
     code = body.code.strip().upper()
 
@@ -125,7 +131,7 @@ async def redeem_invite_code(
         logger.info(f"User {user.user_id} redeemed invite code {code}")
         return RedeemResponse(
             success=True,
-            message="Welcome to Pro! Your access expires in 90 days.",
+            message="Code applied. Thanks for joining Snugd!",
             expires_at=pro_expires.isoformat(),
         )
     except Exception as e:

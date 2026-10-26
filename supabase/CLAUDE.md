@@ -30,6 +30,7 @@ Applied in order from `migrations/`. There is no migration runner in the repo â€
 | `008_tour_contact_info.sql` | `contact_phone`, `contact_email` on `tour_pipeline` |
 | `009_add_user_locations.sql` | `user_locations` (commute destinations) |
 | `015_ai_consent_and_profile_grants.sql` | `ai_consent_at` on `profiles`; drops the public "Service can update profiles" policy; limits client profile updates to name, avatar_url, email_notifications, has_completed_onboarding, ai_consent_at |
+| `017_waitlist_city_and_read_policy.sql` | `city` on `waitlist`; drops the public "Service can read waitlist" policy (anyone with the anon key could read every row) |
 
 ## Key Tables
 
@@ -93,7 +94,7 @@ unique(user_id, label)
 ```
 
 ### `beta_feedback`, `waitlist`, `analytics_events`
-Feedback and waitlist accept public/anon inserts (`"Anyone can insert"` policies); reads are service-role only. `analytics_events` is written fire-and-forget by the backend and is service-role on both sides.
+Feedback and waitlist accept public/anon inserts (`"Anyone can insert"` policies); reads are service-role only â€” for the waitlist only since 017, which dropped a `using (true)` select policy that let the anon key read it. Since signup opened (2026-10) the waitlist collects city requests (`city`), not access requests. `analytics_events` is written fire-and-forget by the backend and is service-role on both sides.
 
 ## RLS Model
 

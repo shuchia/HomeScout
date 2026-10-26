@@ -103,7 +103,7 @@ export default function FavoritesPage() {
             Search for apartments and tap the heart icon to save your favorites here.
           </p>
           <Link
-            href="/"
+            href="/search"
             className="inline-block px-6 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-light)] transition-colors"
           >
             Start Searching
