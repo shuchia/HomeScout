@@ -3,7 +3,7 @@ resource "aws_ecs_cluster" "main" {
 
   setting {
     name  = "containerInsights"
-    value = var.environment == "prod" ? "enabled" : "disabled"
+    value = var.enable_container_insights ? "enabled" : "disabled"
   }
 
   tags = {
@@ -199,9 +199,9 @@ resource "aws_ecs_service" "api" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = var.subnet_ids
     security_groups  = [var.ecs_security_group_id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   load_balancer {
@@ -232,9 +232,9 @@ resource "aws_ecs_service" "worker" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = var.subnet_ids
     security_groups  = [var.ecs_security_group_id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   lifecycle {
@@ -255,9 +255,9 @@ resource "aws_ecs_service" "beat" {
   }
 
   network_configuration {
-    subnets          = var.private_subnet_ids
+    subnets          = var.subnet_ids
     security_groups  = [var.ecs_security_group_id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   lifecycle {

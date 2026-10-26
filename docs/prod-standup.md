@@ -6,6 +6,7 @@ How to bring `api.snugd.ai` + `snugd.ai` up as the real app, with `qa.snugd.ai` 
 - Prod starts from a copy of QA — **both** the RDS corpus (step 3) and the Supabase project: users, profiles, saved listings, tours, notes, invite codes (step 7) — plus the tour-assets bucket (step 6), so testers keep their history when they move to snugd.ai.
 - snugd.ai builds from `release/prod` (step 9).
 - Prod Supabase is the existing project `arbfkxvrkdsaojyecjby`.
+- **Infra first, minimum size.** Prod stands up before anything else, at the smallest footprint that works; scale up when traffic justifies it. Every instance is the smallest class, nothing is redundant, there is no NAT gateway and no Container Insights (see Cost).
 - Alarms go to `shuchi@snugd.ai` (`alert_email`, step 3).
 - Still open: the mobile deep-link scheme (not needed until the mobile apps — step 7.5).
 
@@ -21,7 +22,7 @@ How to bring `api.snugd.ai` + `snugd.ai` up as the real app, with `qa.snugd.ai` 
 | RDS snapshot `snugd-prod-final` | Exists, 2026-05-04, 50 GB. **Don't use it** — five months of schema and listings behind |
 | QA RDS | Postgres 16.13 (auto-minor-upgraded from the 16.6 in Terraform), 20 GB, daily automated snapshots |
 | Prod Supabase project `arbfkxvrkdsaojyecjby` | Exists; waitlist on snugd.ai writes to it. Which other migrations are applied is unknown — check in step 6 |
-| GitHub `prod` environment | Exists with required reviewers. `PROD_PRIVATE_SUBNETS` / `PROD_ECS_SG` are from **2026-04-14** and point at the destroyed VPC — must be replaced in step 5 |
+| GitHub `prod` environment | Exists with required reviewers. Its `PROD_PRIVATE_SUBNETS` / `PROD_ECS_SG` point at the destroyed VPC — no longer read by CI (step 6) |
 | Branches | `main` fast-forwarded to `release/qa` on 2026-10-25 (equal); `release/prod` is far behind, last touched 2026-04-10 |
 | Vercel `snugd` project (snugd.ai) | Builds from **`main`**; switching to `release/prod` in step 9 |
 
@@ -30,20 +31,30 @@ How to bring `api.snugd.ai` + `snugd.ai` up as the real app, with `qa.snugd.ai` 
 - `prod.tfvars`: `use_floorplan_search = "true"`, `beat_desired_count = 1`, `rds_snapshot_identifier = "snugd-qa-prod-bootstrap"`, `rds_engine_version = "16"`, storage 50 → 20 GB, `alert_email = "shuchi@snugd.ai"`.
 - `modules/rds`: optional `snapshot_identifier` (null default; `ignore_changes` so clearing it later can't replace the DB) and `engine_version` variable (default `16.6` — QA's config is unchanged).
 - `scripts/deploy.sh tf-plan|tf-apply`: `init` now passes `-reconfigure`.
+- `enable_nat` (default `true`; **`false` in prod**): no NAT gateway. ECS tasks run in the public subnets with public IPs; the ECS security group still admits only the ALB on 8000, and RDS/Redis stay in the private subnets with no route out. Egress IPs change on every deploy, so nothing may rely on allowlisting a prod IP — check the Google Maps key is restricted by API, not by IP.
+- `enable_container_insights` (default `false`, was hard-wired on for prod).
+- `modules/rds`: `engine_version` is in `ignore_changes` — RDS applies minor upgrades itself, and a pinned minor then plans as a downgrade (QA was showing `16.13 -> 16.6`).
+- CI (`deploy-backend.yml` migrate step, `seed-data.yml`) reads the network config from the running ECS service instead of the `{ENV}_PRIVATE_SUBNETS` / `{ENV}_ECS_SG` GitHub secrets.
+- QA `terraform plan` with all of the above: **no resource changes** (one new output).
 - `terraform validate` and `fmt -check` pass. `plan` for prod has **not** been run — it is blocked by the stale digest (step 1).
 
 ---
 
 ## 1. Clear the stale Terraform digest **[Claude w/ approval]**
 
-The 2026-05-04 teardown deleted the state object but left `…-md5` in DynamoDB. First confirm the last state version was the post-destroy one (zero resources) — **[human]**, since a non-empty state file contains the old DB password:
+The 2026-05-04 teardown deleted the state object but left `…-md5` in DynamoDB.
+
+**Checked 2026-10-26:** the last state version (2026-05-04 22:19) still lists 9 resources — the prod VPC, 2 private subnets, 3 security groups, the DB subnet group, an ECR repo entry with no instances, and the old `random_password`. Every one was looked up by ID and **none exists in AWS** (the teardown was finished by hand), so starting from empty state is safe. The old state version still holds that password in S3; it unlocks nothing, since its database is gone.
+
+To repeat the check, list types and IDs only — never print the file, it has the password. (`get-object … /dev/stdout | jq` reads AWS's response metadata as a second document and prints a misleading trailing `0`.)
 
 ```bash
 VER=$(aws s3api list-object-versions --bucket homescout-terraform-state \
   --prefix infra/prod/terraform.tfstate \
   --query 'Versions[?LastModified==`2026-05-04T22:19:08+00:00`].VersionId' --output text)
-aws s3api get-object --bucket homescout-terraform-state --key infra/prod/terraform.tfstate \
-  --version-id "$VER" /dev/stdout | jq '.resources | length'     # expect 0
+D=$(mktemp -d); aws s3api get-object --bucket homescout-terraform-state \
+  --key infra/prod/terraform.tfstate --version-id "$VER" "$D/s" > /dev/null
+jq -r '.resources[] | "\(.type).\(.name) instances=\(.instances|length)"' "$D/s"; rm -rf "$D"
 ```
 
 Then remove the digest:
@@ -144,16 +155,9 @@ Verify by **key names only**: `… get-secret-value … | jq -r 'keys[]'` → ex
 terraform plan  -var-file=environments/prod.tfvars    # review: all creates, no replaces
 terraform apply -var-file=environments/prod.tfvars
 terraform output alb_dns_name
-terraform output private_subnet_ids
-terraform output ecs_security_group_id
 ```
 
-Then update the GitHub `prod` environment secrets — the April values point at the destroyed VPC and the CI migrate step will fail on them **[Claude w/ approval]**:
-
-```bash
-gh secret set PROD_PRIVATE_SUBNETS --env prod --body "subnet-aaa,subnet-bbb"   # comma-separated, from the output
-gh secret set PROD_ECS_SG          --env prod --body "sg-…"
-```
+No GitHub secrets to update: CI reads the subnets, security group and public-IP setting from the running `api`/`worker` service. The old `PROD_PRIVATE_SUBNETS` / `PROD_ECS_SG` are unused and can be deleted; delete the QA pair only once this workflow change has reached `release/qa`.
 
 Check the services came up (a stopped worker is silent): `./scripts/deploy.sh status prod`.
 
@@ -292,16 +296,26 @@ Then sign in on snugd.ai with Google **and** Apple, run a search, favourite a li
 
 ## Cost
 
-Same sizing as QA, us-east-1 on-demand, approximate:
+Minimum footprint, us-east-1 on-demand, approximate:
 
 | Item | $/mo |
 |---|---|
-| NAT gateway (single) + its public IP | ~36 |
-| ALB + public IPs | ~20–25 |
+| ALB + its public IPs | ~20–25 |
 | Fargate: api + worker + beat, 0.25 vCPU / 0.5 GB each | ~27 |
-| RDS db.t4g.micro + 20 GB gp3 | ~14 |
-| ElastiCache cache.t4g.micro | ~12 |
-| Secrets, CloudWatch logs/alarms, S3 | ~5 |
-| **Infra total** | **~$115–120** |
+| Public IPs on the 3 tasks (instead of a NAT gateway) | ~11 |
+| RDS db.t4g.micro, single-AZ, 20 GB gp3, 1-day backups | ~14 |
+| ElastiCache cache.t4g.micro, 1 node | ~12 |
+| Secrets, CloudWatch logs + 4 alarms, S3 | ~5 |
+| **Infra total** | **~$90** |
+
+Down from ~$120: no NAT gateway (−$36, +$11 for task IPs) and no Container Insights (−$5–10).
+
+**Scaling up later** — each is a `prod.tfvars` change + apply:
+- More API capacity: `api_desired_count`, then `api_cpu`/`api_memory`.
+- Worker OOMs or a slow queue: `worker_memory` first (512 MB is tight — see the worker memory notes), then `worker_desired_count`. Keep `beat_desired_count = 1` always.
+- Database: `rds_instance_class`, `rds_allocated_storage`; `rds_multi_az = true` and a longer `rds_backup_retention` once there's real user data to protect; `rds_deletion_protection = true` at launch.
+- Private networking: `enable_nat = true` (stable egress IP, tasks off public subnets).
+
+**Not yet trimmed:** `beat` could run inside the worker (`celery worker -B`) to save ~$9/mo, but that's a task-definition change and the worker is already near its 512 MB limit.
 
 On top: Apify for prod's own weekly sweeps (QA keeps sweeping too, so scraping roughly doubles — still single-digit dollars at ~$0.0005/listing), and Anthropic/OpenAI usage, which is now driven by every signed-in user.

@@ -136,12 +136,16 @@ jobs:
 
       - name: Run Alembic migrations
         run: |
-          # Select secrets based on environment
-          case "$ENV" in
-            qa)   SUBNETS='${{ secrets.QA_PRIVATE_SUBNETS }}'; SG='${{ secrets.QA_ECS_SG }}' ;;
-            prod) SUBNETS='${{ secrets.PROD_PRIVATE_SUBNETS }}'; SG='${{ secrets.PROD_ECS_SG }}' ;;
-          esac
-          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
+          # Run where the api service runs: same subnets, security group and
+          # public-IP setting, read from ECS. These used to come from the
+          # {ENV}_PRIVATE_SUBNETS / {ENV}_ECS_SG environment secrets, which went
+          # stale when prod's VPC was destroyed and would be wrong again for a
+          # prod without a NAT (tasks in public subnets, assignPublicIp ENABLED).
+          NETWORK=$(aws ecs describe-services --cluster snugd-${ENV} --services api \
+            --query 'services[0].networkConfiguration' --output json)
+          if [ -z "$NETWORK" ] || [ "$NETWORK" = "null" ]; then
+            echo "::error::Could not read the api service's network configuration"; exit 1
+          fi
 
           MAX_RETRIES=3
           for ATTEMPT in $(seq 1 $MAX_RETRIES); do
@@ -150,7 +154,7 @@ jobs:
               --cluster snugd-${ENV} \
               --task-definition snugd-${ENV}-api \
               --launch-type FARGATE \
-              --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${SG}\"],\"assignPublicIp\":\"DISABLED\"}}" \
+              --network-configuration "$NETWORK" \
               --overrides '{"containerOverrides":[{"name":"api","environment":[{"name":"SERVICE_TYPE","value":"migrate"}]}]}' \
               --query 'tasks[0].taskArn' \
               --output text)

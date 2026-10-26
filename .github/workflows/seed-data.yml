@@ -52,15 +52,19 @@ jobs:
             CMD="from app.tasks.dispatcher import dispatch_scrapes; dispatch_scrapes()"
           fi
 
-          SUBNETS='${{ secrets[format('{0}_PRIVATE_SUBNETS', inputs.environment)] }}'
-          SUBNET_JSON=$(echo "$SUBNETS" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
-          SG='${{ secrets[format('{0}_ECS_SG', inputs.environment)] }}'
+          # Same network as the worker service (subnets, SG, public IP),
+          # read from ECS rather than kept in environment secrets.
+          NETWORK=$(aws ecs describe-services --cluster "snugd-${ENV}" --services worker \
+            --query 'services[0].networkConfiguration' --output json)
+          if [ -z "$NETWORK" ] || [ "$NETWORK" = "null" ]; then
+            echo "::error::Could not read the worker service's network configuration"; exit 1
+          fi
 
           TASK_ARN=$(aws ecs run-task \
             --cluster "snugd-${ENV}" \
             --task-definition "snugd-${ENV}-worker" \
             --launch-type FARGATE \
-            --network-configuration "{\"awsvpcConfiguration\":{\"subnets\":[${SUBNET_JSON}],\"securityGroups\":[\"${SG}\"],\"assignPublicIp\":\"DISABLED\"}}" \
+            --network-configuration "$NETWORK" \
             --overrides "{\"containerOverrides\":[{\"name\":\"worker\",\"command\":[\"python\",\"-c\",\"${CMD}\"]}]}" \
             --query 'tasks[0].taskArn' --output text)
 

@@ -15,8 +15,19 @@ variable "image_tag" {
   default = "latest"
 }
 
-variable "private_subnet_ids" {
+variable "subnet_ids" {
   type = list(string)
+}
+
+variable "assign_public_ip" {
+  description = "true when the tasks run in public subnets (no NAT)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_container_insights" {
+  type    = bool
+  default = false
 }
 
 variable "ecs_security_group_id" {

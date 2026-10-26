@@ -146,3 +146,15 @@ variable "rds_snapshot_identifier" {
   type        = string
   default     = null
 }
+
+variable "enable_nat" {
+  description = "NAT gateway for the private subnets (~$36/mo). false = ECS tasks get public IPs instead"
+  type        = bool
+  default     = true
+}
+
+variable "enable_container_insights" {
+  description = "ECS Container Insights (per-task CloudWatch metrics, billed)"
+  type        = bool
+  default     = false
+}

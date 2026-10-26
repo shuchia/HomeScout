@@ -1,10 +1,16 @@
 environment          = "prod"
 vpc_cidr             = "10.2.0.0/16"
-enable_redundant_nat = false # Single NAT for now (cost saving)
-frontend_url         = "https://snugd.ai"
-alert_from_email     = "alerts@snugd.ai"
-log_level            = "INFO"
-use_floorplan_search = "true" # Same as QA; the frontend flag is set separately in Vercel
+enable_redundant_nat = false
+# Minimum footprint until there's traffic to justify more. No NAT gateway
+# (~$36/mo): ECS tasks run in the public subnets with public IPs (~$11/mo
+# for 3), and the ECS security group still admits only the ALB. Egress IPs
+# change on every deploy — nothing may depend on an allowlisted prod IP.
+enable_nat                = false
+enable_container_insights = false
+frontend_url              = "https://snugd.ai"
+alert_from_email          = "alerts@snugd.ai"
+log_level                 = "INFO"
+use_floorplan_search      = "true" # Same as QA; the frontend flag is set separately in Vercel
 
 # CloudWatch alarm notifications (SNS email subscription). AWS emails a
 # confirmation link after the apply; alarms notify nobody until it's clicked.

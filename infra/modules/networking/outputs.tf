@@ -25,3 +25,13 @@ output "rds_security_group_id" {
 output "redis_security_group_id" {
   value = aws_security_group.redis.id
 }
+
+# Where ECS tasks run: private behind the NAT, or public with their own IP
+# when there is no NAT (the ECS security group still only admits the ALB).
+output "ecs_subnet_ids" {
+  value = var.enable_nat ? aws_subnet.private[*].id : aws_subnet.public[*].id
+}
+
+output "ecs_assign_public_ip" {
+  value = !var.enable_nat
+}

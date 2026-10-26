@@ -48,7 +48,11 @@ resource "aws_db_instance" "main" {
     # snapshot_identifier forces replacement when it changes. Without this,
     # clearing it after the bootstrap restore would destroy and recreate the
     # database.
-    ignore_changes = [snapshot_identifier]
+    # engine_version: RDS applies minor upgrades itself (QA went 16.6 ->
+    # 16.13), after which a pinned minor reads as a downgrade on every plan.
+    # The variable sets the version at create; major upgrades are deliberate
+    # and done outside Terraform, then the variable is updated to match.
+    ignore_changes = [snapshot_identifier, engine_version]
   }
 
   tags = {
