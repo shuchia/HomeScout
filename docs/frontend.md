@@ -55,6 +55,7 @@ frontend/
 | Path | Auth | Purpose |
 |------|------|---------|
 | `/` | optional | Landing page for visitors; signed-in users are redirected to `/search` |
+| `/privacy`, `/terms` | no | Privacy policy and terms of service |
 | `/search` | optional | Search form + results grid (sticky form on desktop, sessionStorage persists results) |
 | `/compare` | optional | Compare up to 3 apartments; Pro gets Claude head-to-head analysis |
 | `/favorites` | required | List saved apartments; "Start Touring" button per card |

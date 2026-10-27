@@ -45,6 +45,7 @@ NEXT_PUBLIC_FLOORPLAN_SEARCH=true    # true on QA, unset by default
 | `/pricing` | `app/pricing/page.tsx` | Redirects to `/` (billing dormant) |
 | `/settings` | `app/settings/page.tsx` | Account, AI consent, commute addresses |
 | `/auth/callback` | `app/auth/callback/page.tsx` | Supabase OAuth callback → `/search` |
+| `/privacy`, `/terms` | `app/privacy/page.tsx`, `app/terms/page.tsx` | Legal pages (`components/LegalPage.tsx`); URLs registered on the Google OAuth consent screen and needed for App Store / Play listings. Keep the privacy policy in step with processors and data types |
 
 ### Landing page and invite codes
 

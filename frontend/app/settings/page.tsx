@@ -6,7 +6,7 @@ import CommuteAddresses from '@/components/CommuteAddresses'
 import { AiConsentSetting } from '@/components/AiConsent'
 
 function SettingsContent() {
-  const { user, profile, loading, profileLoading, signOut } = useAuth()
+  const { user, profile, loading, profileLoading } = useAuth()
   // No paid tier any more; billing stays reachable only so anyone still
   // holding a Stripe subscription can cancel it.
   const hasSubscription = !!profile?.subscription_status && profile.subscription_status !== 'canceled'
@@ -27,12 +27,6 @@ function SettingsContent() {
     } catch (err) {
       console.error('Manage billing failed:', err)
     }
-  }
-
-  async function handleDeleteAccount() {
-    if (!confirm('This will permanently delete your account, favorites, and saved searches. This cannot be undone.')) return
-    signOut()
-    window.location.href = '/'
   }
 
   async function handleExportData() {
@@ -105,14 +99,25 @@ function SettingsContent() {
         <button onClick={handleExportData} className="text-sm text-[var(--color-primary)] hover:underline">
           Export my data (JSON)
         </button>
+        <p className="text-xs text-gray-500 mt-3">
+          <a href="/privacy" className="hover:underline">Privacy Policy</a> · <a href="/terms" className="hover:underline">Terms of Service</a>
+        </p>
       </section>
 
       {/* Danger Zone */}
       <section className="bg-white rounded-lg border border-red-200 p-6">
         <h2 className="text-lg font-semibold text-red-600 mb-4">Danger Zone</h2>
-        <button onClick={handleDeleteAccount} className="text-sm text-red-600 hover:underline">
+        {/* No in-app deletion yet. This used to confirm "permanently delete" and
+            then only sign out — say what actually happens instead. */}
+        <a
+          href={`mailto:privacy@snugd.ai?subject=${encodeURIComponent('Delete my Snugd account')}&body=${encodeURIComponent(`Please delete the Snugd account for ${user?.email ?? ''}.`)}`}
+          className="text-sm text-red-600 hover:underline"
+        >
           Delete my account
-        </button>
+        </a>
+        <p className="text-xs text-gray-500 mt-1">
+          Emails privacy@snugd.ai from your mail app. We delete your account and data within 30 days.
+        </p>
       </section>
     </div>
   )
