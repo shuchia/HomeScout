@@ -125,6 +125,8 @@ function LandingContent() {
   const { signInWithGoogle } = useAuth();
   const inviteCode = searchParams.get('code')?.trim().toUpperCase() || '';
   const channelName = channelFor(inviteCode);
+  // Settings → Delete my account lands here once the account is gone
+  const accountDeleted = searchParams.get('account') === 'deleted';
   const [scrolled, setScrolled] = useState(false);
 
   // Signup is open; a code only credits the channel that sent this visitor.
@@ -196,6 +198,11 @@ function LandingContent() {
               <p className="text-xs text-[var(--color-text-muted)] mt-3">
                 Free · No credit card · Sign in with Google to save listings and plan tours
               </p>
+              {accountDeleted && (
+                <p className="text-sm text-[var(--color-text-secondary)] mt-3" role="status">
+                  Your account and everything in it have been deleted.
+                </p>
+              )}
               {inviteCode && (
                 <p className="text-xs text-[var(--color-primary)] mt-2">
                   Invite code <span className="font-mono font-semibold">{inviteCode}</span> is applied when you sign in.

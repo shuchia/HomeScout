@@ -36,6 +36,7 @@ from app.routers.waitlist import router as waitlist_router
 from app.routers.commute import router as commute_router
 from app.routers.beta_admin import router as beta_admin_router
 from app.routers.analytics import router as analytics_router
+from app.routers.account import router as account_router
 from app.database import is_database_enabled, init_db, close_db
 
 # Configure logging
@@ -115,6 +116,7 @@ app.include_router(feedback_router)
 app.include_router(waitlist_router)
 app.include_router(beta_admin_router)
 app.include_router(analytics_router)
+app.include_router(account_router)
 # Commute router before apartments_router: its POST /api/apartments/commute must
 # be matched ahead of apartments_router's GET /{apartment_id} catch-all.
 app.include_router(commute_router)

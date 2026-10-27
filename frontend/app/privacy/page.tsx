@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 // data type or the deletion flow changes, change this page in the same PR.
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 26, 2026">
+    <LegalPage title="Privacy Policy" updated="October 27, 2026">
       <p>
         Snugd (&quot;Snugd&quot;, &quot;we&quot;, &quot;us&quot;) is an apartment-hunting app at snugd.ai, currently
         operated by an individual in the United States. This policy explains what we collect when you use the
@@ -102,8 +102,8 @@ export default function PrivacyPage() {
       <h2>How long we keep it</h2>
       <p>
         We keep your account data for as long as you have an account. When you delete your account, we delete your
-        profile, saved listings, tours, notes, recordings, photos and commute addresses within 30 days. Usage events are kept with the link to your account removed. Backups roll over within a further 30
-        days.
+        profile, saved listings, tours, notes, recordings, photos and commute addresses immediately. Usage events are
+        kept with the link to your account removed. Database backups roll over within 30 days.
       </p>
 
       <h2>Your choices</h2>
@@ -111,8 +111,9 @@ export default function PrivacyPage() {
         <li><strong>See and export your data:</strong> Settings → Export my data downloads your saved listings.</li>
         <li><strong>Correct it:</strong> edit or delete notes, photos and addresses in the app.</li>
                 <li>
-          <strong>Delete your account:</strong> email <a href="mailto:privacy@snugd.ai">privacy@snugd.ai</a> from the
-          address you sign in with, and we will delete it as described above. In-app deletion is coming.
+          <strong>Delete your account:</strong> Settings → Delete my account. Your profile, saved listings, tours,
+          notes, voice recordings, photos and commute addresses are deleted straight away. If you can&apos;t sign in,
+          email <a href="mailto:privacy@snugd.ai">privacy@snugd.ai</a> from the address you signed in with.
         </li>
         <li>
           <strong>Other requests:</strong> depending on where you live you may have further rights, such as asking

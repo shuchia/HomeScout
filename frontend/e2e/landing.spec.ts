@@ -67,4 +67,51 @@ test.describe('Front door', () => {
     await expect(page).toHaveURL(/\/terms$/, { timeout: 30_000 })
     await expect(page.getByRole('heading', { name: 'Terms of Service', level: 1 })).toBeVisible()
   })
+
+  test('settings deletes the account after a second confirmation', async ({ page }) => {
+    let deletes = 0
+    await page.route('**/api/account', async route => {
+      if (route.request().method() === 'DELETE') deletes++
+      await route.fulfill({ status: 204, body: '' })
+    })
+    await page.route('**/placeholder.supabase.co/**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }))
+    // Signed in on /settings only: after deletion the app navigates to /, and
+    // an init script that re-adds the mock user there would undo the sign-out.
+    await page.addInitScript((user: string) => {
+      if (location.pathname === '/settings') localStorage.setItem('__test_auth_user', user)
+      else localStorage.removeItem('__test_auth_user')
+    }, JSON.stringify({ id: 'delete-test-user', email: 'delete@example.com' }))
+
+    await page.goto('/settings')
+    await page.getByRole('button', { name: 'Delete my account' }).click()
+    await expect(page.getByText('Delete your Snugd account?')).toBeVisible()
+    expect(deletes).toBe(0)  // first click only asks
+
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByText('Delete your Snugd account?')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Delete my account' }).click()
+    await page.getByRole('button', { name: 'Delete permanently' }).click()
+    await expect(page).toHaveURL(/account=deleted/, { timeout: 30_000 })
+    expect(deletes).toBe(1)
+    await expect(page.getByText('Your account and everything in it have been deleted.')).toBeVisible()
+  })
+
+  test('a failed deletion keeps the user on settings with the error', async ({ page }) => {
+    await page.route('**/api/account', route =>
+      route.fulfill({ status: 500, contentType: 'application/json',
+        body: JSON.stringify({ detail: "Couldn't delete your files. Your account is still there; please try again." }) }))
+    await page.route('**/placeholder.supabase.co/**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }))
+    await page.addInitScript((user: string) => {
+      localStorage.setItem('__test_auth_user', user)
+    }, JSON.stringify({ id: 'delete-test-user', email: 'delete@example.com' }))
+
+    await page.goto('/settings')
+    await page.getByRole('button', { name: 'Delete my account' }).click()
+    await page.getByRole('button', { name: 'Delete permanently' }).click()
+    await expect(page.getByText(/Your account is still there/)).toBeVisible()
+    await expect(page).toHaveURL(/\/settings$/)
+  })
 })

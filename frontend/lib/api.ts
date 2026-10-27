@@ -700,6 +700,15 @@ export async function redeemInviteCode(code: string): Promise<{ success: boolean
   return res.json();
 }
 
+/** Permanently delete the signed-in user's account, data and uploaded files. */
+export async function deleteAccount(): Promise<void> {
+  const res = await fetchWithAuth(`${API_URL}/api/account`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to delete account' }));
+    throw new ApiError(err.detail || 'Failed to delete account', res.status);
+  }
+}
+
 export async function getInviteStatus(): Promise<{ has_invite: boolean; expires_at?: string }> {
   const res = await fetchWithAuth(`${API_URL}/api/invite/status`);
   if (!res.ok) throw new ApiError('Failed to check invite status', res.status);

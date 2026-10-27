@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { createBillingPortalSession } from '@/lib/api'
 import CommuteAddresses from '@/components/CommuteAddresses'
 import { AiConsentSetting } from '@/components/AiConsent'
+import { DeleteAccount } from '@/components/DeleteAccount'
 
 function SettingsContent() {
   const { user, profile, loading, profileLoading } = useAuth()
@@ -107,17 +108,7 @@ function SettingsContent() {
       {/* Danger Zone */}
       <section className="bg-white rounded-lg border border-red-200 p-6">
         <h2 className="text-lg font-semibold text-red-600 mb-4">Danger Zone</h2>
-        {/* No in-app deletion yet. This used to confirm "permanently delete" and
-            then only sign out — say what actually happens instead. */}
-        <a
-          href={`mailto:privacy@snugd.ai?subject=${encodeURIComponent('Delete my Snugd account')}&body=${encodeURIComponent(`Please delete the Snugd account for ${user?.email ?? ''}.`)}`}
-          className="text-sm text-red-600 hover:underline"
-        >
-          Delete my account
-        </a>
-        <p className="text-xs text-gray-500 mt-1">
-          Emails privacy@snugd.ai from your mail app. We delete your account and data within 30 days.
-        </p>
+        <DeleteAccount />
       </section>
     </div>
   )
