@@ -78,6 +78,16 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
           "s3:DeleteObject"
         ]
         Resource = "${var.tours_bucket_arn}/*"
+      },
+      {
+        # Account deletion sweeps tours/{user_id}/ (app/routers/account.py) to
+        # catch files no row points at any more. Listing only, tours/ only.
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = var.tours_bucket_arn
+        Condition = {
+          StringLike = { "s3:prefix" = ["tours/*"] }
+        }
       }
     ]
   })

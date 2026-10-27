@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" updated="October 26, 2026">
+    <LegalPage title="Terms of Service" updated="October 27, 2026">
       <p>
         These terms cover your use of Snugd — the website at snugd.ai and the Snugd mobile apps. Snugd is currently
         operated by an individual in the United States (&quot;we&quot;, &quot;us&quot;). By using Snugd you agree to
@@ -72,7 +72,7 @@ export default function TermsPage() {
 
       <h2>Ending your use</h2>
       <p>
-        You can stop using Snugd at any time and ask us to delete your account at{' '}
+        You can stop using Snugd at any time and delete your account in Settings, or by emailing{' '}
         <a href="mailto:privacy@snugd.ai">privacy@snugd.ai</a>. We may stop offering Snugd, and if we do we will give
         you notice and a chance to export your data.
       </p>

@@ -109,6 +109,7 @@ Prefix `/api/admin/data-collection`. Admin endpoints: `/jobs` (POST/GET), `/jobs
 |--------|-------------|------|
 | `feedback.py` | POST `/api/feedback` | optional |
 | `invite.py` | POST `/api/invite/redeem`, GET `/api/invite/status`, POST `/api/admin/invite-codes` | last requires `X-Admin-Key` |
+| `account.py` | DELETE `/api/account` | Deletes the caller's S3 files under `tours/{user_id}/`, then the Supabase auth user (every user table cascades). Files first, so a failure leaves the account to retry |
 | `waitlist.py` | POST `/api/waitlist`, GET `/api/admin/waitlist` | admin on second |
 | `webhooks.py` | POST `/webhooks/supabase/check-matches` | HMAC `x-webhook-secret` |
 

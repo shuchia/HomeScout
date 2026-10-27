@@ -161,6 +161,7 @@ PostgreSQL (ApartmentModel)
 | `saved_searches.py` | `/api/saved-searches` | Saved search CRUD (Pro only to create) |
 | `saved_listings.py` | `/api/saved-listings` | The user's own copy of a listing — favourites + tour pipeline as one record |
 | `invite.py` | `/api/invite`, `/api/admin/invite-codes` | Beta invite redeem/status, code minting |
+| `account.py` | `/api/account` | In-app account deletion (App Store 5.1.1(v)): S3 files, then the auth user |
 | `feedback.py` | `/api/feedback` | Beta feedback submission |
 | `waitlist.py` | `/api/waitlist`, `/api/admin/waitlist` | Public waitlist signup + admin listing |
 | `analytics.py` | `/api/analytics/event` | Fire-and-forget event logging |
@@ -497,6 +498,7 @@ Presigned photo thumbnail URLs are regenerated on tour read (they expire).
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/invite/redeem` | POST | Required | Redeem an invite code → Pro |
+| `/api/account` | DELETE | Required | Permanently delete the caller's account, data and files → 204 |
 | `/api/invite/status` | GET | Required | Current user's invite status |
 | `/api/admin/invite-codes` | POST | `X-Admin-Key` | Mint codes |
 | `/api/admin/beta-report` | GET | `X-Admin-Key` | Usage snapshot (`days`, `top_n`, `feedback_limit`) |
