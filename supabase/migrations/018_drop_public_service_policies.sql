@@ -1,7 +1,10 @@
 /* ============================================================================
    Drop the remaining "Service can …" policies that were granted to everyone
-   Run in the Supabase SQL Editor — QA and prod. Apply on QA BEFORE copying QA
-   into prod, or the copy carries these policies across.
+   Run in the Supabase SQL Editor on QA, BEFORE copying QA into prod — the
+   copy (docs/prod-standup.md step 7) replaces prod's public schema with QA's,
+   policies included, so prod gets this through the copy. Don't run it on prod
+   before the copy: prod has none of these tables yet and the first statement
+   fails with 42P01. Applied on QA 2026-10-26.
 
    WHY
    Same mistake as 014, 015 and 017: a policy with no TO clause applies to
