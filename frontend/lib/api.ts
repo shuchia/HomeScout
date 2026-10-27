@@ -578,7 +578,10 @@ export async function uploadVoiceNote(tourId: string, audioBlob: Blob): Promise<
     // No Content-Type header — browser sets multipart boundary automatically
     body: formData,
   })
-  if (!response.ok) throw new ApiError('Failed to upload voice note', response.status)
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new ApiError(err.detail || 'Failed to upload voice note', response.status)
+  }
   return response.json()
 }
 

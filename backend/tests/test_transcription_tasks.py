@@ -24,8 +24,9 @@ class TestTranscribeVoiceNote:
         mock_update = MagicMock()
         mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
 
-        # No AI consent → no enhancement
-        with patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=False):
+        # Consented (so it's transcribed), but today's AI cap is spent → no enhancement
+        with patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True), \
+             patch("app.services.tier_service.TierService.consume_ai_call", new_callable=AsyncMock, return_value=False):
             from app.tasks.transcription_tasks import transcribe_voice_note
             transcribe_voice_note(
                 "note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1"
@@ -55,12 +56,14 @@ class TestTranscribeVoiceNote:
         from app.tasks.transcription_tasks import transcribe_voice_note
 
         # Call directly (not via Celery) — the retry will re-raise
-        try:
-            transcribe_voice_note(
-                "note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1"
-            )
-        except Exception:
-            pass
+        with patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True):
+            try:
+                transcribe_voice_note(
+                    "note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1"
+                )
+            except Exception:
+                pass
+        mock_s3.get_object.assert_called_once()  # reached the transcription path
 
         # Verify status was set to "failed"
         update_calls = mock_sb.table.return_value.update.call_args_list
@@ -93,7 +96,8 @@ class TestTranscribeVoiceNote:
         mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
 
         # Consented, with cap headroom
-        with patch("app.services.tier_service.TierService.ai_denial", new_callable=AsyncMock, return_value=None):
+        with patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True), \
+             patch("app.services.tier_service.TierService.ai_denial", new_callable=AsyncMock, return_value=None):
             from app.tasks.transcription_tasks import transcribe_voice_note
             transcribe_voice_note(
                 "note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1"
@@ -101,6 +105,23 @@ class TestTranscribeVoiceNote:
 
         # Verify enhance was called
         mock_enhance.delay.assert_called_once_with("note-1", "Nice place.", "tour-1")
+
+
+    @patch("app.tasks.transcription_tasks.supabase_admin")
+    @patch("app.services.transcription.whisper_service._get_openai_client")
+    @patch("app.services.storage.photo_service._get_s3_client")
+    def test_no_consent_nothing_goes_to_openai(self, mock_get_s3, mock_get_openai, mock_sb):
+        """Consent withdrawn while queued: no Whisper call, note marked failed, no retry."""
+        mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+
+        with patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=False):
+            from app.tasks.transcription_tasks import transcribe_voice_note
+            transcribe_voice_note("note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1")  # no raise = no retry
+
+        mock_get_openai.assert_not_called()
+        mock_get_s3.return_value.get_object.assert_not_called()
+        update_calls = mock_sb.table.return_value.update.call_args_list
+        assert [c[0][0] for c in update_calls] == [{"transcription_status": "failed"}]
 
 
 _MISSING = object()

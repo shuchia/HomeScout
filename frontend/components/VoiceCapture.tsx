@@ -2,6 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { uploadVoiceNote } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { AiConsentDialog } from '@/components/AiConsent'
 
 interface VoiceCaptureProps {
   tourId: string
@@ -20,6 +22,11 @@ export default function VoiceCapture({ tourId, onNoteCreated }: VoiceCaptureProp
   const [state, setState] = useState<CaptureState>('idle')
   const [duration, setDuration] = useState(0)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // Voice notes are transcribed by OpenAI, so recording waits on AI consent
+  // (App Store 5.1.2). Without it, pressing the button asks instead of opening
+  // the microphone; the backend refuses the upload either way.
+  const { aiEnabled } = useAuth()
+  const [consentOpen, setConsentOpen] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -105,8 +112,10 @@ export default function VoiceCapture({ tourId, onNoteCreated }: VoiceCaptureProp
         try {
           await uploadVoiceNote(tourId, blob)
           onNoteCreated()
-        } catch {
-          setErrorMsg('Failed to upload voice note. Please try again.')
+        } catch (e) {
+          setErrorMsg(e instanceof Error && e.message.includes('OpenAI')
+            ? e.message
+            : 'Failed to upload voice note. Please try again.')
         } finally {
           setState('idle')
         }
@@ -136,8 +145,13 @@ export default function VoiceCapture({ tourId, onNoteCreated }: VoiceCaptureProp
   }, [tourId, onNoteCreated, stopRecording])
 
   const handlePointerDown = useCallback(() => {
-    if (state === 'idle') startRecording()
-  }, [state, startRecording])
+    if (state !== 'idle') return
+    if (!aiEnabled) {
+      setConsentOpen(true)
+      return
+    }
+    startRecording()
+  }, [state, aiEnabled, startRecording])
 
   const handlePointerUp = useCallback(() => {
     if (state === 'recording') stopRecording()
@@ -199,12 +213,18 @@ export default function VoiceCapture({ tourId, onNoteCreated }: VoiceCaptureProp
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
-          <span className="text-sm font-medium">Hold to Record</span>
+          <span className="text-sm font-medium">{aiEnabled ? 'Hold to Record' : 'Record a voice note'}</span>
         </div>
       </div>
+      {!aiEnabled && (
+        <p className="text-xs text-gray-500 mt-2 text-center">
+          Voice notes are transcribed by OpenAI. You&apos;ll be asked to turn on AI features first.
+        </p>
+      )}
       {errorMsg && (
         <p className="text-xs text-red-500 mt-2 text-center">{errorMsg}</p>
       )}
+      <AiConsentDialog open={consentOpen} onClose={() => setConsentOpen(false)} />
     </div>
   )
 }

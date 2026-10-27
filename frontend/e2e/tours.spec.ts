@@ -661,6 +661,7 @@ test.describe('Voice Capture E2E Tests', () => {
   })
 
   test('voice capture button visible on capture tab', async ({ page }) => {
+    await mockAiAuth(page)  // voice notes need AI consent (OpenAI transcribes them)
     await mockTourApis(page)
     await page.goto('/tours/tour-001')
 
@@ -671,6 +672,30 @@ test.describe('Voice Capture E2E Tests', () => {
     await expect(
       page.locator('text=Hold to Record').first(),
     ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('without AI consent, recording asks first and never opens the microphone', async ({ page }) => {
+    // Count microphone requests: the consent dialog must come before any audio
+    await page.addInitScript(() => {
+      const w = window as unknown as { __micRequests: number }
+      w.__micRequests = 0
+      if (navigator.mediaDevices) {
+        navigator.mediaDevices.getUserMedia = async () => {
+          w.__micRequests++
+          throw new DOMException('blocked in test', 'NotAllowedError')
+        }
+      }
+    })
+    await mockTourApis(page)  // mockAuth from beforeEach: no ai_consent_at
+    await page.goto('/tours/tour-001')
+    await page.locator('button:has-text("capture")').first().click()
+
+    await expect(page.getByText('Voice notes are transcribed by OpenAI.')).toBeVisible({ timeout: 10000 })
+    await page.getByRole('button', { name: 'Hold to record voice note' }).dispatchEvent('mousedown')
+
+    await expect(page.getByRole('dialog', { name: 'Turn on AI features?' })).toBeVisible()
+    await expect(page.getByRole('dialog')).toContainText('OpenAI')
+    expect(await page.evaluate(() => (window as unknown as { __micRequests: number }).__micRequests)).toBe(0)
   })
 
   test('voice note shows transcribing status', async ({ page }) => {
