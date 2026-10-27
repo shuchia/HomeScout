@@ -303,7 +303,11 @@ function LandingContent() {
             <span className="text-sm font-bold text-[var(--color-text-secondary)]">snugd.ai</span>
           </div>
           <p className="text-xs text-[var(--color-text-muted)]">&copy; {new Date().getFullYear()} Snugd. All rights reserved.</p>
-          <a href="mailto:founders@snugd.ai" className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition">founders@snugd.ai</a>
+          <div className="flex items-center gap-4 text-xs text-[var(--color-text-muted)]">
+            <Link href="/privacy" className="hover:text-[var(--color-primary)] transition">Privacy</Link>
+            <Link href="/terms" className="hover:text-[var(--color-primary)] transition">Terms</Link>
+            <a href="mailto:founders@snugd.ai" className="hover:text-[var(--color-primary)] transition">founders@snugd.ai</a>
+          </div>
         </div>
       </footer>
     </div>

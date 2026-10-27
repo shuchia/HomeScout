@@ -54,4 +54,17 @@ test.describe('Front door', () => {
     await page.goto('/search')
     await expect.poll(() => redeemed).toEqual(['BETA-PNC'])
   })
+
+  test('privacy policy and terms are linked from the footer', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('footer').getByRole('link', { name: 'Privacy' }).click()
+    await expect(page).toHaveURL(/\/privacy$/, { timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', level: 1 })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'privacy@snugd.ai' }).first()).toBeVisible()
+
+    await page.goto('/')
+    await page.locator('footer').getByRole('link', { name: 'Terms' }).click()
+    await expect(page).toHaveURL(/\/terms$/, { timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: 'Terms of Service', level: 1 })).toBeVisible()
+  })
 })

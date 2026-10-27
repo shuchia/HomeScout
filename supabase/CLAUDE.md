@@ -31,6 +31,7 @@ Applied in order from `migrations/`. There is no migration runner in the repo �
 | `009_add_user_locations.sql` | `user_locations` (commute destinations) |
 | `015_ai_consent_and_profile_grants.sql` | `ai_consent_at` on `profiles`; drops the public "Service can update profiles" policy; limits client profile updates to name, avatar_url, email_notifications, has_completed_onboarding, ai_consent_at |
 | `017_waitlist_city_and_read_policy.sql` | `city` on `waitlist`; drops the public "Service can read waitlist" policy (anyone with the anon key could read every row) |
+| `018_drop_public_service_policies.sql` | Drops the last "Service can …" policies granted to public: anon could read/write `analytics_events`, manage `invite_codes` and `invite_redemptions`, read all `beta_feedback`, and reassign `saved_searches` rows |
 
 ## Key Tables
 
@@ -94,7 +95,7 @@ unique(user_id, label)
 ```
 
 ### `beta_feedback`, `waitlist`, `analytics_events`
-Feedback and waitlist accept public/anon inserts (`"Anyone can insert"` policies); reads are service-role only — for the waitlist only since 017, which dropped a `using (true)` select policy that let the anon key read it. Since signup opened (2026-10) the waitlist collects city requests (`city`), not access requests. `analytics_events` is written fire-and-forget by the backend and is service-role on both sides.
+Feedback and waitlist accept public/anon inserts (`"Anyone can insert"` policies); reads are service-role only — for the waitlist only since 017, which dropped a `using (true)` select policy that let the anon key read it. Since signup opened (2026-10) the waitlist collects city requests (`city`), not access requests. `analytics_events` is written fire-and-forget by the backend and is service-role on both sides. **Rule:** a policy meant for the backend is never needed — the service role bypasses RLS. A policy with no `TO` clause applies to `public`, i.e. to the anon key in every bundle; 014, 015, 017 and 018 each removed one. Check with an anon-key `Prefer: count=exact` request: anything but `*/0` on a private table is a leak.
 
 ## RLS Model
 
