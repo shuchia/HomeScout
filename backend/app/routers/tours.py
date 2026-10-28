@@ -944,6 +944,17 @@ async def create_voice_note(
     try:
         _verify_tour_ownership(tour_id, user.user_id)
 
+        # Voice notes are transcribed by OpenAI, so they need the same consent
+        # as every other AI feature (App Store 5.1.2: explicit permission before
+        # personal data goes to a third-party AI). Checked before the audio is
+        # read or stored. Consent only, not the daily AI cap: a recording is
+        # the user's own note, and Whisper is not a Claude call.
+        if not await TierService.has_ai_consent(user.user_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Voice notes are transcribed by OpenAI. Turn on AI features in Settings to record them.",
+            )
+
         audio_data = await file.read()
         content_type = file.content_type or "audio/webm"
 

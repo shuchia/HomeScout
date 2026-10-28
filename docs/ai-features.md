@@ -103,12 +103,14 @@ Internal: `_log_usage`, `_strip_code_block`, `_parse_*_response` handle markdown
 
 ## Whisper Transcription Pipeline
 
+**Consent gate (2026-10-27).** Audio goes to OpenAI, so voice notes need `profiles.ai_consent_at` like every Claude feature — App Store 5.1.2 requires explicit permission before personal data reaches a third-party AI. Checked three times: `VoiceCapture` opens the consent dialog instead of the microphone; the upload endpoint returns 403 before reading or storing audio; `transcribe_voice_note` re-checks before calling Whisper (consent can be withdrawn while a note is queued) and marks the note `failed` without retrying. Consent only — voice notes don't count against the daily AI cap.
+
 1. `POST /api/tours/{tour_id}/notes/voice` — multipart audio upload (max 5 MB).
 2. Backend uploads to S3 at `tours/{user_id}/{tour_id}/voice/{uuid}.{ext}`, creates a `tour_notes` row with `status=transcribing`, returns 202.
 3. Celery task `transcribe_voice_note` (max 2 retries, 30 s delay) pulls the audio.
 4. `WhisperService.transcribe_from_s3` calls Whisper (`whisper-1`, `response_format="text"`).
 5. Updates `tour_notes.content` and `status=transcribed`.
-6. **Pro tier**: chains to `enhance_voice_note` → `ClaudeService.enhance_note` → updates note with cleaned text + suggested tags.
+6. **If the user has AI cap left today**: chains to `enhance_voice_note` → `ClaudeService.enhance_note` → updates note with cleaned text + suggested tags.
 7. Frontend polls (or subscribes via Supabase realtime) and replaces the placeholder.
 
 Voice notes show with a microphone icon; typed notes with a pencil icon.

@@ -1207,6 +1207,7 @@ class TestVoiceUpload:
             mock_s3 = MagicMock()
 
             with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True), \
                  patch("app.services.storage.photo_service._get_s3_client", return_value=mock_s3), \
                  patch("app.tasks.transcription_tasks.transcribe_voice_note") as mock_task:
                 mock_task.delay = MagicMock()
@@ -1244,7 +1245,7 @@ class TestVoiceUpload:
 
             oversized_audio = b"x" * (6 * 1024 * 1024)  # 6 MB
 
-            with patch("app.routers.tours.supabase_admin", mock_sb):
+            with patch("app.routers.tours.supabase_admin", mock_sb), patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True):
                 response = client.post(
                     "/api/tours/tour-001/notes/voice",
                     files={"file": ("audio.webm", oversized_audio, "audio/webm")},
@@ -1253,5 +1254,32 @@ class TestVoiceUpload:
 
             assert response.status_code == 400
             assert "too large" in response.json()["detail"].lower()
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_voice_upload_refused_without_ai_consent(self):
+        """Voice notes go to OpenAI: without consent nothing is stored or queued."""
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = MagicMock()
+            mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[{"id": "tour-001"}]
+            )
+            mock_s3 = MagicMock()
+
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=False), \
+                 patch("app.services.storage.photo_service._get_s3_client", return_value=mock_s3), \
+                 patch("app.tasks.transcription_tasks.transcribe_voice_note") as mock_task:
+                response = client.post(
+                    "/api/tours/tour-001/notes/voice",
+                    files={"file": ("audio.webm", b"fake-audio-data", "audio/webm")},
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 403
+            assert "OpenAI" in response.json()["detail"]
+            mock_s3.put_object.assert_not_called()
+            mock_task.delay.assert_not_called()
         finally:
             app.dependency_overrides.pop(get_current_user, None)

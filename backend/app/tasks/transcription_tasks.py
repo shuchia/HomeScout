@@ -16,6 +16,16 @@ def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id
         logger.error("Supabase not configured, cannot update note")
         return
 
+    # Consent is checked at upload, and again here: it can be withdrawn while
+    # the note waits in the queue, and nothing goes to OpenAI without it.
+    # Not retried — a retry wouldn't change the answer.
+    if not run_async(TierService.has_ai_consent(user_id)):
+        logger.info(f"Skipping transcription of note {note_id}: no AI consent")
+        supabase_admin.table("tour_notes").update({
+            "transcription_status": "failed",
+        }).eq("id", note_id).execute()
+        return
+
     try:
         text = WhisperService.transcribe_from_s3(s3_key)
 
