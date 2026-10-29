@@ -27,6 +27,7 @@ All prerequisites cleared as of 2026-10-12.
 - **Commute calculator** — Google Distance Matrix or Mapbox; user adds work/school addresses, listings show transit/drive time.
 - **Tour pipeline polish from beta feedback** — `FeedbackWidget` is collecting beta signal; triage and ship the high-value fixes once volume warrants.
 - **Weekly + price-drop email digests** — extend the existing daily Pro alert task to add weekly summaries and price-drop notifications on saved searches.
+- **AI pro/con tags from tour notes** — see [note-tagging-design.md](note-tagging-design.md). Designed, nothing built. Every tag carries a verbatim quote from the note and a deterministic verifier drops any whose evidence is not in the source, so the model can only select and label the user's own words. Blocked on migration 016 being applied: until then enhancement still overwrites `content` and quotes would verify against the paraphrase.
 
 ## Recently Shipped (last 60 days)
 
