@@ -227,24 +227,37 @@ useEffect(() => {
 ```
 
 Enhancement never touches `transcription_status`, and it runs *after*
-transcription as a separate task. Measured on QA:
+transcription as a separate task. Worker log for one note on QA:
 
 ```
-09:38:43.983  Transcribed voice note 6a9566e2…: 120 chars
-09:38:44.280  Task enhance_voice_note received
-09:38:51.238  Enhanced voice note 6a9566e2…        ← 7.3s after transcription
+09:38:37.950  transcribe_voice_note received
+09:38:43.980  PATCH → content + transcription_status=complete committed
+09:38:44.280  transcribe succeeded; enhance_voice_note received
+09:38:51.237  PATCH → enhanced_content committed
 ```
 
-The poll at ~09:38:44 saw `complete`, cleared its interval, and
-`pendingCount` dropping to 0 re-ran the effect into its early return. The
-`enhanced_content` written seven seconds later was not observed. The write
-itself was fine — the worker logged success and the value was there on a
-subsequent fetch.
+That leaves a **7.26-second window** in which the note reads `complete` with
+`enhanced_content` still NULL. The poll loop fires every 2s, so it lands in
+that window and clears on the first hit — `pendingCount` drops to 0 and
+re-runs the effect into its early return.
 
-(What the user saw was the cleanup appearing "after a few seconds", which did
-not distinguish a manual reload from a natural refresh. The code-level defect
-above holds either way: nothing re-fetches on a schedule once transcription
-reports complete.)
+**It is a race, not a deterministic failure, and that makes it harder to
+spot.** Observed behaviour on the note above: the transcript appeared with no
+cleanup, and the cleanup then showed up later *without a reload*. Nothing in
+the poll loop can do that, so some other `getTour` caller surfaced it — a
+re-mount from a tab switch or navigation calling `fetchData`, or any
+interaction that re-fetches (`handleAddTag`, `handleAddNote`, …). Which one
+is not determinable from server logs.
+
+Consequences worth being explicit about, because they shape how this gets
+mis-triaged:
+
+- The window is the length of the AI call, so it grows with a slower model or
+  a longer note. It is not a fixed small gap.
+- Whether a user ever sees the cleanup depends on whether they happen to do
+  something else on the page. Doing nothing is the case that stays broken.
+- It will reproduce intermittently and "fix itself" on investigation, which
+  reads as flakiness rather than a missing state transition.
 
 **Tagging makes this worse, not equal.** It adds a *third* async stage behind
 the same dead loop, and unlike enhancement its result is interactive — chips
