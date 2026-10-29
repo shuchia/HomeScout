@@ -163,7 +163,7 @@ failure should not take the tags with it.
 |---|---|
 | `suggest_tags` + prompt | `services/claude_service.py` |
 | Verifier | `services/note_tagging.py` (new) |
-| `suggested_tags jsonb` on `tour_notes` | migration **017** (016 is taken and unapplied; 015 is on `feat/ai-free-for-all`; 014 is unapplied) |
+| `suggested_tags jsonb` on `tour_notes` | migration **019** — 014 through 018 are all taken. Check before numbering: 016 (`enhanced_content`) was written while 017 and 018 were landing on `release/qa` from another branch, so 016 now sits in a numbering gap and will be applied out of sequence. Harmless here because it is additive and touches a table nothing else in that range does, but do not assume the highest number on your own branch is the highest that exists. |
 | Chain after transcription | `tasks/transcription_tasks.py` |
 | Accept/decline endpoint | `routers/tours.py` — accept creates the `tour_tags` row |
 | Chips + evidence + toggle | `frontend/app/tours/[id]/page.tsx`, `components/TagPicker.tsx` |
