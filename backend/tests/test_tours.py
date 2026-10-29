@@ -512,6 +512,10 @@ class TestNotes:
                         data=[{"id": "tour-001"}]
                     )
                 elif table_name == "tour_notes":
+                    # The audio key is read before the row is deleted.
+                    mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"audio_s3_key": None}]
+                    )
                     mock_table.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
                         data=[SAMPLE_NOTE_CREATED]
                     )
@@ -519,7 +523,8 @@ class TestNotes:
 
             mock_sb.table.side_effect = table_router
 
-            with patch("app.routers.tours.supabase_admin", mock_sb):
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.services.storage.photo_service._get_s3_client") as mock_s3:
                 response = client.delete(
                     "/api/tours/tour-001/notes/note-002",
                     headers={"Authorization": "Bearer fake-token"},
@@ -527,8 +532,77 @@ class TestNotes:
 
             assert response.status_code == 200
             assert response.json()["status"] == "deleted"
+            # A typed note has no recording, so nothing to remove from S3.
+            mock_s3.return_value.delete_object.assert_not_called()
         finally:
             app.dependency_overrides.pop(get_current_user, None)
+
+
+class TestDeleteVoiceNoteAudio:
+    """Deleting a voice note used to leave the recording in S3 — a year on
+    non-prod and forever in prod, where the lifecycle rule is skipped
+    (infra/main.tf:116). Someone deleting a voice note is asking for what
+    they said to be gone, not just its transcript. Photos always did this."""
+
+    AUDIO_KEY = "tours/user-123/tour-001/voice/abc.webm"
+
+    def _sb(self, audio_key):
+        mock_sb = MagicMock()
+        tables = {}
+
+        def table_router(name):
+            if name not in tables:
+                t = MagicMock()
+                if name == "saved_listings":
+                    t.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "tour-001"}]
+                    )
+                elif name == "tour_notes":
+                    t.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"audio_s3_key": audio_key}]
+                    )
+                    t.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                        data=[{"id": "note-002"}]
+                    )
+                tables[name] = t
+            return tables[name]
+
+        mock_sb.table.side_effect = table_router
+        return mock_sb
+
+    def _delete(self, audio_key, s3_side_effect=None):
+        app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        try:
+            mock_sb = self._sb(audio_key)
+            with patch("app.routers.tours.supabase_admin", mock_sb), \
+                 patch("app.services.storage.photo_service._get_s3_client") as mock_get_s3, \
+                 patch("app.services.storage.photo_service.S3_BUCKET", "snugd-test"):
+                if s3_side_effect:
+                    mock_get_s3.return_value.delete_object.side_effect = s3_side_effect
+                response = client.delete(
+                    "/api/tours/tour-001/notes/note-002",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+            return response, mock_get_s3.return_value
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    def test_removes_the_recording(self):
+        response, s3 = self._delete(self.AUDIO_KEY)
+
+        assert response.status_code == 200
+        s3.delete_object.assert_called_once_with(
+            Bucket="snugd-test", Key=self.AUDIO_KEY
+        )
+
+    def test_s3_failure_still_deletes_the_note(self):
+        """Best-effort: a failed S3 call must not resurrect a deleted note or
+        surface an error for work the user already asked to be done."""
+        response, s3 = self._delete(self.AUDIO_KEY, s3_side_effect=Exception("boom"))
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "deleted"
+        s3.delete_object.assert_called_once()
 
 
 # ── Photos sub-resource tests ────────────────────────────────────────

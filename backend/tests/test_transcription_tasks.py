@@ -218,12 +218,24 @@ class TestEnhanceVoiceNote:
 
         assert mock_enhance.call_args[0][1]["rent"] is None
 
-    def test_writes_enhanced_text_to_the_note(self):
+    def test_writes_the_cleanup_beside_the_transcript(self):
         mock_sb, _ = self._run(self.LISTING)
 
         notes = mock_sb.tables["tour_notes"]
-        notes.update.assert_called_once_with({"content": "Bright kitchen."})
+        notes.update.assert_called_once_with({"enhanced_content": "Bright kitchen."})
         notes.update.return_value.eq.assert_called_once_with("id", "note-1")
+
+    def test_never_overwrites_content(self):
+        """`content` is what the user said. Enhancement used to write over it,
+        destroying the only copy of their words — the audio outlives the text
+        it produced (365-day expiry off-prod, no rule at all in prod). The
+        decision brief reads `content`, so it was also reasoning over the
+        paraphrase with no artifact left to check against."""
+        mock_sb, _ = self._run(self.LISTING)
+
+        payload = mock_sb.tables["tour_notes"].update.call_args[0][0]
+        assert "content" not in payload
+        assert payload == {"enhanced_content": "Bright kitchen."}
 
     def test_missing_saved_listing_is_a_no_op(self):
         """No such row — return without calling Claude."""

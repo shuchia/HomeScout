@@ -631,7 +631,7 @@ async def get_tour(
         # Fetch related notes, photos, tags
         notes_result = (
             supabase_admin.table("tour_notes")
-            .select("id, content, source, transcription_status, created_at")
+            .select("id, content, enhanced_content, source, transcription_status, created_at")
             .eq("saved_listing_id", tour_id)
             .order("created_at", desc=True)
             .execute()
@@ -1051,7 +1051,7 @@ async def list_notes(
 
         result = (
             supabase_admin.table("tour_notes")
-            .select("id, content, source, transcription_status, created_at")
+            .select("id, content, enhanced_content, source, transcription_status, created_at")
             .eq("saved_listing_id", tour_id)
             .order("created_at", desc=False)
             .execute()
@@ -1076,6 +1076,19 @@ async def delete_note(
     try:
         _verify_tour_ownership(tour_id, user.user_id)
 
+        # Read the recording's key before the row goes. Taking it from the
+        # delete's returned representation would work only as long as
+        # PostgREST keeps returning every column, and a quietly orphaned
+        # recording is the kind of failure nothing would ever surface.
+        existing = (
+            supabase_admin.table("tour_notes")
+            .select("audio_s3_key")
+            .eq("id", note_id)
+            .eq("saved_listing_id", tour_id)
+            .execute()
+        )
+        audio_key = (existing.data[0] or {}).get("audio_s3_key") if existing.data else None
+
         result = (
             supabase_admin.table("tour_notes")
             .delete()
@@ -1085,6 +1098,26 @@ async def delete_note(
         )
         if not result.data:
             raise HTTPException(status_code=404, detail="Note not found")
+
+        # Delete the recording too. The row used to go while the audio stayed
+        # in S3 — a year on non-prod, forever in prod, since the lifecycle
+        # rule is skipped there. A user who deletes a voice note is asking for
+        # what they said to be gone, not just its transcript. Photos have
+        # always done this (photo_service.delete_photo).
+        #
+        # Best-effort, and only once the row is actually gone: a failed S3
+        # call must not resurrect a note the user deleted. The lifecycle rule
+        # is the backstop on non-prod; an orphan in prod is logged and stays.
+        if audio_key:
+            try:
+                from app.services.storage.photo_service import _get_s3_client, S3_BUCKET
+
+                _get_s3_client().delete_object(Bucket=S3_BUCKET, Key=audio_key)
+            except Exception as e:
+                logger.warning(
+                    f"Deleted note {note_id} but could not remove its audio "
+                    f"{audio_key}: {e}"
+                )
 
         return {"status": "deleted"}
     except HTTPException:

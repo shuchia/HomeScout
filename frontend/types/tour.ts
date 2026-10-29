@@ -5,7 +5,12 @@ export type TourStage = 'interested' | 'outreach_sent' | 'scheduled' | 'toured' 
 
 export interface TourNote {
   id: string
+  /** What the user said or typed. Never overwritten by AI (migration 016).
+   *  Notes enhanced before that hold the cleanup here instead. */
   content: string | null
+  /** AI grammar/clarity cleanup. Null when none has run. Display prefers
+   *  this and falls back to content. */
+  enhanced_content: string | null
   source: 'voice' | 'typed'
   transcription_status: string | null
   created_at: string

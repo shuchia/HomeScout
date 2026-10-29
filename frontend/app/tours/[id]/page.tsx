@@ -875,7 +875,17 @@ function CaptureTab({
 }
 
 function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) {
-  const renderContent = () => {
+  const [showOriginal, setShowOriginal] = useState(false)
+
+  // The cleanup is what we show, but `content` is what the user actually
+  // said — enhancement no longer overwrites it, so the original stays
+  // available. Whisper gets no vocabulary biasing and mishears street names
+  // and rental terms, so being able to check the two against each other is
+  // the point of keeping both.
+  const enhanced = note.enhanced_content
+  const body = (enhanced ?? note.content) || ''
+
+  const renderBody = () => {
     if (note.source === 'voice') {
       if (note.transcription_status === 'pending') {
         return (
@@ -887,12 +897,36 @@ function NoteItem({ note, onDelete }: { note: TourNote; onDelete: () => void }) 
           <span className="text-red-500 text-sm">Transcription failed</span>
         )
       }
-      return (
-        <p className="text-sm text-gray-700 whitespace-pre-line">{note.content}</p>
-      )
     }
+    return <p className="text-sm text-gray-700 whitespace-pre-line">{body}</p>
+  }
+
+  const renderContent = () => {
+    const transcribing =
+      note.source === 'voice' && note.transcription_status === 'pending'
+    // Only offer the toggle when there are genuinely two versions to compare.
+    const canCompare = Boolean(enhanced && note.content && !transcribing)
+
     return (
-      <p className="text-sm text-gray-700 whitespace-pre-line">{note.content}</p>
+      <>
+        {renderBody()}
+        {canCompare && (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowOriginal((v) => !v)}
+              className="mt-1.5 text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+            >
+              {showOriginal ? 'Hide original' : 'Show what I said'}
+            </button>
+            {showOriginal && (
+              <p className="mt-1.5 pl-2 border-l-2 border-gray-200 text-xs text-gray-500 whitespace-pre-line">
+                {note.content}
+              </p>
+            )}
+          </>
+        )}
+      </>
     )
   }
 
