@@ -205,6 +205,78 @@ The mechanism makes fabrication impossible and misinterpretation obvious; it
 does not claim to make the model right. Anyone reading this later should not
 mistake the first property for the second.
 
+## The UI stops polling before the async stage finishes
+
+**This must be fixed before tagging ships, and it is already broken for
+enhancement today.** Found on QA 2026-10-29.
+
+`app/tours/[id]/page.tsx` polls the tour only while a note is still
+transcribing:
+
+```js
+const pendingCount = … notes.filter(n => n.transcription_status === 'pending').length
+
+useEffect(() => {
+  if (!pendingCount) return            // ← returns early once nothing is pending
+  const interval = setInterval(async () => {
+    …
+    if (!stillPending?.length) clearInterval(interval)
+  }, 2000)
+  return () => clearInterval(interval)
+}, [pendingCount, tourId])
+```
+
+Enhancement never touches `transcription_status`, and it runs *after*
+transcription as a separate task. Measured on QA:
+
+```
+09:38:43.983  Transcribed voice note 6a9566e2…: 120 chars
+09:38:44.280  Task enhance_voice_note received
+09:38:51.238  Enhanced voice note 6a9566e2…        ← 7.3s after transcription
+```
+
+The poll at ~09:38:44 saw `complete`, cleared its interval, and
+`pendingCount` dropping to 0 re-ran the effect into its early return. The
+`enhanced_content` written seven seconds later was not observed. The write
+itself was fine — the worker logged success and the value was there on a
+subsequent fetch.
+
+(What the user saw was the cleanup appearing "after a few seconds", which did
+not distinguish a manual reload from a natural refresh. The code-level defect
+above holds either way: nothing re-fetches on a schedule once transcription
+reports complete.)
+
+**Tagging makes this worse, not equal.** It adds a *third* async stage behind
+the same dead loop, and unlike enhancement its result is interactive — chips
+the user is meant to accept. Suggestions that never appear until a reload are
+suggestions nobody acts on.
+
+### Fix: give each async stage a status column
+
+Add `enhancement_status` and `tagging_status` to `tour_notes`
+(`pending` | `complete` | `skipped` | `failed`), mirroring the existing
+`transcription_status`, and poll while **any** of them is `pending`.
+
+Preferred over the alternatives because it is the only one that does not
+guess:
+
+- **Not "poll while `enhanced_content is null`"** — that polls forever for
+  every note that was never going to be enhanced, and there are three such
+  cases already: consent withdrawn, daily AI cap spent, and enhancement
+  raised. All three are currently indistinguishable from "still working".
+- **Not a bounded extra polling window** — a timeout standing in for a state
+  we could record. It works, and it is a reasonable stopgap if a migration is
+  unwelcome, but it quietly polls for ~20s after every note that will never
+  change.
+
+`skipped` is the state that earns the column. The task already knows which of
+the three it took; today it throws that away and the UI cannot tell "no cleanup
+is coming" from "cleanup is on its way".
+
+Write it on **every** exit path in `tasks/transcription_tasks.py`, including
+the non-fatal `except` — an enhancement that raised must land on `failed`, not
+sit on `pending` forever. The same applies to whatever task runs tagging.
+
 ## Prerequisites
 
 1. **Migration 016 applied.** Tagging reads `content` expecting the verbatim
@@ -215,6 +287,9 @@ mistake the first property for the second.
 2. **Notes enhanced before 016 cannot be tagged reliably.** Their `content`
    holds a paraphrase and the transcript is unrecoverable. Either skip them or
    tag them with the limitation recorded on the row.
+3. **The polling fix above.** Tagging is a third async stage behind a loop
+   that already stops too early, and its output is interactive. Shipping
+   tagging without it means suggestions that only appear on a page reload.
 
 ## Where I would push back
 
@@ -229,3 +304,6 @@ mistake the first property for the second.
   more cleanly. It also makes the evidence point at the wrong artifact.
 - **Shipping this before 016 is applied.** Every quote would verify and the
   feature would look like it was working.
+- **Adding a third async stage without fixing the polling loop.** Enhancement
+  already lands unobserved; tags would too, and tags are the half the user is
+  supposed to interact with.
