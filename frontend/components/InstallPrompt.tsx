@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { isNativeApp } from '@/lib/native'
 
 /**
  * "Install Snugd" prompt — surfaces the native PWA install dialog on Chrome
@@ -30,6 +31,8 @@ function isIos(): boolean {
 
 function isStandalone(): boolean {
   if (typeof window === 'undefined') return false
+  // The iOS/Android app is already installed.
+  if (isNativeApp()) return true
   // Both the modern (display-mode) and legacy (iOS Safari) checks.
   return (
     window.matchMedia('(display-mode: standalone)').matches ||

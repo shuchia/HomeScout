@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { isNativeApp } from '@/lib/native'
 
 /**
  * Registers /sw.js on the client. Required for the browser to fire
@@ -13,6 +14,8 @@ export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator)) return
+    // Only there for the install prompt, which the mobile apps don't show.
+    if (isNativeApp()) return
     // Defer registration so it doesn't compete with initial render work.
     const handle = window.setTimeout(() => {
       navigator.serviceWorker.register('/sw.js').catch((err) => {
