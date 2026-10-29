@@ -30,6 +30,7 @@ Applied in order from `migrations/`. There is no migration runner in the repo �
 | `008_tour_contact_info.sql` | `contact_phone`, `contact_email` on `tour_pipeline` |
 | `009_add_user_locations.sql` | `user_locations` (commute destinations) |
 | `015_ai_consent_and_profile_grants.sql` | `ai_consent_at` on `profiles`; drops the public "Service can update profiles" policy; limits client profile updates to name, avatar_url, email_notifications, has_completed_onboarding, ai_consent_at |
+| `016_tour_note_enhanced_content.sql` | `enhanced_content` on `tour_notes`. Applied to QA **2026-10-28, after 017 and 018** — it was written while those were landing from another branch, so it sits in a numbering gap. Safe only because it is additive and the one migration in that range touching `tour_notes`. Before it, AI enhancement overwrote `content`, destroying the Whisper transcript; `content` is now what the user said and is never written by a model. Rows enhanced before it still hold a paraphrase in `content` and cannot be repaired |
 | `017_waitlist_city_and_read_policy.sql` | `city` on `waitlist`; drops the public "Service can read waitlist" policy (anyone with the anon key could read every row) |
 | `018_drop_public_service_policies.sql` | Drops the last "Service can …" policies granted to public: anon could read/write `analytics_events`, manage `invite_codes` and `invite_redemptions`, read all `beta_feedback`, and reassign `saved_searches` rows |
 
