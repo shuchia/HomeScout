@@ -41,6 +41,8 @@
 	<string>Snugd takes photos of apartments you tour so you can compare them later.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Snugd records voice notes while you tour an apartment.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Snugd only saves photos to your library when you ask it to.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Snugd adds photos from your library to the apartments you tour.</string>
 	<key>UIApplicationSceneManifest</key>
