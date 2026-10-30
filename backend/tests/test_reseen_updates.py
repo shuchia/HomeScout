@@ -104,3 +104,104 @@ class TestReseenPayload:
         )
         assert len(_new) == 1
         assert updates == []
+
+
+class TestReseenRefreshesBuildingState:
+    """Floorplan buckets are rebuilt from the stored row after a re-see, so the
+    row must carry the new floorplans. It didn't: every building kept its
+    first-insert floorplan prices and unit list forever, stamped fresh."""
+
+    def setup_method(self):
+        self.dedup = DeduplicationService()
+
+    def test_payload_carries_floorplans_units_fees_and_pricing_model(self):
+        plans = [{"modelName": "A1", "rentLabel": "$1,900", "availability": "2 Available"}]
+        upd = self.dedup._build_reseen_update(
+            _listing(
+                floor_plans=plans,
+                available_units=[],
+                pricing_model="per_person",
+                pricing_model_confidence=0.9,
+                parking_fee=150,
+                specials={"description": "1 month free"},
+            ),
+            "existing-1",
+            "hash-1",
+        )
+        assert upd["floor_plans"] == plans
+        assert upd["available_units"] == []
+        assert upd["pricing_model"] == "per_person"
+        assert upd["pricing_model_confidence"] == 0.9
+        assert upd["parking_fee"] == 150
+        assert upd["specials"] == {"description": "1 month free"}
+
+    def test_fields_the_scrape_did_not_carry_are_none(self):
+        upd = self.dedup._build_reseen_update(_listing(), "existing-1", "hash-1")
+        assert upd["floor_plans"] is None
+        assert upd["available_units"] is None
+
+
+class _FakeSession:
+    def __init__(self, log, fail_ids):
+        self._log = log
+        self._fail_ids = fail_ids
+
+    async def execute(self, stmt):
+        params = stmt.compile().params
+        if params.get("id_1") in self._fail_ids:
+            raise RuntimeError("duplicate key value violates unique constraint")
+        self._log.append(params)
+
+    async def commit(self):
+        return None
+
+
+def _patch_sessions(monkeypatch, fail_ids=()):
+    from contextlib import asynccontextmanager
+    import app.tasks.scrape_tasks as mod
+
+    log = []
+
+    @asynccontextmanager
+    async def ctx():
+        yield _FakeSession(log, set(fail_ids))
+
+    monkeypatch.setattr(mod, "get_session_context", ctx)
+    return log
+
+
+class TestUpdateReseenListings:
+    async def test_writes_refreshed_floorplans_and_keeps_what_the_scrape_lacked(self, monkeypatch):
+        from app.tasks.scrape_tasks import _update_reseen_listings
+
+        log = _patch_sessions(monkeypatch)
+        plans = [{"modelName": "B2"}]
+        dedup = DeduplicationService()
+        upd = dedup._build_reseen_update(
+            _listing(floor_plans=plans, available_units=[], pricing_model="per_unit"),
+            "existing-1",
+            "hash-1",
+        )
+
+        assert await _update_reseen_listings([upd]) == 1
+        written = log[0]
+        assert written["floor_plans"] == plans
+        # An empty unit list is the source saying the building leased up.
+        assert written["available_units"] == []
+        assert written["pricing_model"] == "per_unit"
+        # Fields the scrape didn't carry must not wipe what we hold.
+        assert "parking_fee" not in written
+        assert "specials" not in written
+
+    async def test_one_bad_row_does_not_roll_back_the_rest(self, monkeypatch):
+        from app.tasks.scrape_tasks import _update_reseen_listings
+
+        log = _patch_sessions(monkeypatch, fail_ids={"existing-2"})
+        dedup = DeduplicationService()
+        updates = [
+            dedup._build_reseen_update(_listing(), f"existing-{i}", f"hash-{i}")
+            for i in (1, 2, 3)
+        ]
+
+        assert await _update_reseen_listings(updates) == 2
+        assert [p["id_1"] for p in log] == ["existing-1", "existing-3"]

@@ -205,7 +205,11 @@ class ApifyService(BaseScraper):
             actor_input = build_input()
 
             # Run the actor
-            run_result = await self._run_actor(actor_input)
+            run_result = await self._run_actor(
+                actor_input,
+                max_wait_seconds=max_wait_seconds,
+                poll_interval=poll_interval,
+            )
 
             if not run_result:
                 result.status = ScraperStatus.FAILED
@@ -220,20 +224,34 @@ class ApifyService(BaseScraper):
             # Get dataset items
             dataset_id = run_result.get("defaultDatasetId")
             logger.info(f"Run {run_result.get('id')} completed. defaultDatasetId={dataset_id}, status={run_result.get('status')}")
-            if dataset_id:
-                items = await self._get_dataset_items(dataset_id, max_listings)
-                result.total_found = len(items)
-                logger.info(f"Fetched {len(items)} items from dataset {dataset_id}")
-
-                # Normalize listings
-                for item in items:
-                    listing = self._normalize_listing(item)
-                    if listing:
-                        result.listings.append(listing)
-
-                logger.info(f"Normalized {len(result.listings)}/{len(items)} listings")
-            else:
+            # A run we cannot read is a failed scrape, not an empty one. Both
+            # branches below used to fall through to COMPLETED with zero
+            # listings, which the market bookkeeping counted as a success and
+            # a listing check read as "gone".
+            if not dataset_id:
                 logger.warning(f"No defaultDatasetId in run result. Keys: {list(run_result.keys())}")
+                result.status = ScraperStatus.FAILED
+                result.errors.append("Actor run has no dataset")
+                result.completed_at = datetime.utcnow()
+                return result
+
+            items = await self._get_dataset_items(dataset_id, max_listings)
+            if items is None:
+                result.status = ScraperStatus.FAILED
+                result.errors.append(f"Could not fetch dataset {dataset_id}")
+                result.completed_at = datetime.utcnow()
+                return result
+
+            result.total_found = len(items)
+            logger.info(f"Fetched {len(items)} items from dataset {dataset_id}")
+
+            # Normalize listings
+            for item in items:
+                listing = self._normalize_listing(item)
+                if listing:
+                    result.listings.append(listing)
+
+            logger.info(f"Normalized {len(result.listings)}/{len(items)} listings")
 
             result.status = ScraperStatus.COMPLETED
             result.estimated_cost_cents = self._estimate_cost(len(result.listings))
@@ -406,12 +424,19 @@ class ApifyService(BaseScraper):
             "maxResults": max_listings,
         }
 
-    async def _run_actor(self, actor_input: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _run_actor(
+        self,
+        actor_input: Dict[str, Any],
+        max_wait_seconds: Optional[int] = None,
+        poll_interval: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
         Run an Apify actor and wait for completion.
 
         Args:
             actor_input: Input parameters for the actor
+            max_wait_seconds, poll_interval: Passed to _wait_for_run when set;
+                None keeps its bulk-sweep defaults
 
         Returns:
             Run result dict or None if failed
@@ -502,7 +527,7 @@ class ApifyService(BaseScraper):
                 logger.warning(f"Error checking Apify run status (will retry): {e}")
                 await asyncio.sleep(poll_interval)
 
-    async def _get_dataset_items(self, dataset_id: str, max_items: int) -> List[Dict[str, Any]]:
+    async def _get_dataset_items(self, dataset_id: str, max_items: int) -> Optional[List[Dict[str, Any]]]:
         """
         Get items from an Apify dataset.
 
@@ -511,7 +536,7 @@ class ApifyService(BaseScraper):
             max_items: Maximum items to retrieve
 
         Returns:
-            List of dataset items
+            List of dataset items, or None if the fetch failed
         """
         try:
             url = f"{self.API_BASE_URL}/datasets/{dataset_id}/items"
@@ -527,8 +552,10 @@ class ApifyService(BaseScraper):
             return items
 
         except Exception as e:
+            # None, not []: an empty list is a real answer ("the actor found
+            # nothing") and callers act on it. This is "we could not ask".
             logger.exception(f"Error getting Apify dataset {dataset_id}: {e}")
-            return []
+            return None
 
     def _normalize_listing(self, raw_data: Dict[str, Any]) -> Optional[ScrapedListing]:
         """
