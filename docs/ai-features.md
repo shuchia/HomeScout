@@ -53,7 +53,7 @@ Pinned IDs in `claude_service.py`:
 | `FAST` | `claude-haiku-4-5-20251001` | scoring, emails, day plan, note enhancement |
 | `DEEP` | `claude-sonnet-4-5-20250929` | comparison head-to-head, decision brief |
 
-Whisper: `whisper-1` (`response_format="text"`).
+Whisper: `whisper-1` (`response_format="verbose_json"`, for per-segment `no_speech_prob`).
 
 ## ClaudeService Methods
 
@@ -108,7 +108,8 @@ Internal: `_log_usage`, `_strip_code_block`, `_parse_*_response` handle markdown
 1. `POST /api/tours/{tour_id}/notes/voice` — multipart audio upload (max 5 MB).
 2. Backend uploads to S3 at `tours/{user_id}/{tour_id}/voice/{uuid}.{ext}`, creates a `tour_notes` row with `status=transcribing`, returns 202.
 3. Celery task `transcribe_voice_note` (max 2 retries, 30 s delay) pulls the audio.
-4. `WhisperService.transcribe_from_s3` calls Whisper (`whisper-1`, `response_format="text"`).
+4. `WhisperService.transcribe_from_s3` calls Whisper (`whisper-1`, `response_format="verbose_json"`).
+   **No speech → no note (2026-10-30).** Whisper invents text for silence ("Enjoy!", "Thank you.") rather than returning nothing, so a pocketed or accidental recording used to become a note nobody said. If *every* segment is silent — `no_speech_prob > 0.8`, or Whisper's reference rule `> 0.6` with `avg_logprob < -1` — `transcribe` returns `""` and the task deletes the note row and its audio. The tour page notices a pending note vanish and says "No speech detected — that recording wasn't saved." A quiet pause inside real speech is one silent segment among others and is kept.
 5. Updates `tour_notes.content` and `status=transcribed`.
 6. **If the user has AI cap left today**: chains to `enhance_voice_note` → `ClaudeService.enhance_note` → updates note with cleaned text + suggested tags.
 7. Frontend polls (or subscribes via Supabase realtime) and replaces the placeholder.

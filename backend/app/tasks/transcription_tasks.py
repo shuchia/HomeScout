@@ -6,6 +6,19 @@ from app.tasks._async_runner import run_async
 logger = logging.getLogger(__name__)
 
 
+def _discard_silent_note(note_id: str, s3_key: str):
+    """No speech in the recording: delete the note and its audio rather than
+    keep text Whisper made up. The tour page tells the user when a note it was
+    waiting on disappears."""
+    supabase_admin.table("tour_notes").delete().eq("id", note_id).execute()
+    try:
+        from app.services.storage.photo_service import _get_s3_client, S3_BUCKET
+        _get_s3_client().delete_object(Bucket=S3_BUCKET, Key=s3_key)
+    except Exception as e:
+        logger.warning(f"Couldn't delete audio for silent note {note_id}: {e}")
+    logger.info(f"Discarded voice note {note_id}: no speech")
+
+
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
 def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id: str):
     """Transcribe voice note, then auto-enhance for users who consented to AI."""
@@ -28,6 +41,10 @@ def transcribe_voice_note(self, note_id: str, s3_key: str, user_id: str, tour_id
 
     try:
         text = WhisperService.transcribe_from_s3(s3_key)
+
+        if not text:
+            _discard_silent_note(note_id, s3_key)
+            return
 
         supabase_admin.table("tour_notes").update({
             "content": text,

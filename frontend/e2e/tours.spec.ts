@@ -736,6 +736,28 @@ test.describe('Voice Capture E2E Tests', () => {
     await expect(noteItem).toBeVisible()
   })
 
+  test('a recording with no speech disappears with a notice', async ({ page }) => {
+    // The transcription task deletes a note whose recording held no speech.
+    await mockTourApis(page, { tour: { ...MOCK_TOUR, notes: [MOCK_VOICE_NOTE_PENDING] } })
+    let gets = 0
+    // Registered last, so it takes precedence for the single-tour GET
+    await page.route('**/api/tours/tour-001', async (route, request) => {
+      if (request.method() !== 'GET') return route.fallback()
+      gets += 1
+      const notes = gets === 1 ? [MOCK_VOICE_NOTE_PENDING] : []
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ tour: { ...MOCK_TOUR, notes } }),
+      })
+    })
+    await page.goto('/tours/tour-001')
+    await page.locator('button:has-text("capture")').first().click()
+
+    await expect(page.getByRole('status')).toContainText('No speech detected', { timeout: 10000 })
+    await expect(page.locator('text=Transcribing...')).toHaveCount(0)
+  })
+
   test('voice note shows failed status', async ({ page }) => {
     const tourWithFailedNote = {
       ...MOCK_TOUR,
