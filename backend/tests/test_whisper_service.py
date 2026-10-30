@@ -19,7 +19,24 @@ class TestWhisperTranscribe:
         mock_client.audio.transcriptions.create.assert_called_once()
         call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
         assert call_kwargs["model"] == "whisper-1"
-        assert call_kwargs["response_format"] == "text"
+        # verbose_json carries per-segment no_speech_prob, used to drop silence
+        assert call_kwargs["response_format"] == "verbose_json"
+
+    @patch("app.services.transcription.whisper_service._get_openai_client")
+    def test_sdk_object_response(self, mock_get_client):
+        """The SDK returns attribute objects, not dicts; both are read."""
+        from types import SimpleNamespace
+        from app.services.transcription.whisper_service import WhisperService
+
+        seg = lambda n, lp: SimpleNamespace(no_speech_prob=n, avg_logprob=lp)
+        client = MagicMock()
+        mock_get_client.return_value = client
+
+        client.audio.transcriptions.create.return_value = SimpleNamespace(text=" Nice view. ", segments=[seg(0.01, -0.2)])
+        assert WhisperService.transcribe(b"a") == "Nice view."
+
+        client.audio.transcriptions.create.return_value = SimpleNamespace(text="Enjoy!", segments=[seg(0.88, -0.6)])
+        assert WhisperService.transcribe(b"a") == ""
 
     def test_transcribe_empty_audio_raises(self):
         """transcribe() raises ValueError for empty audio data."""

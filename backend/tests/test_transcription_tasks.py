@@ -1,5 +1,5 @@
 """Tests for transcription Celery tasks."""
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock, ANY
 
 
 class TestTranscribeVoiceNote:
@@ -125,6 +125,68 @@ class TestTranscribeVoiceNote:
 
 
 _MISSING = object()
+
+
+def _verbose(text, *segments):
+    """A verbose_json transcription: segments are (no_speech_prob, avg_logprob)."""
+    return {"text": text, "segments": [{"no_speech_prob": n, "avg_logprob": lp} for n, lp in segments]}
+
+
+class TestSilentRecordings:
+    """Whisper invents text for silence ("Enjoy!"); those notes are dropped."""
+
+    def _run(self, whisper_response):
+        mock_s3 = MagicMock()
+        mock_s3.get_object.return_value = {"Body": MagicMock(read=MagicMock(return_value=b"audio"))}
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create.return_value = whisper_response
+        mock_sb = MagicMock()
+        with patch("app.tasks.transcription_tasks.supabase_admin", mock_sb), \
+             patch("app.services.transcription.whisper_service._get_openai_client", return_value=mock_client), \
+             patch("app.services.storage.photo_service._get_s3_client", return_value=mock_s3), \
+             patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True), \
+             patch("app.services.tier_service.TierService.ai_denial", new_callable=AsyncMock, return_value=None), \
+             patch("app.tasks.transcription_tasks.enhance_voice_note") as mock_enhance:
+            from app.tasks.transcription_tasks import transcribe_voice_note
+            transcribe_voice_note("note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1")
+        return mock_sb, mock_s3, mock_enhance
+
+    def test_silence_deletes_the_note_and_its_audio(self):
+        sb, s3, enhance = self._run(_verbose("Enjoy!", (0.85, -0.4)))
+        sb.table.return_value.delete.return_value.eq.assert_called_with("id", "note-1")
+        s3.delete_object.assert_called_once_with(Bucket=ANY, Key="tours/u/t/voice/abc.webm")
+        sb.table.return_value.update.assert_not_called()
+        enhance.delay.assert_not_called()
+
+    def test_reference_rule_low_confidence_and_likely_silent(self):
+        sb, s3, _ = self._run(_verbose("Thank you.", (0.65, -1.3)))
+        sb.table.return_value.delete.assert_called_once()
+
+    def test_speech_is_kept(self):
+        sb, s3, enhance = self._run(_verbose("Great kitchen.", (0.02, -0.2)))
+        sb.table.return_value.delete.assert_not_called()
+        s3.delete_object.assert_not_called()
+        assert sb.table.return_value.update.call_args[0][0]["content"] == "Great kitchen."
+        enhance.delay.assert_called_once()
+
+    def test_a_quiet_pause_inside_real_speech_is_kept(self):
+        sb, _, _ = self._run(_verbose("Big windows. Small closet.", (0.05, -0.3), (0.9, -1.5)))
+        sb.table.return_value.delete.assert_not_called()
+
+    def test_audio_delete_failure_still_removes_the_note(self):
+        mock_s3 = MagicMock()
+        mock_s3.get_object.return_value = {"Body": MagicMock(read=MagicMock(return_value=b"audio"))}
+        mock_s3.delete_object.side_effect = Exception("s3 down")
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create.return_value = _verbose("Enjoy!", (0.9, -0.5))
+        mock_sb = MagicMock()
+        with patch("app.tasks.transcription_tasks.supabase_admin", mock_sb), \
+             patch("app.services.transcription.whisper_service._get_openai_client", return_value=mock_client), \
+             patch("app.services.storage.photo_service._get_s3_client", return_value=mock_s3), \
+             patch("app.services.tier_service.TierService.has_ai_consent", new_callable=AsyncMock, return_value=True):
+            from app.tasks.transcription_tasks import transcribe_voice_note
+            transcribe_voice_note("note-1", "tours/u/t/voice/abc.webm", "user-1", "tour-1")
+        mock_sb.table.return_value.delete.return_value.eq.assert_called_with("id", "note-1")
 
 
 class TestEnhanceVoiceNote:

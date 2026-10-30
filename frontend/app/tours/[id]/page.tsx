@@ -81,6 +81,7 @@ export default function TourDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('info')
+  const [noteNotice, setNoteNotice] = useState<string | null>(null)
 
   // Note form state
   const [noteText, setNoteText] = useState('')
@@ -136,10 +137,24 @@ export default function TourDetailPage() {
   useEffect(() => {
     if (!pendingCount) return
 
+    const waitingOn = new Set(
+      (tour?.notes ?? []).filter((n) => n.transcription_status === 'pending').map((n) => n.id)
+    )
+
     const interval = setInterval(async () => {
       try {
         const { tour: updated } = await getTour(tourId)
         setTour(updated)
+        // A recording with no speech in it is deleted by the transcription
+        // task rather than saved with text Whisper made up. Say so, or the
+        // note just vanishes.
+        const present = new Set((updated.notes ?? []).map((n) => n.id))
+        const discarded = [...waitingOn].filter((id) => !present.has(id))
+        if (discarded.length) {
+          discarded.forEach((id) => waitingOn.delete(id))
+          setNoteNotice("No speech detected — that recording wasn't saved.")
+          setTimeout(() => setNoteNotice(null), 5000)
+        }
         const stillPending = updated.notes?.filter((n) => n.transcription_status === 'pending')
         if (!stillPending?.length) clearInterval(interval)
       } catch {
@@ -148,6 +163,9 @@ export default function TourDetailPage() {
     }, 2000)
 
     return () => clearInterval(interval)
+    // `tour` is read once to snapshot which notes are pending; re-running on
+    // every poll would restart the interval each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCount, tourId])
 
   // ------------------------------------------
@@ -308,6 +326,11 @@ export default function TourDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {noteNotice && (
+        <div role="status" className="fixed top-20 inset-x-4 z-50 mx-auto max-w-md bg-gray-900 text-white text-sm rounded-lg px-4 py-3 shadow-lg">
+          {noteNotice}
+        </div>
+      )}
       {/* ---- Header ---- */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="flex items-center gap-3 px-4 py-3 max-w-2xl mx-auto">

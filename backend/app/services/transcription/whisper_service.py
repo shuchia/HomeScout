@@ -17,10 +17,33 @@ def _get_openai_client() -> OpenAI:
     return _openai_client
 
 
+# Whisper invents text for silence ("Enjoy!", "Thank you.") rather than
+# returning nothing — a pocketed or accidental recording became a note nobody
+# said. verbose_json gives each segment Whisper's own estimate that it held no
+# speech. A segment counts as silent by Whisper's reference rule (no_speech_prob
+# > 0.6 with avg_logprob < -1) or when it is very sure on its own (> 0.8).
+NO_SPEECH_PROB = 0.6
+NO_SPEECH_PROB_ALONE = 0.8
+LOW_AVG_LOGPROB = -1.0
+
+
+def _field(obj, name, default=None):
+    return obj.get(name, default) if isinstance(obj, dict) else getattr(obj, name, default)
+
+
+def _is_silent(segment) -> bool:
+    no_speech = _field(segment, "no_speech_prob", 0.0) or 0.0
+    logprob = _field(segment, "avg_logprob", 0.0) or 0.0
+    return no_speech > NO_SPEECH_PROB_ALONE or (no_speech > NO_SPEECH_PROB and logprob < LOW_AVG_LOGPROB)
+
+
 class WhisperService:
     @staticmethod
     def transcribe(audio_data: bytes, filename: str = "audio.webm") -> str:
-        """Transcribe audio bytes using OpenAI Whisper API."""
+        """Transcribe audio bytes using OpenAI Whisper API.
+
+        Returns "" when the recording held no speech.
+        """
         if not audio_data:
             raise ValueError("Empty audio data")
         client = _get_openai_client()
@@ -29,9 +52,16 @@ class WhisperService:
         response = client.audio.transcriptions.create(
             model="whisper-1",
             file=audio_file,
-            response_format="text",
+            response_format="verbose_json",
         )
-        return response.strip()
+        if isinstance(response, str):
+            return response.strip()
+        text = (_field(response, "text", "") or "").strip()
+        segments = _field(response, "segments", None) or []
+        if segments and all(_is_silent(seg) for seg in segments):
+            logger.info("Whisper heard no speech; discarding %r", text[:80])
+            return ""
+        return text
 
     @staticmethod
     def transcribe_from_s3(s3_key: str) -> str:
