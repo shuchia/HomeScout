@@ -454,6 +454,21 @@ async def _scrape_market(task, market_id: str) -> Dict[str, Any]:
 
         found = len(scrape_result.listings)
 
+        # Every live market returns dozens to hundreds of listings (the smallest,
+        # Bryn Mawr, ~35). Zero is a fault — an unparseable payload, a changed
+        # actor schema — and must not be booked as a successful scrape: that
+        # resets the circuit breaker and leaves the corpus to decay out of
+        # search with every signal green.
+        if found == 0:
+            msg = (
+                f"Scrape returned 0 usable listings "
+                f"({scrape_result.total_found} raw items from the actor)"
+            )
+            logger.error(f"Market {market_id}: {msg}")
+            await _update_job(job_id, "failed", error=msg, listings_found=0)
+            await _update_market_after_scrape(market_id, "failed")
+            return {"status": "failed", "market_id": market_id, "error": msg}
+
         # Normalize
         normalized = []
         errors = 0
@@ -492,7 +507,7 @@ async def _scrape_market(task, market_id: str) -> Dict[str, Any]:
 
             # Update re-seen listings (confidence reset)
             if updates:
-                await _update_reseen_listings(updates)
+                updated_count = await _update_reseen_listings(updates)
 
             # Rebuild floorplan buckets for everything this scrape touched, so
             # new/updated listings are immediately matchable under floorplan-aware
@@ -590,64 +605,89 @@ async def _update_market_after_scrape(market_id: str, status: str):
         await session.commit()
 
 
-async def _update_reseen_listings(updates: List[Dict[str, Any]]):
-    """Update existing listings that were re-seen in a scrape."""
+async def _update_reseen_listings(updates: List[Dict[str, Any]]) -> int:
+    """Update existing listings that were re-seen in a scrape.
+
+    One transaction per row, like _save_listings. These used to share a single
+    transaction, so one bad row (a content_hash already held by a leftover
+    duplicate trips the unique constraint) rolled back every re-seen update in
+    the market and failed the whole scrape — deterministically, on every retry.
+
+    Returns the number of rows actually updated.
+    """
     from sqlalchemy import update
     from app.models.apartment import ApartmentModel
+    from app.services.deduplication.deduplicator import RESEEN_REFRESH_FIELDS
 
-    async with get_session_context() as session:
-        for upd in updates:
-            values = {
-                "last_seen_at": datetime.utcnow(),
-                "freshness_confidence": 100,
-                "times_seen": ApartmentModel.times_seen + 1,
-                # Reactivate: a re-seen listing may have decayed to is_active=0
-                # since the last scrape. Seeing it live again means it's back on
-                # the market, so restore it to search results.
-                "is_active": 1,
-            }
+    updated = 0
+    for upd in updates:
+        values = {
+            "last_seen_at": datetime.utcnow(),
+            "freshness_confidence": 100,
+            "times_seen": ApartmentModel.times_seen + 1,
+            # Reactivate: a re-seen listing may have decayed to is_active=0
+            # since the last scrape. Seeing it live again means it's back on
+            # the market, so restore it to search results.
+            "is_active": 1,
+        }
 
-            # Price. This is the whole point of re-scraping a listing we already
-            # hold — and it used to be dropped on the floor. The scrape arrives
-            # carrying the current rent, we reset freshness to 100 on the
-            # strength of having seen it, and then kept the old price. Anything
-            # that moved less than the fuzzy matcher's 10% tolerance displayed
-            # its original rent indefinitely, stamped maximally fresh.
-            #
-            # true_cost_* is written in the same breath because it is derived
-            # from rent; updating one without the other would leave the headline
-            # price disagreeing with its own cost breakdown.
-            if upd.get("rent") is not None:
-                values["rent"] = upd["rent"]
-                if upd.get("true_cost_monthly") is not None:
-                    values["true_cost_monthly"] = upd["true_cost_monthly"]
-                if upd.get("true_cost_move_in") is not None:
-                    values["true_cost_move_in"] = upd["true_cost_move_in"]
-                # The stored hash was derived from the old rent. Leaving it
-                # stale would make the next scrape miss the hash match and fall
-                # through to fuzzy matching unnecessarily.
-                if upd.get("content_hash"):
-                    values["content_hash"] = upd["content_hash"]
+        # Price. This is the whole point of re-scraping a listing we already
+        # hold — and it used to be dropped on the floor. The scrape arrives
+        # carrying the current rent, we reset freshness to 100 on the
+        # strength of having seen it, and then kept the old price. Anything
+        # that moved less than the fuzzy matcher's 10% tolerance displayed
+        # its original rent indefinitely, stamped maximally fresh.
+        #
+        # true_cost_* is written in the same breath because it is derived
+        # from rent; updating one without the other would leave the headline
+        # price disagreeing with its own cost breakdown.
+        if upd.get("rent") is not None:
+            values["rent"] = upd["rent"]
+            if upd.get("true_cost_monthly") is not None:
+                values["true_cost_monthly"] = upd["true_cost_monthly"]
+            if upd.get("true_cost_move_in") is not None:
+                values["true_cost_move_in"] = upd["true_cost_move_in"]
+            # The stored hash was derived from the old rent. Leaving it
+            # stale would make the next scrape miss the hash match and fall
+            # through to fuzzy matching unnecessarily.
+            if upd.get("content_hash"):
+                values["content_hash"] = upd["content_hash"]
 
-            # Merge richer data if available
-            if upd.get("images"):
-                values["images"] = upd["images"]
-            if upd.get("description") and len(upd.get("description", "")) > 100:
-                values["description"] = upd["description"]
-            if upd.get("available_date"):
-                values["available_date"] = upd["available_date"]
-            if upd.get("contact_phone"):
-                values["contact_phone"] = upd["contact_phone"]
-            if upd.get("contact_email"):
-                values["contact_email"] = upd["contact_email"]
+        # Merge richer data if available
+        if upd.get("images"):
+            values["images"] = upd["images"]
+        if upd.get("description") and len(upd.get("description", "")) > 100:
+            values["description"] = upd["description"]
+        if upd.get("available_date"):
+            values["available_date"] = upd["available_date"]
+        if upd.get("contact_phone"):
+            values["contact_phone"] = upd["contact_phone"]
+        if upd.get("contact_email"):
+            values["contact_email"] = upd["contact_email"]
 
-            await session.execute(
-                update(ApartmentModel)
-                .where(ApartmentModel.id == upd["matched_id"])
-                .values(**values)
-            )
-        await session.commit()
-        logger.info(f"Updated {len(updates)} re-seen listings")
+        # Building-level state that floorplan buckets and availability are
+        # rebuilt from. `is not None`, not truthiness: an empty
+        # available_units list is the source telling us the building has
+        # leased up, and must overwrite the old list. None means the scrape
+        # didn't carry the field, which must not wipe what we hold.
+        for field in RESEEN_REFRESH_FIELDS:
+            if upd.get(field) is not None:
+                values[field] = upd[field]
+
+        try:
+            async with get_session_context() as session:
+                await session.execute(
+                    update(ApartmentModel)
+                    .where(ApartmentModel.id == upd["matched_id"])
+                    .values(**values)
+                )
+                await session.commit()
+            updated += 1
+        except Exception as e:
+            logger.error(f"Failed to update re-seen listing {upd.get('matched_id')}: {e}")
+
+    logger.info(f"Updated {updated}/{len(updates)} re-seen listings")
+    return updated
 
 
 async def _rebuild_floorplan_buckets(apartment_ids: List[str]) -> int:

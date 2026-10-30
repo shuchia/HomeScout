@@ -27,8 +27,7 @@ ITEM = {
 }
 
 
-@pytest.fixture
-def fake_apify(monkeypatch):
+def _install(monkeypatch, run=RUN, dataset_status=200):
     """Route the service's httpx client to an in-process fake Apify API."""
     calls = []
 
@@ -37,8 +36,10 @@ def fake_apify(monkeypatch):
         if request.method == "POST" and request.url.path.endswith("/runs"):
             return httpx.Response(201, json={"data": {"id": "run-1", "status": "RUNNING"}})
         if request.url.path.endswith("/actor-runs/run-1"):
-            return httpx.Response(200, json={"data": RUN})
+            return httpx.Response(200, json={"data": run})
         if request.url.path.endswith("/datasets/ds-1/items"):
+            if dataset_status != 200:
+                return httpx.Response(dataset_status, json={"error": "boom"})
             return httpx.Response(200, json=[ITEM])
         return httpx.Response(404)
 
@@ -50,6 +51,11 @@ def fake_apify(monkeypatch):
     )
     monkeypatch.setenv("APIFY_API_TOKEN", "test-token")
     return calls
+
+
+@pytest.fixture
+def fake_apify(monkeypatch):
+    return _install(monkeypatch)
 
 
 async def test_bulk_scrape_collects_a_succeeded_run(fake_apify):
@@ -67,3 +73,24 @@ async def test_url_check_collects_a_succeeded_run(fake_apify):
     assert result.errors == []
     assert result.status.value == "completed"
     assert len(result.listings) == 1
+
+
+# A run we could not read used to come back COMPLETED with zero listings: the
+# market bookkeeping booked it as a success (resetting the circuit breaker) and
+# a listing check read it as "gone". It must come back FAILED.
+
+async def test_dataset_fetch_error_is_a_failed_scrape(monkeypatch):
+    _install(monkeypatch, dataset_status=502)
+    result = await ApifyService(source_id="apartments_com").scrape("Pittsburgh", "PA", max_listings=10)
+
+    assert result.status.value == "failed"
+    assert result.listings == []
+    assert any("dataset" in e for e in result.errors)
+
+
+async def test_run_without_a_dataset_is_a_failed_scrape(monkeypatch):
+    _install(monkeypatch, run={"id": "run-1", "status": "SUCCEEDED"})
+    result = await ApifyService(source_id="apartments_com").scrape_url("https://www.apartments.com/test/123")
+
+    assert result.status.value == "failed"
+    assert any("dataset" in e for e in result.errors)

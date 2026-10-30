@@ -15,6 +15,28 @@ logger = logging.getLogger(__name__)
 
 # apartments.com property id, the last path segment of a listing URL:
 # https://www.apartments.com/south-standard/j5ve2k4/ -> j5ve2k4
+# Fields a re-seen listing refreshes wholesale from the new scrape, beyond the
+# rent/contact fields _build_reseen_update names individually. These are what
+# floorplan buckets, availability and true cost are rebuilt from: leaving them
+# out meant every building kept its first-insert floorplan prices and unit list
+# forever while being stamped freshness 100, and _rebuild_floorplan_buckets
+# faithfully rebuilt the stale buckets from them.
+RESEEN_REFRESH_FIELDS = (
+    "floor_plans",
+    "available_units",
+    "specials",
+    "pricing_model",
+    "pricing_model_confidence",
+    "pet_rent",
+    "parking_fee",
+    "amenity_fee",
+    "application_fee",
+    "admin_fee",
+    "security_deposit",
+    "other_monthly_fees",
+    "raw_data",
+)
+
 _URL_ID = re.compile(r"/([a-z0-9]{5,12})/?$", re.I)
 
 
@@ -381,6 +403,7 @@ class DeduplicationService:
             "available_date": listing.get("available_date"),
             "contact_phone": listing.get("contact_phone"),
             "contact_email": listing.get("contact_email"),
+            **{f: listing.get(f) for f in RESEEN_REFRESH_FIELDS},
         }
 
     def deduplicate_batch_with_updates(

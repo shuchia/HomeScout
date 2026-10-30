@@ -20,10 +20,12 @@ class _Status:
 
 
 class _FakeResult:
-    def __init__(self, status="completed", listings=None, errors=None):
+    def __init__(self, status="completed", listings=None, errors=None, total_found=None):
         self.status = _Status(status)
         self.listings = listings or []
         self.errors = errors or []
+        # Raw items the actor returned, before our normalizer had its say.
+        self.total_found = len(self.listings) if total_found is None else total_found
 
 
 class _FakeScraper:
@@ -118,6 +120,16 @@ class TestCheckListing:
         _patch_scraper(monkeypatch, result=_FakeResult(listings=[]))
         status, updated, _ = await check_listing("https://x/y/", {"rent": 2100})
         assert status == GONE
+        assert updated is None
+
+    @pytest.mark.asyncio
+    async def test_item_our_parser_dropped_is_unknown_not_gone(self, monkeypatch):
+        """The actor returned the listing but our normalizer dropped it (a
+        price-on-request building has no rent). That is our failure to read
+        it; marking the user's saved listing gone would be a false claim."""
+        _patch_scraper(monkeypatch, result=_FakeResult(listings=[], total_found=1))
+        status, updated, _ = await check_listing("https://x/y/", {"rent": 2100})
+        assert status == UNKNOWN
         assert updated is None
 
     @pytest.mark.asyncio

@@ -101,7 +101,16 @@ async def check_listing(
     if not result.listings:
         # The actor ran and found nothing at a well-formed listing URL. That is
         # good evidence the listing has been taken down.
-        return GONE, None, {}
+        if result.total_found == 0:
+            return GONE, None, {}
+        # The actor did return the listing, but our normalizer dropped it
+        # (price-on-request has no rent, or the payload didn't parse). That is
+        # our failure to read it, not evidence it is gone.
+        logger.warning(
+            f"Listing check for {source_url}: actor returned {result.total_found} "
+            f"item(s) but none normalized"
+        )
+        return UNKNOWN, None, {}
 
     # Put it through the same normalizer the scrape pipeline uses, so the check
     # and the corpus agree on field names, units and how true cost is derived.
