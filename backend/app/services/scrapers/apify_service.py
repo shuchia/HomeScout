@@ -205,7 +205,11 @@ class ApifyService(BaseScraper):
             actor_input = build_input()
 
             # Run the actor
-            run_result = await self._run_actor(actor_input)
+            run_result = await self._run_actor(
+                actor_input,
+                max_wait_seconds=max_wait_seconds,
+                poll_interval=poll_interval,
+            )
 
             if not run_result:
                 result.status = ScraperStatus.FAILED
@@ -406,12 +410,19 @@ class ApifyService(BaseScraper):
             "maxResults": max_listings,
         }
 
-    async def _run_actor(self, actor_input: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _run_actor(
+        self,
+        actor_input: Dict[str, Any],
+        max_wait_seconds: Optional[int] = None,
+        poll_interval: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
         Run an Apify actor and wait for completion.
 
         Args:
             actor_input: Input parameters for the actor
+            max_wait_seconds, poll_interval: Passed to _wait_for_run when set;
+                None keeps its bulk-sweep defaults
 
         Returns:
             Run result dict or None if failed
