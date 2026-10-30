@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends, Body, Header
 from pydantic import BaseModel, Field
 
 from app.database import get_async_session, is_database_enabled, AsyncSession
+from app.models.market_config import SEARCH_FLOOR
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,19 @@ ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "homescout-dev-admin-key")
 # A check takes 10-20s, so anything past a few minutes means the queue is
 # stuck rather than merely busy.
 CHECK_LAG_MINUTES = int(os.getenv("CHECK_LAG_MINUTES", "15"))
+
+# A market is late once it has gone one full cycle plus this long without a
+# scrape that actually found listings.
+INGEST_GRACE_HOURS = int(os.getenv("INGEST_GRACE_HOURS", "24"))
+
+# Share of a market's active listings that must clear the search floor. A
+# market swept weekly sits near 100% (only listings that have left the source
+# decay out); a stalled one falls toward 0 while its active count holds steady.
+SEARCHABLE_MIN_SHARE = 0.5
+
+# Listing checks: alert when most recent checks could not reach the source.
+CHECK_UNKNOWN_MIN_SAMPLE = 5
+CHECK_UNKNOWN_MAX_SHARE = 0.5
 
 
 async def verify_admin_key(x_admin_key: str = Header(...)):
@@ -264,6 +278,7 @@ async def list_scrape_jobs(
                     metrics={
                         "listings_found": job.listings_found,
                         "listings_new": job.listings_new,
+                        "listings_updated": job.listings_updated,
                         "listings_duplicates": job.listings_duplicates,
                         "listings_errors": job.listings_errors,
                     },
@@ -320,6 +335,7 @@ async def get_job_status(job_id: str):
                 metrics={
                     "listings_found": job.listings_found,
                     "listings_new": job.listings_new,
+                    "listings_updated": job.listings_updated,
                     "listings_duplicates": job.listings_duplicates,
                     "listings_errors": job.listings_errors,
                 },
@@ -822,7 +838,16 @@ async def check_pipeline_health():
     failed every single run for weeks without anyone noticing, which in turn
     masked the scraper by freezing every listing's freshness score.
 
-    Anything in `problems` is worth an alert.
+    Anything in `problems` is worth an alert, and maintenance_tasks.
+    alert_pipeline_health sends them.
+
+    It then stayed green through a third: from 2026-10-10 every Apify call
+    raised inside _run_actor, so every scrape *ran* and failed. last_scrape_at
+    moved on each attempt, the nightly cleanup reset consecutive_failures, and
+    failed jobs counted toward the job total — while search emptied out as the
+    corpus decayed. The per-market checks below therefore ask whether listings
+    actually arrived and whether search can still see them, not whether a task
+    ran.
     """
     if not is_database_enabled():
         return {"healthy": True, "message": "Database not enabled", "problems": []}
@@ -852,17 +877,17 @@ async def check_pipeline_health():
                     age_hours = None
                     overdue = True
 
-                if overdue:
-                    problems.append(
-                        f"market '{m.id}' has not scraped in "
-                        f"{'ever' if age_hours is None else f'{age_hours:.0f}h'} "
-                        f"(frequency {m.scrape_frequency_hours}h)"
-                    )
+                # `overdue` keys on last_scrape_at, which moves on every attempt
+                # — including failed ones — so it only proves dispatch is
+                # running. It stays in the payload; the problem it used to raise
+                # is now raised by the ingestion check below, which it is a
+                # strict subset of.
                 if m.consecutive_failures >= 3:
                     problems.append(f"market '{m.id}' circuit breaker is open")
 
                 markets_out.append({
                     "id": m.id,
+                    "city": m.city,
                     "tier": m.tier,
                     "frequency_hours": m.scrape_frequency_hours,
                     "last_scrape_at": m.last_scrape_at.isoformat() if m.last_scrape_at else None,
@@ -871,6 +896,70 @@ async def check_pipeline_health():
                     "consecutive_failures": m.consecutive_failures,
                     "overdue": overdue,
                 })
+
+            # --- Did listings actually arrive? -----------------------------
+            #
+            # A productive scrape is a completed job that found something. One
+            # cycle plus a day of grace is the threshold: at weekly sweeps a
+            # hot listing has 21 days before it drops out of search, so this
+            # fires with two weeks to spare instead of after the fact.
+            productive = dict(
+                (await session.execute(
+                    select(ScrapeJobModel.city, func.max(ScrapeJobModel.completed_at))
+                    .where(
+                        ScrapeJobModel.status == "completed",
+                        ScrapeJobModel.listings_found > 0,
+                    )
+                    .group_by(ScrapeJobModel.city)
+                )).all()
+            )
+            for mo in markets_out:
+                last_ok = productive.get(mo["city"])
+                if last_ok is not None and last_ok.tzinfo is None:
+                    last_ok = last_ok.replace(tzinfo=timezone.utc)
+                ok_age = (now - last_ok).total_seconds() / 3600 if last_ok else None
+                mo["last_productive_scrape_at"] = last_ok.isoformat() if last_ok else None
+                mo["hours_since_productive_scrape"] = round(ok_age, 1) if ok_age is not None else None
+                if ok_age is None or ok_age > mo["frequency_hours"] + INGEST_GRACE_HOURS:
+                    since = "ever" if ok_age is None else f"in {ok_age:.0f}h"
+                    problems.append(
+                        f"market '{mo['id']}' has not ingested listings {since} "
+                        f"(frequency {mo['frequency_hours']}h, "
+                        f"last attempt {mo['last_scrape_status'] or 'none'})"
+                    )
+                elif mo["last_scrape_status"] == "failed":
+                    # At weekly cadence one failed sweep is a week of staleness;
+                    # the breaker can't say so (it needs 3 and resets nightly).
+                    problems.append(f"market '{mo['id']}' last scrape failed")
+
+                # --- Can search still see the market? ----------------------
+                # The same city match and freshness floor search applies. A
+                # stalled corpus keeps its active count for ~2 weeks after it
+                # has fallen out of search, so active-row counts can't see this.
+                city_match = ApartmentModel.city.ilike(f"%{mo['city']}%")
+                active = (
+                    await session.execute(
+                        select(func.count()).select_from(ApartmentModel)
+                        .where(ApartmentModel.is_active == 1, city_match)
+                    )
+                ).scalar() or 0
+                searchable = (
+                    await session.execute(
+                        select(func.count()).select_from(ApartmentModel)
+                        .where(
+                            ApartmentModel.is_active == 1,
+                            ApartmentModel.freshness_confidence >= SEARCH_FLOOR,
+                            city_match,
+                        )
+                    )
+                ).scalar() or 0
+                mo["active_listings"] = active
+                mo["searchable_listings"] = searchable
+                if active and searchable < active * SEARCHABLE_MIN_SHARE:
+                    problems.append(
+                        f"market '{mo['id']}': only {searchable} of {active} "
+                        f"active listings are searchable"
+                    )
 
             # The decay task writes confidence_updated_at on every listing it
             # touches, so the freshest one is a proxy for "when did decay last
@@ -884,10 +973,14 @@ async def check_pipeline_health():
             # jobs, and a fixed 24h window reads that as an outage.
             slowest = max((m["frequency_hours"] for m in markets_out), default=24)
             window_hours = max(48, slowest * 2)
+            # Productive jobs only: failed jobs used to count, so three weeks of
+            # failures read as exactly the expected number of scrapes.
             jobs_in_window = (
                 await session.execute(
                     select(func.count()).select_from(ScrapeJobModel).where(
-                        ScrapeJobModel.created_at >= now - timedelta(hours=window_hours)
+                        ScrapeJobModel.created_at >= now - timedelta(hours=window_hours),
+                        ScrapeJobModel.status == "completed",
+                        ScrapeJobModel.listings_found > 0,
                     )
                 )
             ).scalar() or 0
@@ -913,7 +1006,7 @@ async def check_pipeline_health():
         )
         if expected_in_window and jobs_in_window < expected_in_window * 0.5:
             problems.append(
-                f"only {jobs_in_window} scrape jobs in {window_hours}h, "
+                f"only {jobs_in_window} productive scrape jobs in {window_hours}h, "
                 f"expected ~{expected_in_window:.0f}"
             )
 
@@ -948,6 +1041,28 @@ async def check_pipeline_health():
                         f"{backlog}{'+' if backlog >= 100 else ''} saved listings "
                         f"never checked after {CHECK_LAG_MINUTES}min — "
                         f"listing checks are not draining"
+                    )
+            # A check that runs and always fails stamps listing_checked_at
+            # anyway, so the backlog above stays at zero. That is exactly what
+            # happened from 2026-10-10: every check came back unknown. Watch
+            # the outcome, not just whether a check ran.
+            if supabase_admin:
+                since = (now - timedelta(hours=24)).isoformat()
+                recent = (
+                    supabase_admin.table("saved_listings")
+                    .select("availability_status")
+                    .gte("listing_checked_at", since)
+                    .limit(1000)
+                    .execute()
+                )
+                outcomes = [r.get("availability_status") for r in (recent.data or [])]
+                unknown = sum(1 for o in outcomes if o == "unknown")
+                checks["checked_24h"] = len(outcomes)
+                checks["unknown_24h"] = unknown
+                if len(outcomes) >= CHECK_UNKNOWN_MIN_SAMPLE and unknown > len(outcomes) * CHECK_UNKNOWN_MAX_SHARE:
+                    problems.append(
+                        f"{unknown} of {len(outcomes)} listing checks in 24h "
+                        f"could not reach the source"
                     )
         except Exception as e:
             logger.warning(f"Could not measure listing-check lag: {e}")
