@@ -7,6 +7,7 @@ import Image from 'next/image'
 export function UserMenu() {
   const { user, profile, signOut } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   if (!user) return null
 
@@ -16,13 +17,17 @@ export function UserMenu() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100"
       >
-        {profile?.avatar_url ? (
+        {profile?.avatar_url && !avatarFailed ? (
           <Image
             src={profile.avatar_url}
             alt={profile.name || 'User'}
             width={32}
             height={32}
             className="w-8 h-8 rounded-full"
+            // Google's avatar host can refuse requests carrying another
+            // site's Referer; if it fails anyway, show the initial instead.
+            referrerPolicy="no-referrer"
+            onError={() => setAvatarFailed(true)}
           />
         ) : (
           <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white">

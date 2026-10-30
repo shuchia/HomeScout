@@ -8,6 +8,7 @@ import { Header } from "@/components/Header";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { OnboardingWalkthrough } from "@/components/OnboardingWalkthrough";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { NativeSplashHider } from "@/components/NativeSplashHider";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PendingInviteRedeemer } from "@/components/PendingInvite";
 
@@ -52,6 +53,9 @@ export const viewport: Viewport = {
   themeColor: "#2D6A4F",
   width: "device-width",
   initialScale: 1,
+  // Draw under the notch and home indicator; Header and BottomNav pad by
+  // --safe-top / --safe-bottom so nothing ends up behind them.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -65,7 +69,7 @@ export default function RootLayout({
         <AuthProvider>
           <Header />
           <OnboardingWalkthrough />
-          <main className="pb-16 md:pb-0">{children}</main>
+          <main className="pb-[calc(4rem+var(--safe-bottom))] md:pb-0">{children}</main>
           <ComparisonBar />
           <BottomNav />
           <FeedbackWidget />
@@ -73,6 +77,7 @@ export default function RootLayout({
           <PendingInviteRedeemer />
         </AuthProvider>
         <ServiceWorkerRegistration />
+        <NativeSplashHider />
       </body>
     </html>
   );

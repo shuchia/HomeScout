@@ -106,7 +106,7 @@ export function InstallPrompt() {
   if (!deferredPrompt && !showIosHint) return null
 
   return (
-    <div className="fixed bottom-20 left-3 right-3 md:bottom-6 md:left-auto md:right-6 md:w-80 z-40 bg-white border border-[var(--color-border)] rounded-2xl shadow-xl p-4">
+    <div className="fixed bottom-[calc(5rem+var(--safe-bottom))] left-3 right-3 md:bottom-6 md:left-auto md:right-6 md:w-80 z-40 bg-white border border-[var(--color-border)] rounded-2xl shadow-xl p-4">
       <div className="flex items-start gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

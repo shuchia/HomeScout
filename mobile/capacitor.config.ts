@@ -16,7 +16,23 @@ const config: CapacitorConfig = {
     cleartext: serverUrl.startsWith('http://'),
   },
   ios: {
-    contentInset: 'automatic',
+    // The page handles the notch itself (viewport-fit=cover + --safe-top /
+    // --safe-bottom in globals.css). 'automatic' inset the scroll content
+    // but not fixed elements, so content scrolled up behind the status bar.
+    contentInset: 'never',
+  },
+  plugins: {
+    // The green launch screen stays up while the site loads, instead of a
+    // blank white WebView. The page hides it once it has rendered
+    // (frontend/components/NativeSplashHider.tsx); the duration is only the
+    // fallback if that never happens.
+    SplashScreen: {
+      launchAutoHide: true,
+      launchShowDuration: 8000,
+      launchFadeOutDuration: 200,
+      backgroundColor: '#2D6A4F',
+      showSpinner: false,
+    },
   },
 }
 

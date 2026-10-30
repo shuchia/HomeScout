@@ -17,6 +17,10 @@
   --color-error: #EF4444;
   --background: var(--color-bg);
   --foreground: var(--color-text);
+  /* Notch / status bar and home indicator. Non-zero only on notched devices
+     with viewport-fit=cover (the iOS app, and Safari in landscape); 0 elsewhere. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @theme inline {

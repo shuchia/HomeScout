@@ -17,5 +17,10 @@
     <p>Can't reach Snugd. Check your connection and try again.</p>
     <button onclick="location.href='https://snugd.ai/'">Try again</button>
   </div>
+<script>
+  // Hide the native launch screen so this message is visible.
+  window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SplashScreen
+    && window.Capacitor.Plugins.SplashScreen.hide()
+</script>
 </body>
 </html>

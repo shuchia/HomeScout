@@ -37,7 +37,7 @@ export function BottomNav() {
   const pathname = usePathname()
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-[var(--color-surface)] border-t border-[var(--color-border)] md:hidden z-50">
+    <nav className="fixed bottom-0 left-0 right-0 bg-[var(--color-surface)] border-t border-[var(--color-border)] md:hidden z-50 pb-[var(--safe-bottom)]">
       <div className="flex">
         {tabs.map((tab) => {
           const active = pathname === tab.href

@@ -46,13 +46,13 @@ export function FeedbackWidget() {
   return (
     <>
       {toast && (
-        <div className="fixed bottom-20 right-6 z-[60] bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+        <div className="fixed bottom-[calc(5rem+var(--safe-bottom))] right-6 z-[60] bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
           Thanks for your feedback!
         </div>
       )}
 
       {open && (
-        <div className="fixed bottom-20 right-6 z-[60] w-80 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl">
+        <div className="fixed bottom-[calc(5rem+var(--safe-bottom))] right-6 z-[60] w-80 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl">
           <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
             <h3 className="font-semibold text-sm">Send Feedback</h3>
             <button onClick={() => setOpen(false)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
@@ -102,7 +102,7 @@ export function FeedbackWidget() {
 
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-4 right-6 z-50 bg-[var(--color-primary)] text-white p-3 rounded-full shadow-lg hover:bg-[var(--color-primary-light)] transition-colors md:bottom-6"
+        className="fixed bottom-[calc(1rem+var(--safe-bottom))] right-6 z-50 bg-[var(--color-primary)] text-white p-3 rounded-full shadow-lg hover:bg-[var(--color-primary-light)] transition-colors md:bottom-6"
         aria-label="Send feedback"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

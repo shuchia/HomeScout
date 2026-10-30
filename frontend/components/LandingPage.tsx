@@ -153,7 +153,7 @@ function LandingContent() {
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       {/* NAV */}
-      <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[var(--color-bg)]/90 backdrop-blur-md shadow-sm border-b border-[var(--color-border)]' : 'bg-transparent'}`}>
+      <nav className={`fixed top-0 inset-x-0 z-50 pt-[var(--safe-top)] transition-all duration-300 ${scrolled ? 'bg-[var(--color-bg)]/90 backdrop-blur-md shadow-sm border-b border-[var(--color-border)]' : 'bg-transparent'}`}>
         <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <HeartIcon className="w-5 h-5 text-[var(--color-accent)]" />
