@@ -91,7 +91,10 @@ jobs:
   deploy:
     name: Deploy to ${{ needs.resolve-env.outputs.environment }}
     needs: [resolve-env, build-and-push]
-    runs-on: ubuntu-latest
+    # Pinned: this job runs Playwright E2E, and ubuntu-latest moved to 26.04,
+    # which Playwright 1.58 cannot install browsers on. Unpin when Playwright
+    # supports it.
+    runs-on: ubuntu-24.04
     environment: ${{ needs.resolve-env.outputs.environment }}
     concurrency:
       group: deploy-backend-${{ needs.resolve-env.outputs.environment }}
