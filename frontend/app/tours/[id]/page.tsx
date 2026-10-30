@@ -26,6 +26,8 @@ import VoiceCapture from '@/components/VoiceCapture'
 import AiConsentPrompt from '@/components/AiConsent'
 import { Tour, TourStage, TourNote } from '@/types/tour'
 import { Apartment } from '@/types/apartment'
+import { isNativeApp } from '@/lib/native'
+import { pickNativePhoto } from '@/lib/native-photo'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -388,7 +390,7 @@ export default function TourDetailPage() {
 
       {/* ---- Decision bar ---- */}
       {showDecisionBar && (
-        <div className="fixed bottom-14 md:bottom-0 inset-x-0 bg-white border-t border-gray-200 z-40">
+        <div className="fixed bottom-[calc(3.5rem+var(--safe-bottom))] md:bottom-0 inset-x-0 bg-white border-t border-gray-200 z-40">
           <div className="max-w-2xl mx-auto px-3 py-2 md:px-4 md:py-3 flex gap-2">
             <button
               type="button"
@@ -700,13 +702,8 @@ function CaptureTab({
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoError, setPhotoError] = useState<string | null>(null)
 
-  const handlePhotoSelected = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      // Reset input so selecting the same file twice re-fires onChange
-      if (e.target) e.target.value = ''
-      if (!file) return
-
+  const uploadPhoto = useCallback(
+    async (file: File) => {
       if (!file.type.startsWith('image/')) {
         setPhotoError('Please choose an image file.')
         return
@@ -728,6 +725,35 @@ function CaptureTab({
       }
     },
     [tourId, onVoiceNoteCreated],
+  )
+
+  const handlePhotoSelected = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      // Reset input so selecting the same file twice re-fires onChange
+      if (e.target) e.target.value = ''
+      if (file) void uploadPhoto(file)
+    },
+    [uploadPhoto],
+  )
+
+  // In the mobile app the labels open the native camera/library sheet instead
+  // of the file input (see lib/native-photo.ts).
+  const handleAddPhotoClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isNativeApp()) return
+      e.preventDefault()
+      pickNativePhoto()
+        .then((file) => { if (file) return uploadPhoto(file) })
+        .catch((err) => {
+          // Plugin rejections print as {} — pull the fields out.
+          const detail = `${err?.code ?? ''} ${err?.message ?? String(err)}`.trim()
+          console.warn('Native photo picker failed:', detail)
+          setPhotoError("Couldn't open your photos. Check Snugd's camera and photo access in Settings."
+            + (process.env.NODE_ENV !== 'production' ? ` (${detail})` : ''))
+        })
+    },
+    [uploadPhoto],
   )
 
   return (
@@ -812,20 +838,23 @@ function CaptureTab({
       <section>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-gray-900">Photos</h3>
-          <button
-            type="button"
-            onClick={() => photoInputRef.current?.click()}
-            disabled={uploadingPhoto}
-            className="text-xs font-medium text-[var(--color-primary)] disabled:text-gray-400 disabled:cursor-not-allowed"
+          <label
+            htmlFor="tour-photo-input"
+            onClick={handleAddPhotoClick}
+            aria-disabled={uploadingPhoto}
+            className={`text-xs font-medium ${uploadingPhoto ? 'text-gray-400 pointer-events-none' : 'text-[var(--color-primary)] cursor-pointer'}`}
           >
             {uploadingPhoto ? 'Uploading…' : '+ Add Photo'}
-          </button>
+          </label>
         </div>
+        {/* Opened by the labels (on the website); sr-only keeps it focusable. */}
         <input
           ref={photoInputRef}
+          id="tour-photo-input"
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          className="hidden"
+          className="sr-only"
+          disabled={uploadingPhoto}
           onChange={handlePhotoSelected}
         />
         {tour.photos.length > 0 ? (
@@ -851,11 +880,11 @@ function CaptureTab({
             ))}
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => photoInputRef.current?.click()}
-            disabled={uploadingPhoto}
-            className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:cursor-not-allowed"
+          <label
+            htmlFor="tour-photo-input"
+            onClick={handleAddPhotoClick}
+            aria-disabled={uploadingPhoto}
+            className={`block w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:bg-gray-50 active:bg-gray-100 transition-colors ${uploadingPhoto ? 'pointer-events-none' : 'cursor-pointer'}`}
           >
             <svg className="h-8 w-8 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -864,7 +893,7 @@ function CaptureTab({
             <p className="text-sm text-gray-500">
               {uploadingPhoto ? 'Uploading…' : 'No photos yet — tap to add one'}
             </p>
-          </button>
+          </label>
         )}
         {photoError && (
           <p className="text-xs text-red-500 mt-2">{photoError}</p>

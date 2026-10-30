@@ -67,7 +67,7 @@ function SettingsContent() {
         <h2 className="text-lg font-semibold mb-4">Profile</h2>
         <div className="flex items-center gap-4">
           {profile?.avatar_url && (
-            <img src={profile.avatar_url} alt="" className="w-12 h-12 rounded-full" />
+            <img src={profile.avatar_url} alt="" className="w-12 h-12 rounded-full" referrerPolicy="no-referrer" />
           )}
           <div>
             <p className="font-medium">{profile?.name || 'No name'}</p>

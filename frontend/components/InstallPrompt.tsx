@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { isNativeApp } from '@/lib/native'
 
 /**
  * "Install Snugd" prompt — surfaces the native PWA install dialog on Chrome
@@ -30,6 +31,8 @@ function isIos(): boolean {
 
 function isStandalone(): boolean {
   if (typeof window === 'undefined') return false
+  // The iOS/Android app is already installed.
+  if (isNativeApp()) return true
   // Both the modern (display-mode) and legacy (iOS Safari) checks.
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
@@ -103,7 +106,7 @@ export function InstallPrompt() {
   if (!deferredPrompt && !showIosHint) return null
 
   return (
-    <div className="fixed bottom-20 left-3 right-3 md:bottom-6 md:left-auto md:right-6 md:w-80 z-40 bg-white border border-[var(--color-border)] rounded-2xl shadow-xl p-4">
+    <div className="fixed bottom-[calc(5rem+var(--safe-bottom))] left-3 right-3 md:bottom-6 md:left-auto md:right-6 md:w-80 z-40 bg-white border border-[var(--color-border)] rounded-2xl shadow-xl p-4">
       <div className="flex items-start gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

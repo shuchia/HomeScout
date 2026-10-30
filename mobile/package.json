@@ -1,0 +1,25 @@
+{
+  "name": "snugd-mobile",
+  "private": true,
+  "description": "Capacitor shell for the Snugd iOS and Android apps. Loads the web app; see README.md.",
+  "scripts": {
+    "sync": "cap sync",
+    "ios": "cap open ios",
+    "android": "cap open android",
+    "run:ios": "cap run ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/camera": "^8.2.6",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0",
+    "@capacitor/splash-screen": "^8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "8.6.0",
+    "typescript": "^5"
+  }
+}

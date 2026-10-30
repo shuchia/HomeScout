@@ -19,7 +19,7 @@ export function ComparisonBar() {
   if (apartmentIds.length === 0 || !user || pathname === '/compare') return null
 
   return (
-    <div className="fixed bottom-16 md:bottom-0 left-0 right-0 bg-white border-t shadow-lg p-3 sm:p-4 z-50">
+    <div className="fixed bottom-[calc(4rem+var(--safe-bottom))] md:bottom-0 left-0 right-0 bg-white border-t shadow-lg p-3 sm:p-4 z-50">
       <div className="max-w-6xl mx-auto flex items-center justify-between">
         {/* Selection indicator */}
         <div className="flex items-center gap-2 sm:gap-4">

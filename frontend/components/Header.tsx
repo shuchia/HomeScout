@@ -8,7 +8,7 @@ export function Header() {
   const { user } = useAuth()
 
   return (
-    <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)] sticky top-0 z-40">
+    <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)] sticky top-0 z-40 pt-[var(--safe-top)]">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
         <Link href="/" className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-primary)' }}>
           snugd

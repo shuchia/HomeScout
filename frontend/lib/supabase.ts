@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { isNativeApp } from '@/lib/native'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
@@ -15,6 +16,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // call exchangeCodeForSession manually — it waits for onAuthStateChange
     // to confirm the session, avoiding the double-exchange race condition.
     detectSessionInUrl: true,
+    // In the mobile apps the provider redirects to snugd://auth/callback, a
+    // URL any app can claim. PKCE puts only a code in it, useless without the
+    // verifier this webview kept. The website keeps the implicit flow.
+    flowType: isNativeApp() ? 'pkce' : 'implicit',
   },
 })
 

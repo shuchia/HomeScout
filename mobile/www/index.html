@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Snugd</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         font-family: -apple-system, system-ui, sans-serif; background: #fff; color: #222; text-align: center; padding: 24px; }
+  @media (prefers-color-scheme: dark) { body { background: #111; color: #eee; } }
+  button { margin-top: 16px; padding: 10px 20px; border-radius: 8px; border: 0; background: #222; color: #fff; font-size: 16px; }
+</style>
+</head>
+<body>
+  <div>
+    <h1>Snugd</h1>
+    <p>Can't reach Snugd. Check your connection and try again.</p>
+    <button onclick="location.href='https://snugd.ai/'">Try again</button>
+  </div>
+<script>
+  // Hide the native launch screen so this message is visible.
+  window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SplashScreen
+    && window.Capacitor.Plugins.SplashScreen.hide()
+</script>
+</body>
+</html>

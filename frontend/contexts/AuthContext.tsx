@@ -4,6 +4,8 @@ import { User, Session } from '@supabase/supabase-js'
 import { supabase, Profile } from '@/lib/supabase'
 import { setAccessToken, setAuthLostHandler } from '@/lib/auth-store'
 import { useComparison } from '@/hooks/useComparison'
+import { isNativeApp } from '@/lib/native'
+import { listenForNativeAuthCallback, nativeSignIn } from '@/lib/native-auth'
 
 interface AuthContextType {
   user: User | null
@@ -207,19 +209,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchProfile, applySession, finishLoading])
 
-  async function signInWithGoogle() {
+  // In the mobile apps, sign-in returns through snugd://auth/callback rather
+  // than the /auth/callback page; the session it creates reaches state through
+  // onAuthStateChange like any other.
+  useEffect(() => {
+    if (!isNativeApp()) return
+    return listenForNativeAuthCallback(
+      () => { if (window.location.pathname === '/') window.location.replace('/search') },
+      (message) => console.warn('Native sign-in failed:', message),
+    )
+  }, [])
+
+  async function signIn(provider: 'google' | 'apple') {
+    if (isNativeApp()) return nativeSignIn(provider)
     await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: { redirectTo: `${window.location.origin}/auth/callback` }
     })
   }
 
-  async function signInWithApple() {
-    await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: { redirectTo: `${window.location.origin}/auth/callback` }
-    })
-  }
+  const signInWithGoogle = () => signIn('google')
+  const signInWithApple = () => signIn('apple')
 
   function signOut() {
     setProfile(null)

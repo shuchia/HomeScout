@@ -12,6 +12,11 @@
     "test:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/camera": "^8.2.6",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/splash-screen": "^8.0.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.94.0",
     "cookie": "^1.1.1",
