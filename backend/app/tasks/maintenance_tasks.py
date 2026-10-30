@@ -1837,3 +1837,80 @@ async def _normalize_city_names(apply: bool, batch_size: int) -> Dict[str, Any]:
         "changed": changed,
         "moves": dict(moves.most_common(25)),
     }
+
+
+# --- Pipeline health alerting -------------------------------------------------
+#
+# pipeline-health was pull-only: nothing called it, so it could only help
+# someone who already suspected a problem. This runs it hourly and pushes the
+# problems out. AlertService always logs at ERROR ("[ALERT] ...") and also posts
+# to Slack when SLACK_WEBHOOK_URL is set.
+
+# Re-send an unchanged set of problems at most this often.
+HEALTH_ALERT_REPEAT_HOURS = 24
+_HEALTH_ALERT_KEY = "pipeline_health:last_alert"
+
+
+def _problem_signature(problems: List[str]) -> str:
+    """Identity of a set of problems, ignoring the numbers in them.
+
+    "has not ingested listings in 190h" becomes 191h an hour later; that is the
+    same problem and must not re-alert every hour.
+    """
+    import hashlib
+    import re
+
+    keys = sorted(re.sub(r"\d+", "#", p) for p in problems)
+    return hashlib.sha256("\n".join(keys).encode()).hexdigest()
+
+
+@celery_app.task
+def alert_pipeline_health() -> Dict[str, Any]:
+    """Hourly: alert on pipeline-health problems when they change."""
+    return run_async(_alert_pipeline_health())
+
+
+async def _alert_pipeline_health() -> Dict[str, Any]:
+    from app.routers.data_collection import check_pipeline_health
+    from app.services.monitoring.alerts import AlertService, AlertSeverity
+
+    report = await check_pipeline_health()
+    problems = report.get("problems") or []
+    if not problems:
+        return {"healthy": True, "alerted": False}
+
+    signature = _problem_signature(problems)
+    redis = None
+    try:
+        import redis.asyncio as aioredis
+
+        redis = aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+        if await redis.get(_HEALTH_ALERT_KEY) == signature.encode():
+            return {"healthy": False, "alerted": False, "reason": "already alerted"}
+    except Exception as e:
+        # Fail toward alerting: a duplicate alert is cheap, a missed one is not.
+        logger.warning(f"Health alert dedupe unavailable, alerting anyway: {e}")
+
+    # A fresh service per run: a module-level httpx client would outlive the
+    # event loop run_async created for this task.
+    alerts = AlertService()
+    try:
+        sent = await alerts.send_alert(
+            title=f"Pipeline unhealthy: {len(problems)} problem(s)",
+            message="\n".join(f"• {p}" for p in problems),
+            severity=AlertSeverity.ERROR,
+            source="pipeline-health",
+        )
+    finally:
+        await alerts.close()
+
+    if redis is not None:
+        try:
+            await redis.set(_HEALTH_ALERT_KEY, signature, ex=HEALTH_ALERT_REPEAT_HOURS * 3600)
+        except Exception as e:
+            logger.warning(f"Could not record health alert: {e}")
+        finally:
+            await redis.aclose()
+
+    return {"healthy": False, "alerted": True, "sent": sent, "problems": problems}
+

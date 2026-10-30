@@ -73,6 +73,12 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=30),  # Every hour at :30
     },
 
+    # Push pipeline-health problems out (logs + Slack); pull-only before
+    "alert-pipeline-health": {
+        "task": "app.tasks.maintenance_tasks.alert_pipeline_health",
+        "schedule": crontab(minute=45),  # Every hour at :45, after decay
+    },
+
     # Daily maintenance at 3 AM UTC
     "cleanup-maintenance": {
         "task": "app.tasks.maintenance_tasks.cleanup_maintenance",
